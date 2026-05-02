@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Font stacks — designed to feel close to the intended Fraunces/Inter
+     pairing without requiring a Google Fonts fetch. Override these
+     variables (or wire next/font/google in app/layout.tsx) to swap in
+     real webfonts. */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+               'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-display: 'Cormorant Garamond', 'EB Garamond', Georgia, 'Times New Roman',
+                  Times, serif;
+
+  --grid-line:    rgba(22, 24, 26, 0.06);
+  --grid-line-2:  rgba(22, 24, 26, 0.10);
+  --wall-stroke:  #16181A;
+  --wall-fill:    rgba(115, 126, 98, 0.06);
+  --pillar-fill:  rgba(22, 24, 26, 0.85);
+  --inv-fill:     rgba(168, 177, 150, 0.18);
+  --inv-stroke:   #737E62;
+  --selection:    #16181A;
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  font-feature-settings: 'ss01', 'cv11';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Hide the focus ring on the SVG root (we draw our own selection chrome) */
+svg:focus { outline: none; }
+
+/* Number inputs without the spinner cruft */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] { -moz-appearance: textfield; }
