@@ -17,6 +17,7 @@ import { mm, rad } from '@/model/units';
 import { newId } from '@/lib/id';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
+import { findAsset } from '@/lib/assetCatalog';
 
 export type Tool = 'select' | 'draw-room' | 'add-pillar' | 'add-inventory';
 
@@ -25,10 +26,17 @@ interface PlannerState {
   view: ViewState;
   tool: Tool;
   selection: Selection | null;
+  /**
+   * When set, the next click in `add-inventory` mode places this asset (with
+   * its catalog name + size + assetRef) instead of the generic placeholder.
+   * Cleared after one placement or when the user switches tools.
+   */
+  pendingAssetRef: string | null;
 
   // tool actions
   setTool: (t: Tool) => void;
   setSelection: (s: Selection | null) => void;
+  pickAsset: (assetId: string) => void;
 
   // view actions
   setZoom: (z: number) => void;
@@ -97,12 +105,22 @@ export const usePlannerStore = create<PlannerState>()(
     view: { ...DEFAULT_VIEW },
     tool: 'select',
     selection: null,
+    pendingAssetRef: null,
 
     setTool: (t) =>
       set((s) => {
         s.tool = t;
         // Tool change clears any in-progress selection that no longer applies.
         if (t !== 'select') s.selection = null;
+        // Switching away from add-inventory abandons a pending asset pick.
+        if (t !== 'add-inventory') s.pendingAssetRef = null;
+      }),
+
+    pickAsset: (assetId) =>
+      set((s) => {
+        s.pendingAssetRef = assetId;
+        s.tool = 'add-inventory';
+        s.selection = null;
       }),
 
     setSelection: (sel) =>
@@ -240,17 +258,30 @@ export const usePlannerStore = create<PlannerState>()(
       set((s) => {
         const snapped = maybeSnap(s.view, p);
         const id = newId('inv');
-        const item: InventoryItem = {
-          id,
-          type: 'inventory',
-          name: 'Display table',
-          position: { x: snapped.x as Mm, y: snapped.y as Mm },
-          size: { width: mm(1200), depth: mm(600), height: mm(900) },
-          rotation: rad(0),
-        };
+        const asset = findAsset(s.pendingAssetRef ?? undefined);
+        const item: InventoryItem = asset
+          ? {
+              id,
+              type: 'inventory',
+              name: asset.name,
+              category: asset.category,
+              assetRef: asset.id,
+              position: { x: snapped.x as Mm, y: snapped.y as Mm },
+              size: { ...asset.size },
+              rotation: rad(0),
+            }
+          : {
+              id,
+              type: 'inventory',
+              name: 'Display table',
+              position: { x: snapped.x as Mm, y: snapped.y as Mm },
+              size: { width: mm(1200), depth: mm(600), height: mm(900) },
+              rotation: rad(0),
+            };
         s.project.inventory.push(item);
         s.selection = { kind: 'inventory', id };
         s.tool = 'select';
+        s.pendingAssetRef = null;
         touch(s.project);
       }),
 

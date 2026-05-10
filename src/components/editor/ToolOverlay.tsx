@@ -1,10 +1,12 @@
 'use client';
 
 import { usePlannerStore } from '@/store/plannerStore';
+import { findAsset } from '@/lib/assetCatalog';
 
 export function ToolOverlay() {
   const tool = usePlannerStore((s) => s.tool);
   const room = usePlannerStore((s) => s.project.room);
+  const pendingAssetRef = usePlannerStore((s) => s.pendingAssetRef);
 
   let hint: string | null = null;
 
@@ -21,7 +23,10 @@ export function ToolOverlay() {
   } else if (tool === 'add-pillar') {
     hint = 'Click anywhere to drop a pillar.';
   } else if (tool === 'add-inventory') {
-    hint = 'Click anywhere to drop an inventory placeholder.';
+    const asset = findAsset(pendingAssetRef ?? undefined);
+    hint = asset
+      ? `Click to place ${asset.name}.`
+      : 'Click anywhere to drop an inventory placeholder.';
   }
 
   if (!hint) return null;

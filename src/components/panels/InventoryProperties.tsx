@@ -28,6 +28,11 @@ export function InventoryProperties({ id }: { id: string }) {
           value={item.category ?? ''}
           onCommit={(v) => updateInventory(id, { category: v || undefined })}
         />
+        {item.assetRef && (
+          <p className="font-mono text-[10px] uppercase tracking-widest2 text-ink-500">
+            STEP · {item.assetRef}
+          </p>
+        )}
         <p className="text-[11px] text-ink-500 font-mono">{item.id}</p>
       </Section>
 
