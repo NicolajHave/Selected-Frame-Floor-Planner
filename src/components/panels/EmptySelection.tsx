@@ -18,7 +18,9 @@ export function EmptySelection() {
           <p className="font-display text-[18px] italic leading-tight text-ink-900">
             {project.name}
           </p>
-          <p className="text-[11px] text-ink-500">
+          {/* suppressHydrationWarning: updatedAt is minted at store init, so
+              the statically prerendered value never matches the client's. */}
+          <p className="text-[11px] text-ink-500" suppressHydrationWarning>
             {new Date(project.updatedAt).toLocaleString()}
           </p>
         </div>

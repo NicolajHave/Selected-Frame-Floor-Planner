@@ -5,6 +5,7 @@ import { immer } from 'zustand/middleware/immer';
 import type {
   Project,
   ViewState,
+  ViewMode,
   RoomPolygon,
   Pillar,
   InventoryItem,
@@ -44,6 +45,7 @@ interface PlannerState {
   resetView: () => void;
   toggleGrid: () => void;
   toggleSnap: () => void;
+  setViewMode: (m: ViewMode) => void;
 
   // room actions
   startRoom: () => void;
@@ -74,6 +76,7 @@ const DEFAULT_VIEW: ViewState = {
   showGrid: true,
   snapToGrid: true,
   gridSize: mm(100),
+  viewMode: '2d',
 };
 
 function makeProject(name = 'Untitled plan'): Project {
@@ -149,6 +152,15 @@ export const usePlannerStore = create<PlannerState>()(
     toggleSnap: () =>
       set((s) => {
         s.view.snapToGrid = !s.view.snapToGrid;
+      }),
+    setViewMode: (m) =>
+      set((s) => {
+        s.view.viewMode = m;
+        // 3D is read-only; drop any armed placement tool.
+        if (m === '3d') {
+          s.tool = 'select';
+          s.pendingAssetRef = null;
+        }
       }),
 
     startRoom: () =>

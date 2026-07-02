@@ -1,15 +1,26 @@
 'use client';
 
 import { useCallback, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { TopBar } from '../topbar/TopBar';
 import { Canvas } from '@/render/svg/Canvas';
 import { RightPanel } from '../panels/RightPanel';
 import { AssetLibrary } from '../panels/AssetLibrary';
 import { ToolOverlay } from './ToolOverlay';
 import { useKeyboard } from '@/hooks/useKeyboard';
+import { usePlannerStore } from '@/store/plannerStore';
+
+// WebGL only exists in the browser; keep three out of the server bundle.
+const ThreeCanvas = dynamic(
+  () => import('@/render/three/ThreeCanvas').then((m) => m.ThreeCanvas),
+  { ssr: false },
+);
 
 export function PlannerShell() {
   useKeyboard();
+
+  const viewMode = usePlannerStore((s) => s.view.viewMode);
+  const is3d = viewMode === '3d';
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const getViewportSize = useCallback(() => {
@@ -31,8 +42,14 @@ export function PlannerShell() {
 
         {/* Canvas stage */}
         <div ref={stageRef} className="relative min-w-0 flex-1 bg-wall-100">
-          <Canvas />
-          <ToolOverlay />
+          {is3d ? (
+            <ThreeCanvas />
+          ) : (
+            <>
+              <Canvas />
+              <ToolOverlay />
+            </>
+          )}
         </div>
 
         {/* Right panel */}
@@ -43,7 +60,7 @@ export function PlannerShell() {
 
       <footer className="flex h-7 shrink-0 items-center justify-between border-t border-wall-200 bg-wall-50 px-4 text-[10px] uppercase tracking-widest2 text-ink-500">
         <span>Internal · MVP</span>
-        <span>2D Plan · mm · 1:1 world coordinates</span>
+        <span>{is3d ? '3D View · read-only' : '2D Plan · mm · 1:1 world coordinates'}</span>
       </footer>
     </div>
   );

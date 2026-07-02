@@ -79,13 +79,13 @@ export function Canvas() {
 
   const onCanvasPointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
-      // Ignore clicks that bubbled from a child shape (those have their own handlers).
-      if (e.target !== e.currentTarget) return;
-
       const rect = getRect();
       if (!rect) return;
       const world = eventToWorld(view, rect, e.clientX, e.clientY);
 
+      // Placement tools act on any click that reaches the canvas — also
+      // clicks bubbled through the room fill. Shapes that must intercept
+      // (corners, objects in select mode) call stopPropagation themselves.
       if (tool === 'draw-room') {
         // Closing: click the first corner. The first-corner shape itself handles that.
         addCorner(world);
@@ -99,6 +99,10 @@ export function Canvas() {
         addInventoryAt(world);
         return;
       }
+
+      // Ignore select-mode clicks that bubbled from a child shape (those
+      // have their own handlers).
+      if (e.target !== e.currentTarget) return;
 
       // Default: pan drag or clear selection
       if (e.button === 0) {
