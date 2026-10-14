@@ -25,6 +25,13 @@ import { findAsset } from '@/lib/assetCatalog';
 
 export type Tool = 'select' | 'draw-room' | 'add-pillar' | 'add-inventory';
 
+export interface Notice {
+  /** Changes on every new notice so the UI can restart its timer. */
+  id: number;
+  tone: 'info' | 'warning';
+  message: string;
+}
+
 export interface PlaceOptions {
   /** Pull wall-mounted catalog items flush onto the nearest wall. */
   wallSnap?: boolean;
@@ -42,6 +49,9 @@ interface PlannerState {
    */
   pendingAssetRef: string | null;
 
+  /** Transient message about the last action, e.g. mounting requirements. */
+  notice: Notice | null;
+
   /** Undo stack: project snapshots before each edit, oldest first. */
   past: Project[];
   /** Redo stack: snapshots undone, most recently undone last. */
@@ -51,6 +61,7 @@ interface PlannerState {
   setTool: (t: Tool) => void;
   setSelection: (s: Selection | null) => void;
   pickAsset: (assetId: string) => void;
+  dismissNotice: () => void;
 
   // view actions
   setZoom: (z: number) => void;
@@ -122,6 +133,29 @@ function makeProject(name = 'Untitled plan'): Project {
   };
 }
 
+const metres = (n: number) => `${(n / 1000).toFixed(1)} m`;
+
+let noticeSeq = 0;
+
+/** Mounting requirement shown when an item with a minimum wall height is placed. */
+function mountingNotice(
+  name: string,
+  mountHeight: number | undefined,
+  minWallHeight: number,
+  room: RoomPolygon | null,
+): Notice {
+  const hang = mountHeight !== undefined ? `${name} hangs with its bottom edge at ${metres(mountHeight)}. ` : '';
+  const base = `${hang}Walls must be at least ${metres(minWallHeight)} high.`;
+  if (room && room.wallHeight < minWallHeight) {
+    return {
+      id: ++noticeSeq,
+      tone: 'warning',
+      message: `${base} This room's walls are only ${metres(room.wallHeight)} — raise the wall height in the room properties.`,
+    };
+  }
+  return { id: ++noticeSeq, tone: 'info', message: base };
+}
+
 function maybeSnap(view: ViewState, p: Point): Point {
   return view.snapToGrid ? snapPoint(p, view.gridSize) : p;
 }
@@ -167,6 +201,7 @@ export const usePlannerStore = create<PlannerState>()(
         tool: 'select',
         selection: null,
         pendingAssetRef: null,
+        notice: null,
         past: [],
         future: [],
 
@@ -184,6 +219,11 @@ export const usePlannerStore = create<PlannerState>()(
             s.pendingAssetRef = assetId;
             s.tool = 'add-inventory';
             s.selection = null;
+          }),
+
+        dismissNotice: () =>
+          set((s) => {
+            s.notice = null;
           }),
 
         setSelection: (sel) =>
@@ -406,6 +446,9 @@ export const usePlannerStore = create<PlannerState>()(
               }
             }
             s.project.inventory.push(item);
+            s.notice = asset?.minWallHeight
+              ? mountingNotice(asset.name, asset.mountHeight, asset.minWallHeight, s.project.room)
+              : null;
             s.selection = { kind: 'inventory', id };
             s.tool = 'select';
             s.pendingAssetRef = null;

@@ -240,6 +240,9 @@ render, and restored data goes through `migrate()` like a loaded file.
 **Wall snapping.** Catalog entries with `mount: 'wall'` (wall units,
 logos) snap flush to the nearest wall's inner face with their back to
 the wall when placed or dragged (`geometry/wallSnap.ts`); Alt opts out.
+Logos hang with their bottom edge at 2.4 m (`mountHeight`) and need walls
+of at least 2.6 m (`minWallHeight`). Placing one raises a notice, which
+becomes a warning that stays until dismissed if the room's walls are lower.
 
 Actions mutate via Immer (Zustand's `immer` middleware). Components
 subscribe to thin selectors. Derived metrics (`wallLengths`,

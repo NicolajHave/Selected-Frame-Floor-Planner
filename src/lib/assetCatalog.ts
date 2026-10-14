@@ -33,6 +33,8 @@ export interface AssetEntry {
   mount: 'floor' | 'wall';
   /** Bottom edge height above the floor for wall-hung items, mm. */
   mountHeight?: number;
+  /** Lowest wall height (mm) the item can be hung on; shown when it's placed. */
+  minWallHeight?: number;
   /** Procedurally generated 3D model, loaded by the Three.js view. */
   glbUrl: string;
   /** Original CAD file under /public, when we have one. */
@@ -54,6 +56,7 @@ interface Spec {
   itemNumber?: string;
   mount?: 'floor' | 'wall';
   mountHeight?: number;
+  minWallHeight?: number;
   stepUrl?: string;
   material: string;
   weightKg?: number;
@@ -75,6 +78,7 @@ function entry(
     category,
     mount: spec.mount ?? 'floor',
     mountHeight: spec.mountHeight,
+    minWallHeight: spec.minWallHeight,
     glbUrl: `/assets/3d/${id}.glb`,
     stepUrl: spec.stepUrl,
     size: { width: mm(w), depth: mm(d), height: mm(h) },
@@ -86,6 +90,9 @@ function entry(
 }
 
 const SS = 'Stainless Steel';
+
+/** Logos hang with their bottom edge at 2.4 m and need walls of at least 2.6 m. */
+const LOGO = { mount: 'wall', mountHeight: 2400, minWallHeight: 2600 } as const;
 const SS_OAK = 'Stainless Steel, Oak';
 
 /**
@@ -167,11 +174,11 @@ export const ASSET_CATALOG: readonly AssetEntry[] = [
 
   // ---- Logos (wall-mounted; catalog leaves weight blank) ----
   entry('105-13-001', 'Corona Light Logo', 'Logos', [1200, 20, 225],
-    { mount: 'wall', mountHeight: 2100, material: SS, hsCodes: [HS_STEEL] }),
+    { ...LOGO, material: SS, hsCodes: [HS_STEEL] }),
   entry('105-13-015', 'Stainless Steel Logo', 'Logos', [1200, 20, 225],
-    { mount: 'wall', mountHeight: 2100, material: SS, hsCodes: [HS_STEEL] }),
+    { ...LOGO, material: SS, hsCodes: [HS_STEEL] }),
   entry('105-13-LED', 'LED Logo', 'Logos', [1200, 20, 225],
-    { itemNumber: '', mount: 'wall', mountHeight: 2100, material: 'LED', hsCodes: ['9405618020'] }),
+    { ...LOGO, itemNumber: '', material: 'LED', hsCodes: ['9405618020'] }),
 
   // ---- Mannequins (dimensions estimated; not in catalog) ----
   entry('112-18-001', 'Long Torso Female', 'Mannequins', [400, 400, 1500],

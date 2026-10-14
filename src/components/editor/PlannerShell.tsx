@@ -7,6 +7,7 @@ import { Canvas } from '@/render/svg/Canvas';
 import { RightPanel } from '../panels/RightPanel';
 import { AssetLibrary } from '../panels/AssetLibrary';
 import { ToolOverlay } from './ToolOverlay';
+import { NoticeToast } from './NoticeToast';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { usePlannerStore } from '@/store/plannerStore';
 
@@ -56,6 +57,7 @@ export function PlannerShell() {
               <ToolOverlay />
             </>
           )}
+          <NoticeToast />
         </div>
 
         {/* Right panel */}
