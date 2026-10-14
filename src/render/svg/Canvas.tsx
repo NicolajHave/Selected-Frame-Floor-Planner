@@ -10,6 +10,7 @@ import { Pillar } from './Pillar';
 import { Inventory } from './Inventory';
 import { Measurements } from './Measurements';
 import { CalibrationMarks, Underlay } from './Underlay';
+import { Openings } from './Openings';
 import { closestPointOnPolygon } from '@/geometry/insert';
 import { boundingBox } from '@/geometry/polygon';
 import { pointAtDistance } from '@/geometry/snap';
@@ -44,6 +45,8 @@ export function Canvas() {
   const setPan = usePlannerStore((s) => s.setPan);
   const addCalibrationPoint = usePlannerStore((s) => s.addCalibrationPoint);
   const updateUnderlay = usePlannerStore((s) => s.updateUnderlay);
+  const addOpeningAt = usePlannerStore((s) => s.addOpeningAt);
+  const moveOpening = usePlannerStore((s) => s.moveOpening);
 
   const metrics = useDerivedMetrics();
 
@@ -88,7 +91,8 @@ export function Canvas() {
     | { type: 'pillar'; id: string; offset: Point }
     | { type: 'inventory'; id: string; offset: Point }
     | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number }
-    | { type: 'underlay'; offset: Point };
+    | { type: 'underlay'; offset: Point }
+    | { type: 'opening'; id: string };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
@@ -116,6 +120,10 @@ export function Canvas() {
         addPillarAt(world);
         return;
       }
+      if (tool === 'add-opening') {
+        addOpeningAt(world);
+        return;
+      }
       if (tool === 'add-inventory') {
         addInventoryAt(world, { wallSnap: !e.altKey });
         return;
@@ -138,7 +146,7 @@ export function Canvas() {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
       }
     },
-    [tool, view, addCorner, addPillarAt, addInventoryAt, addCalibrationPoint, setSelection, getRect],
+    [tool, view, addCorner, addPillarAt, addInventoryAt, addOpeningAt, addCalibrationPoint, setSelection, getRect],
   );
 
   const onPointerMove = useCallback(
@@ -164,6 +172,8 @@ export function Canvas() {
           { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
           { wallSnap: !e.altKey },
         );
+      } else if (d.type === 'opening') {
+        moveOpening(d.id, world);
       } else if (d.type === 'underlay') {
         updateUnderlay({
           position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
@@ -177,7 +187,7 @@ export function Canvas() {
         else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, updateUnderlay, getRect],
+    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, updateUnderlay, getRect],
   );
 
   const onPointerUp = useCallback(
@@ -269,6 +279,7 @@ export function Canvas() {
       case 'calibrate':     return 'cursor-crosshair';
       case 'add-pillar':    return 'cursor-copy';
       case 'add-inventory': return 'cursor-copy';
+      case 'add-opening':   return 'cursor-copy';
       default:              return 'cursor-grab active:cursor-grabbing';
     }
   }, [tool]);
@@ -358,6 +369,15 @@ export function Canvas() {
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
+  const onPointerDownOpening = (id: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return; // let placement clicks through
+    e.stopPropagation();
+    setSelection({ kind: 'opening', id });
+    beginGesture();
+    drag.current = { type: 'opening', id };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
   const onPointerDownUnderlay = (e: React.PointerEvent<SVGElement>) => {
     const u = project.underlay;
     if (tool !== 'select' || !u || u.locked) return;
@@ -403,6 +423,15 @@ export function Canvas() {
             onPointerDownCorner={onPointerDownCorner}
             onPointerDownEdge={onPointerDownEdge}
             onPointerDownRoom={onPointerDownRoom}
+          />
+        )}
+
+        {room && room.openings.length > 0 && (
+          <Openings
+            room={room}
+            view={view}
+            selectedId={selection?.kind === 'opening' ? selection.id : null}
+            onPointerDown={onPointerDownOpening}
           />
         )}
 

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { findAsset } from '@/lib/assetCatalog';
+import { openingType } from '@/lib/openingTypes';
 
 export function ToolOverlay() {
   const tool = usePlannerStore((s) => s.tool);
@@ -10,6 +11,7 @@ export function ToolOverlay() {
   const pendingAssetRef = usePlannerStore((s) => s.pendingAssetRef);
   const calibration = usePlannerStore((s) => s.calibration);
   const drawLength = usePlannerStore((s) => s.drawLength);
+  const pendingOpening = usePlannerStore((s) => s.pendingOpening);
 
   if (tool === 'calibrate' && calibration?.a && calibration.b) {
     return (
@@ -37,6 +39,8 @@ export function ToolOverlay() {
     } else {
       hint = 'Click the first corner — or press Esc — to close the shape. Type a length + Enter for an exact wall.';
     }
+  } else if (tool === 'add-opening' && pendingOpening) {
+    hint = `Click on a wall to place the ${openingType(pendingOpening).name.toLowerCase()}.`;
   } else if (tool === 'add-pillar') {
     hint = 'Click anywhere to drop a pillar.';
   } else if (tool === 'add-inventory') {

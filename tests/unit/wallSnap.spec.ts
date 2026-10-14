@@ -14,6 +14,7 @@ function rect(reverse = false): RoomPolygon {
     closed: true,
     wallThickness: 120 as Mm,
     wallHeight: 2700 as Mm,
+    openings: [],
     corners: pts.map(([x, y], i) => ({ id: `c${i}`, point: { x: x as Mm, y: y as Mm } })),
   };
 }

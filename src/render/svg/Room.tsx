@@ -40,6 +40,8 @@ export function Room({
   const badgeR = pxStroke(view, 8);
   const badgeFont = pxStroke(view, 9);
   const badgeInset = pxStroke(view, 18);
+  // Beside the wall-length label (drawn at the midpoint), not on top of it.
+  const badgeShift = pxStroke(view, 44);
   const inward = signedArea(corners.map((c) => c.point)) >= 0 ? 1 : -1;
 
   const polyPoints = corners.map((c) => `${c.point.x},${c.point.y}`).join(' ');
@@ -119,8 +121,9 @@ export function Room({
           const len = Math.hypot(e.x2 - e.x1, e.y2 - e.y1) || 1;
           const nx = (inward * -(e.y2 - e.y1)) / len;
           const ny = (inward * (e.x2 - e.x1)) / len;
-          const cx = (e.x1 + e.x2) / 2 + nx * badgeInset;
-          const cy = (e.y1 + e.y2) / 2 + ny * badgeInset;
+          const shift = Math.min(badgeShift, len / 4);
+          const cx = (e.x1 + e.x2) / 2 + nx * badgeInset + ((e.x2 - e.x1) / len) * shift;
+          const cy = (e.y1 + e.y2) / 2 + ny * badgeInset + ((e.y2 - e.y1) / len) * shift;
           const hot = i === highlightedWall;
           return (
             <g key={`n-${e.fromId}`} pointerEvents="none" data-wall-number={i + 1}>

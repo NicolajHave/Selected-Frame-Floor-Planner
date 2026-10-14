@@ -55,7 +55,8 @@ export function EmptySelection() {
       <Section title="Shortcuts">
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px] text-ink-700">
           <Key k="⌘Z / ⇧⌘Z">Undo / redo</Key>
-          <Key k="R / ⇧R">Rotate selected 90°</Key>
+          <Key k="R / ⇧R">Rotate 90° · doors: flip hinge / swing</Key>
+          <Key k="123 + Enter">While drawing: exact wall length</Key>
           <Key k="⌘D">Duplicate selected</Key>
           <Key k="Delete">Remove selected</Key>
           <Key k="Alt + drag">Place freely, no wall snap</Key>
