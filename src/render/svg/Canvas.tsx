@@ -323,7 +323,7 @@ export function Canvas() {
     >
       <Grid view={view} width={size.w} height={size.h} />
 
-      <g transform={`translate(${view.pan.x} ${view.pan.y}) scale(${view.zoom})`}>
+      <g data-layer="world" transform={`translate(${view.pan.x} ${view.pan.y}) scale(${view.zoom})`}>
         {room && (
           <Room
             room={room}
