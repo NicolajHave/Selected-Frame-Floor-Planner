@@ -1,7 +1,19 @@
 # `src/render/three/` — 3D adapter
 
-Read-only 3D view over the same `Project` slice the SVG canvas consumes
-(`src/store/plannerStore.ts`). It introduces no domain fields of its own.
+3D view over the same `Project` slice the SVG canvas consumes
+(`src/store/plannerStore.ts`). It introduces no domain fields of its own and
+edits only through store actions, so undo, autosave and the parts list
+behave the same in both views.
+
+## Interaction
+
+- Click an object to select it; drag to move it along the floor
+  (`scene/useFloorDrag.ts`). Orbiting pauses during the drag, and the
+  whole drag is one undo step (`beginGesture` / `endGesture`).
+- Wall-mounted catalog items snap to the nearest wall while dragged
+  (hold Alt to move freely), same as in 2D.
+- With a placement tool armed, clicking the floor places the item.
+- Room drawing stays in the 2D plan.
 
 ## Coordinate mapping
 
@@ -21,6 +33,7 @@ is metres, Y-up:
 | `Pillar.size` + position     | `BoxGeometry(width, height, depth)` mesh              |
 | `InventoryItem.assetRef`     | GLB via `assetCatalog.glbUrl` (`InventoryMeshes.tsx`) |
 | No `assetRef` / loading      | `BoxGeometry` in the item's stored size               |
+| Wall-hung items (logos)      | Lifted to the catalog's `mountHeight`                 |
 | Camera                       | `OrbitControls` (`controls/OrbitView.tsx`)            |
 
 ## Assets
@@ -43,6 +56,8 @@ three/
 │   ├── Walls.tsx            # box per wall segment
 │   ├── Pillars.tsx
 │   ├── InventoryMeshes.tsx  # GLB loader + placeholder boxes
+│   ├── SelectionBox.tsx     # outline around the selected object
+│   ├── useFloorDrag.ts      # select + drag along the floor plane
 │   └── Lights.tsx
 └── controls/
     └── OrbitView.tsx        # OrbitControls wrapper (no drei)

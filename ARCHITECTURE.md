@@ -221,9 +221,25 @@ PlannerStore
 ├── view:    ViewState
 ├── tool:    'select' | 'draw-room' | 'add-pillar' | 'add-inventory'
 ├── selection: { kind, id } | null
+├── past / future: Project[]          # undo / redo stacks
 └── actions: addCorner, moveCorner, insertCornerOnEdge, closeRoom,
-              addPillar, updateObject, duplicate, delete, …
+              addPillar, updateObject, moveInventory, rotateSelected,
+              duplicate, delete, undo, redo, beginGesture, endGesture, …
 ```
+
+**History.** Every action that edits the project pushes the previous
+`project` onto `past` first (cheap: Immer shares unchanged structure).
+Drags wrap their many per-frame updates in `beginGesture` /
+`endGesture`, so one drag is one undo step. History is session-only.
+
+**Autosave.** Zustand's `persist` middleware writes `project` (only) to
+`localStorage` under `sf-planner:project`. Hydration is deferred to
+mount (`PlannerShell`) so prerendered HTML matches the first client
+render, and restored data goes through `migrate()` like a loaded file.
+
+**Wall snapping.** Catalog entries with `mount: 'wall'` (wall units,
+logos) snap flush to the nearest wall's inner face with their back to
+the wall when placed or dragged (`geometry/wallSnap.ts`); Alt opts out.
 
 Actions mutate via Immer (Zustand's `immer` middleware). Components
 subscribe to thin selectors. Derived metrics (`wallLengths`,
@@ -240,7 +256,9 @@ clears any in-progress drawing.
 through store actions — never mutates objects directly.
 
 Keyboard: `Esc` cancels tool / clears selection, `Delete` removes
-selected, `Cmd/Ctrl+D` duplicates, `Cmd/Ctrl+S` saves JSON.
+selected, `R` / `Shift+R` rotates ±90°, `Cmd/Ctrl+Z` undoes,
+`Shift+Cmd/Ctrl+Z` or `Ctrl+Y` redoes, `Cmd/Ctrl+D` duplicates,
+`Cmd/Ctrl+S` saves JSON.
 
 ---
 
@@ -285,5 +303,9 @@ Implementation order, each phase end-to-end usable:
 
 ## 7. Non-goals (MVP)
 
-3D editor, WebGL, quotes, PDFs, auth, backend, full catalog, advanced
-snapping. Each is unblocked by the architecture above; none are built.
+Quotes, PDFs, auth, backend, multi-user sync, room drawing in 3D.
+Each is unblocked by the architecture above; none are built.
+
+Shipped since the original MVP scope: the full SIS catalog with generated
+3D models, an interactive 3D view, undo/redo, autosave, wall snapping and
+a parts-list export (`lib/partsList.ts`).

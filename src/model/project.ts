@@ -13,7 +13,7 @@ export interface ViewState {
   showGrid: boolean;
   snapToGrid: boolean;
   gridSize: Mm;                       // 100 mm default
-  viewMode: ViewMode;                 // 2D plan (editable) or 3D view (read-only)
+  viewMode: ViewMode;                 // 2D plan or 3D view; both edit the same project
 }
 
 /**

@@ -10,7 +10,6 @@ export function AssetLibrary() {
   const tool = usePlannerStore((s) => s.tool);
   const pickAsset = usePlannerStore((s) => s.pickAsset);
   const setTool = usePlannerStore((s) => s.setTool);
-  const is3d = usePlannerStore((s) => s.view.viewMode === '3d');
 
   const armed = tool === 'add-inventory' && pendingAssetRef !== null;
 
@@ -21,9 +20,8 @@ export function AssetLibrary() {
           Library
         </h3>
         <p className="mt-1 text-[11px] leading-snug text-ink-500">
-          {is3d
-            ? 'Switch to 2D Plan to place items.'
-            : 'Click an item, then click the canvas to place it.'}
+          Click an item, then click the floor to place it. Wall units and logos snap to the
+          nearest wall — hold Alt to place freely.
         </p>
         {armed && (
           <button
@@ -50,7 +48,6 @@ export function AssetLibrary() {
                     key={asset.id}
                     asset={asset}
                     active={pendingAssetRef === asset.id}
-                    disabled={is3d}
                     onPick={() => pickAsset(asset.id)}
                   />
                 ))}
@@ -66,19 +63,16 @@ export function AssetLibrary() {
 interface CardProps {
   asset: AssetEntry;
   active: boolean;
-  disabled: boolean;
   onPick: () => void;
 }
 
-function AssetCard({ asset, active, disabled, onPick }: CardProps) {
+function AssetCard({ asset, active, onPick }: CardProps) {
   return (
     <button
       onClick={onPick}
-      disabled={disabled}
-      title={disabled ? 'Switch to 2D Plan to place items' : `Place ${asset.name}`}
+      title={`Place ${asset.name}`}
       className={clsx(
         'group flex flex-col gap-2 rounded-[2px] border bg-wall-50 p-2 text-left transition-colors',
-        'disabled:cursor-not-allowed disabled:opacity-50',
         active
           ? 'border-ink-900 bg-wall-100'
           : 'border-wall-200 hover:border-ink-500 hover:bg-wall-100',

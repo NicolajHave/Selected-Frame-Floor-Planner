@@ -6,35 +6,47 @@ import { useLoader } from '@react-three/fiber';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import type { InventoryItem } from '@/model/objects';
 import { findAsset } from '@/lib/assetCatalog';
+import { usePlannerStore } from '@/store/plannerStore';
 import { MM } from '../ThreeCanvas';
+import { useFloorDrag } from './useFloorDrag';
+import { SelectionBox } from './SelectionBox';
 
 export function InventoryMeshes({ items }: { items: InventoryItem[] }) {
+  const selectedId = usePlannerStore((s) =>
+    s.selection?.kind === 'inventory' ? s.selection.id : null,
+  );
   return (
     <group>
       {items.map((item) => (
-        <InventoryMesh key={item.id} item={item} />
+        <InventoryMesh key={item.id} item={item} selected={item.id === selectedId} />
       ))}
     </group>
   );
 }
 
-function InventoryMesh({ item }: { item: InventoryItem }) {
+function InventoryMesh({ item, selected }: { item: InventoryItem; selected: boolean }) {
   const asset = findAsset(item.assetRef);
-  const position: [number, number, number] = [item.position.x * MM, 0, item.position.y * MM];
+  const moveInventory = usePlannerStore((s) => s.moveInventory);
+  const handlers = useFloorDrag('inventory', item.id, item.position, (p, free) =>
+    moveInventory(item.id, p, { wallSnap: !free }),
+  );
+
+  const elevation = (asset?.mountHeight ?? 0) * MM;
+  const position: [number, number, number] = [item.position.x * MM, elevation, item.position.y * MM];
   const rotation: [number, number, number] = [0, -item.rotation, 0];
 
-  if (asset?.glbUrl) {
-    return (
-      <group position={position} rotation={rotation}>
+  return (
+    <group position={position} rotation={rotation} {...handlers}>
+      {asset?.glbUrl ? (
         <Suspense fallback={<PlaceholderBox item={item} />}>
           <GlbModel url={asset.glbUrl} />
         </Suspense>
-      </group>
-    );
-  }
-  return (
-    <group position={position} rotation={rotation}>
-      <PlaceholderBox item={item} />
+      ) : (
+        <PlaceholderBox item={item} />
+      )}
+      {selected && (
+        <SelectionBox w={item.size.width * MM} h={item.size.height * MM} d={item.size.depth * MM} />
+      )}
     </group>
   );
 }

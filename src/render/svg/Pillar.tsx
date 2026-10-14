@@ -3,15 +3,17 @@
 import type { Pillar as PillarT } from '@/model/objects';
 import type { ViewState } from '@/model/project';
 import { pxStroke } from './viewport';
+import { RotateHandle } from './Handles';
 
 interface Props {
   pillar: PillarT;
   view: ViewState;
   selected: boolean;
   onPointerDown: (e: React.PointerEvent<SVGElement>) => void;
+  onRotateHandleDown: (e: React.PointerEvent<SVGElement>) => void;
 }
 
-export function Pillar({ pillar, view, selected, onPointerDown }: Props) {
+export function Pillar({ pillar, view, selected, onPointerDown, onRotateHandleDown }: Props) {
   const { width, depth } = pillar.size;
   const x = pillar.position.x - width / 2;
   const y = pillar.position.y - depth / 2;
@@ -20,12 +22,10 @@ export function Pillar({ pillar, view, selected, onPointerDown }: Props) {
   const stroke = pxStroke(view, selected ? 2 : 1);
 
   return (
-    <g
-      transform={`rotate(${rotDeg} ${pillar.position.x} ${pillar.position.y})`}
-      onPointerDown={onPointerDown}
-      style={{ cursor: 'move' }}
-    >
+    <g transform={`rotate(${rotDeg} ${pillar.position.x} ${pillar.position.y})`}>
       <rect
+        onPointerDown={onPointerDown}
+        style={{ cursor: 'move' }}
         x={x}
         y={y}
         width={width}
@@ -35,6 +35,15 @@ export function Pillar({ pillar, view, selected, onPointerDown }: Props) {
         strokeWidth={stroke}
       />
       {selected && <SelectionFrame cx={pillar.position.x} cy={pillar.position.y} w={width} h={depth} view={view} />}
+      {selected && (
+        <RotateHandle
+          cx={pillar.position.x}
+          cy={pillar.position.y}
+          depth={depth}
+          view={view}
+          onPointerDown={onRotateHandleDown}
+        />
+      )}
     </g>
   );
 }

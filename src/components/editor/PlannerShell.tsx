@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { TopBar } from '../topbar/TopBar';
 import { Canvas } from '@/render/svg/Canvas';
@@ -21,6 +21,12 @@ export function PlannerShell() {
 
   const viewMode = usePlannerStore((s) => s.view.viewMode);
   const is3d = viewMode === '3d';
+
+  // Restore the autosaved plan once we're on the client.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    void Promise.resolve(usePlannerStore.persist.rehydrate()).finally(() => setRestored(true));
+  }, []);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
   const getViewportSize = useCallback(() => {
@@ -59,8 +65,8 @@ export function PlannerShell() {
       </div>
 
       <footer className="flex h-7 shrink-0 items-center justify-between border-t border-wall-200 bg-wall-50 px-4 text-[10px] uppercase tracking-widest2 text-ink-500">
-        <span>Internal · MVP</span>
-        <span>{is3d ? '3D View · read-only' : '2D Plan · mm · 1:1 world coordinates'}</span>
+        <span>Internal · MVP{restored ? ' · Autosaved in this browser' : ''}</span>
+        <span>{is3d ? '3D View · m · drag to move, orbit to look around' : '2D Plan · mm · 1:1 world coordinates'}</span>
       </footer>
     </div>
   );

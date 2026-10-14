@@ -12,6 +12,7 @@ interface Props {
 export function OrbitView({ target }: Props) {
   const camera = useThree((s) => s.camera);
   const gl = useThree((s) => s.gl);
+  const setThree = useThree((s) => s.set);
 
   const controls = useMemo(() => {
     const c = new OrbitControls(camera, gl.domElement);
@@ -23,10 +24,18 @@ export function OrbitView({ target }: Props) {
     return c;
   }, [camera, gl]);
 
+  // Expose as r3f's default controls so object drags can pause orbiting.
+  useEffect(() => {
+    setThree({ controls });
+    return () => {
+      setThree({ controls: null });
+      controls.dispose();
+    };
+  }, [controls, setThree]);
+
   useEffect(() => {
     controls.target.set(...target);
     controls.update();
-    return () => controls.dispose();
   }, [controls, target]);
 
   useFrame(() => controls.update());

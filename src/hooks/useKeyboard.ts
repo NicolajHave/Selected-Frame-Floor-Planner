@@ -4,56 +4,68 @@ import { useEffect } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { downloadJson } from '@/lib/io';
 
-export function useKeyboard() {
-  const setSelection = usePlannerStore((s) => s.setSelection);
-  const setTool = usePlannerStore((s) => s.setTool);
-  const closeRoom = usePlannerStore((s) => s.closeRoom);
-  const tool = usePlannerStore((s) => s.tool);
-  const room = usePlannerStore((s) => s.project.room);
-  const project = usePlannerStore((s) => s.project);
-  const deleteSelected = usePlannerStore((s) => s.deleteSelected);
-  const duplicateSelected = usePlannerStore((s) => s.duplicateSelected);
+const QUARTER_TURN = Math.PI / 2;
 
+export function useKeyboard() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // Don't intercept when typing in an input
       const target = e.target as HTMLElement | null;
       if (target?.matches('input, textarea, [contenteditable="true"]')) return;
 
+      // Read fresh state per keypress instead of re-binding on every change.
+      const s = usePlannerStore.getState();
       const meta = e.metaKey || e.ctrlKey;
+      const key = e.key.toLowerCase();
 
       if (e.key === 'Escape') {
-        if (tool === 'draw-room' && room && !room.closed && room.corners.length >= 3) {
+        const room = s.project.room;
+        if (s.tool === 'draw-room' && room && !room.closed && room.corners.length >= 3) {
           // Treat Escape during drawing as "finish here".
-          closeRoom();
+          s.closeRoom();
         } else {
-          setTool('select');
-          setSelection(null);
+          s.setTool('select');
+          s.setSelection(null);
         }
         return;
       }
 
+      if (meta && key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) s.redo();
+        else s.undo();
+        return;
+      }
+
+      if (meta && key === 'y') {
+        e.preventDefault();
+        s.redo();
+        return;
+      }
+
       if ((e.key === 'Delete' || e.key === 'Backspace') && !meta) {
-        deleteSelected();
+        s.deleteSelected();
         return;
       }
 
-      if (meta && e.key.toLowerCase() === 'd') {
-        e.preventDefault();
-        duplicateSelected();
+      if (key === 'r' && !meta && !e.altKey) {
+        s.rotateSelected(e.shiftKey ? -QUARTER_TURN : QUARTER_TURN);
         return;
       }
 
-      if (meta && e.key.toLowerCase() === 's') {
+      if (meta && key === 'd') {
         e.preventDefault();
-        downloadJson(`${project.name || 'plan'}.sf`, project);
+        s.duplicateSelected();
+        return;
+      }
+
+      if (meta && key === 's') {
+        e.preventDefault();
+        downloadJson(`${s.project.name || 'plan'}.sf`, s.project);
         return;
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [
-    setSelection, setTool, closeRoom, tool, room, project,
-    deleteSelected, duplicateSelected,
-  ]);
+  }, []);
 }

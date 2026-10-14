@@ -22,6 +22,10 @@ export function TopBar({ getViewportSize }: Props) {
   const toggleGrid = usePlannerStore((s) => s.toggleGrid);
   const toggleSnap = usePlannerStore((s) => s.toggleSnap);
   const setViewMode = usePlannerStore((s) => s.setViewMode);
+  const undo = usePlannerStore((s) => s.undo);
+  const redo = usePlannerStore((s) => s.redo);
+  const canUndo = usePlannerStore((s) => s.past.length > 0);
+  const canRedo = usePlannerStore((s) => s.future.length > 0);
   const is3d = view.viewMode === '3d';
 
   const fit = useFitToPlan();
@@ -106,12 +110,23 @@ export function TopBar({ getViewportSize }: Props) {
 
       <div className="h-6 w-px bg-wall-200" />
 
-      {/* Tools (2D editing only) */}
+      {/* History */}
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)" aria-label="Undo">
+          ↶
+        </Button>
+        <Button variant="ghost" onClick={redo} disabled={!canRedo} title="Redo (⇧⌘Z)" aria-label="Redo">
+          ↷
+        </Button>
+      </div>
+
+      <div className="h-6 w-px bg-wall-200" />
+
+      {/* Tools — room drawing needs the 2D plan; placement works in both views */}
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
           active={tool === 'select'}
-          disabled={is3d}
           onClick={() => setTool('select')}
         >
           Select
@@ -127,7 +142,6 @@ export function TopBar({ getViewportSize }: Props) {
         <Button
           variant="ghost"
           active={tool === 'add-pillar'}
-          disabled={is3d}
           onClick={() => setTool('add-pillar')}
         >
           + Pillar
@@ -135,7 +149,6 @@ export function TopBar({ getViewportSize }: Props) {
         <Button
           variant="ghost"
           active={tool === 'add-inventory'}
-          disabled={is3d}
           onClick={() => setTool('add-inventory')}
         >
           + Inventory
@@ -155,7 +168,6 @@ export function TopBar({ getViewportSize }: Props) {
         <Button
           variant="ghost"
           active={view.snapToGrid}
-          disabled={is3d}
           onClick={toggleSnap}
           title="Toggle snap"
         >
