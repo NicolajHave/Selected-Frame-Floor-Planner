@@ -120,6 +120,19 @@ interface RoomPolygon {
   wallThickness: Mm;               // for 3D extrusion
   wallHeight: Mm;                  // for 3D extrusion
   closed: boolean;
+  openings: Opening[];             // doors, passages, windows
+}
+
+interface Opening {
+  id: string;
+  kind: 'door' | 'double-door' | 'opening' | 'window';
+  wallStartCornerId: string;       // the wall that starts at this corner
+  offset: Mm;                      // wall start → opening centre
+  width: Mm;
+  height: Mm;                      // top above floor
+  sillHeight: Mm;                  // bottom above floor (windows)
+  hinge: 'start' | 'end';          // doors
+  swing: 'in' | 'out';             // doors
 }
 
 type ShapeType = 'rect' | 'round'; // round reserved for later
@@ -137,11 +150,22 @@ interface InventoryItem {
   id: string;
   type: 'inventory';
   name: string;                    // user label
-  category?: string;               // future: 'frame' | 'shelf' | …
+  category?: string;
+  assetRef?: string;               // SIS catalog id → model, mounting, weight
   position: Point;
   size: Size3D;
   rotation: Radians;
-  // assetRef?: string;            // future: swap placeholder for SVG/3D
+}
+
+interface PlanUnderlay {           // imported PDF page / image to trace
+  src: string;                     // JPEG data URL, so files are self-contained
+  fileName: string;
+  position: Point;                 // top-left, world mm
+  width: Mm;                       // height = width * aspect
+  aspect: number;
+  opacity: number;
+  locked: boolean;
+  calibrated: boolean;
 }
 
 interface ViewState {              // never serialised in export
@@ -150,6 +174,7 @@ interface ViewState {              // never serialised in export
   showGrid: boolean;
   snapToGrid: boolean;
   gridSize: Mm;                    // 100 default
+  viewMode: '2d' | '3d';
 }
 
 interface DerivedMetrics {         // recomputed, never stored
@@ -168,9 +193,15 @@ interface Project {
   room: RoomPolygon | null;
   pillars: Pillar[];
   inventory: InventoryItem[];
+  underlay?: PlanUnderlay | null;
   // view is a UI concern — see ViewState — and is excluded from export.
 }
 ```
+
+**Why anchor openings to a corner, not a wall index.** Inserting or
+deleting a corner renumbers the walls. A corner id + distance survives
+that; `geometry/openings.ts` re-anchors openings when a wall is split or
+merged, and clamps them onto the wall when it is shortened.
 
 **Why mm.** Construction practice in DK/SE. Avoids float drift compared
 to metres. A single conversion site (`render/svg/viewport.ts`) talks to
@@ -220,6 +251,7 @@ PlannerStore
 ├── project: Project
 ├── view:    ViewState
 ├── tool:    'select' | 'draw-room' | 'add-pillar' | 'add-inventory'
+│            | 'add-opening' | 'calibrate'
 ├── selection: { kind, id } | null
 ├── past / future: Project[]          # undo / redo stacks
 └── actions: addCorner, moveCorner, insertCornerOnEdge, closeRoom,
@@ -304,11 +336,29 @@ Implementation order, each phase end-to-end usable:
 
 ---
 
-## 7. Non-goals (MVP)
+## 7. Testing
+
+`npm test` runs two Playwright projects (see `playwright.config.ts`):
+
+- `tests/unit` — pure functions in `geometry/` and `lib/` (wall snapping,
+  wall resizing, openings, parts list / CSV). No browser.
+- `tests/e2e` — the production build in headless Chromium, including the
+  3D view (WebGL via SwiftShader). Tests read the autosaved project from
+  localStorage (`helpers.saved()` flushes the batched autosave first)
+  and locate the canvas transform via `g[data-layer="world"]`.
+
+CI runs typecheck, unit tests, build and e2e tests on every pull request
+and push to `main`. New features should come with a test in one of the
+two folders.
+
+---
+
+## 8. Non-goals (MVP)
 
 Quotes, PDFs, auth, backend, multi-user sync, room drawing in 3D.
 Each is unblocked by the architecture above; none are built.
 
 Shipped since the original MVP scope: the full SIS catalog with generated
-3D models, an interactive 3D view, undo/redo, autosave, wall snapping and
-a parts-list export (`lib/partsList.ts`).
+3D models, an interactive 3D view, undo/redo, autosave, wall snapping, a
+parts-list export (`lib/partsList.ts`), plan underlays with scale
+calibration, exact wall lengths, and doors / passages / windows.
