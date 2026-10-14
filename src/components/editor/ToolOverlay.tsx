@@ -9,6 +9,7 @@ export function ToolOverlay() {
   const room = usePlannerStore((s) => s.project.room);
   const pendingAssetRef = usePlannerStore((s) => s.pendingAssetRef);
   const calibration = usePlannerStore((s) => s.calibration);
+  const drawLength = usePlannerStore((s) => s.drawLength);
 
   if (tool === 'calibrate' && calibration?.a && calibration.b) {
     return (
@@ -29,10 +30,12 @@ export function ToolOverlay() {
   } else if (tool === 'draw-room') {
     if (!room || room.corners.length === 0) {
       hint = 'Click on the canvas to place the first corner.';
+    } else if (drawLength) {
+      hint = `Next wall: ${drawLength} mm — Enter places it towards the cursor (snapped to 45°, hold Alt for any angle).`;
     } else if (room.corners.length < 3) {
-      hint = 'Keep clicking to add corners.';
+      hint = 'Click to add corners — or type a wall length in mm and press Enter.';
     } else {
-      hint = 'Click the first corner — or press Esc — to close the shape.';
+      hint = 'Click the first corner — or press Esc — to close the shape. Type a length + Enter for an exact wall.';
     }
   } else if (tool === 'add-pillar') {
     hint = 'Click anywhere to drop a pillar.';

@@ -12,6 +12,7 @@ import { Measurements } from './Measurements';
 import { CalibrationMarks, Underlay } from './Underlay';
 import { closestPointOnPolygon } from '@/geometry/insert';
 import { boundingBox } from '@/geometry/polygon';
+import { pointAtDistance } from '@/geometry/snap';
 import type { Point } from '@/model/geometry';
 import type { Mm, Radians } from '@/model/units';
 import { mm } from '@/model/units';
@@ -24,6 +25,8 @@ export function Canvas() {
   const tool = usePlannerStore((s) => s.tool);
   const selection = usePlannerStore((s) => s.selection);
   const calibration = usePlannerStore((s) => s.calibration);
+  const highlightedWall = usePlannerStore((s) => s.highlightedWall);
+  const drawLength = usePlannerStore((s) => s.drawLength);
 
   const setSelection = usePlannerStore((s) => s.setSelection);
   const addCorner = usePlannerStore((s) => s.addCorner);
@@ -47,6 +50,8 @@ export function Canvas() {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [hoverWorld, setHoverWorld] = useState<Point | null>(null);
+  const hoverRef = useRef<Point | null>(null);
+  hoverRef.current = hoverWorld;
 
   // Track container size for the grid pattern.
   useLayoutEffect(() => {
@@ -220,15 +225,43 @@ export function Canvas() {
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
+  // ---- typed wall lengths while drawing ----
+  useEffect(() => {
+    if (tool !== 'draw-room') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.matches('input, textarea, [contenteditable="true"]')) return;
+      const s = usePlannerStore.getState();
+      const r = s.project.room;
+      if (!r || r.closed || r.corners.length === 0) return;
+      const buf = s.drawLength;
+      if (/^[0-9]$/.test(e.key) || ((e.key === '.' || e.key === ',') && !buf.includes('.'))) {
+        e.preventDefault();
+        s.setDrawLength(buf + (e.key === ',' ? '.' : e.key));
+      } else if (e.key === 'Backspace' && buf) {
+        e.preventDefault();
+        s.setDrawLength(buf.slice(0, -1));
+      } else if (e.key === 'Enter' && Number(buf) > 0) {
+        e.preventDefault();
+        const last = r.corners[r.corners.length - 1]!.point;
+        s.addCorner(pointAtDistance(last, hoverRef.current, Number(buf), !e.altKey), { snap: false });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tool]);
+
   // ---- preview line in draw-room mode ----
   const room = project.room;
   const previewLine = useMemo(() => {
     if (tool !== 'draw-room') return null;
     if (!room || room.closed) return null;
-    if (room.corners.length === 0 || !hoverWorld) return null;
+    if (room.corners.length === 0) return null;
     const last = room.corners[room.corners.length - 1]!.point;
-    return { x1: last.x, y1: last.y, x2: hoverWorld.x, y2: hoverWorld.y };
-  }, [tool, room, hoverWorld]);
+    const typed = Number(drawLength);
+    const end = typed > 0 ? pointAtDistance(last, hoverWorld, typed, true) : hoverWorld;
+    if (!end) return null;
+    return { x1: last.x, y1: last.y, x2: end.x, y2: end.y };
+  }, [tool, room, hoverWorld, drawLength]);
 
   const cursorClass = useMemo(() => {
     switch (tool) {
@@ -365,6 +398,8 @@ export function Canvas() {
             view={view}
             selectedKind={selection?.kind === 'corner' || selection?.kind === 'room' ? selection.kind : null}
             selectedId={selection?.id ?? null}
+            showWallNumbers={selection?.kind === 'room' || highlightedWall !== null}
+            highlightedWall={highlightedWall}
             onPointerDownCorner={onPointerDownCorner}
             onPointerDownEdge={onPointerDownEdge}
             onPointerDownRoom={onPointerDownRoom}

@@ -10,6 +10,7 @@ import { ToolOverlay } from './ToolOverlay';
 import { NoticeToast } from './NoticeToast';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { usePlannerStore } from '@/store/plannerStore';
+import { AUTOSAVE_EVENT, type AutosaveStatus } from '@/lib/autosaveStorage';
 
 // WebGL only exists in the browser; keep three out of the server bundle.
 const ThreeCanvas = dynamic(
@@ -27,6 +28,13 @@ export function PlannerShell() {
   const [restored, setRestored] = useState(false);
   useEffect(() => {
     void Promise.resolve(usePlannerStore.persist.rehydrate()).finally(() => setRestored(true));
+  }, []);
+
+  const [autosave, setAutosave] = useState<AutosaveStatus>('saved');
+  useEffect(() => {
+    const on = (e: Event) => setAutosave((e as CustomEvent<AutosaveStatus>).detail);
+    window.addEventListener(AUTOSAVE_EVENT, on);
+    return () => window.removeEventListener(AUTOSAVE_EVENT, on);
   }, []);
 
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -67,7 +75,13 @@ export function PlannerShell() {
       </div>
 
       <footer className="flex h-7 shrink-0 items-center justify-between border-t border-wall-200 bg-wall-50 px-4 text-[10px] uppercase tracking-widest2 text-ink-500">
-        <span>Internal · MVP{restored ? ' · Autosaved in this browser' : ''}</span>
+        <span>
+          Internal · MVP
+          {restored && autosave === 'saved' && ' · Autosaved in this browser'}
+          {autosave === 'failed' && (
+            <span className="text-red-700"> · Autosave failed (plan too large for this browser) — use Save</span>
+          )}
+        </span>
         <span>{is3d ? '3D View · m · drag to move, orbit to look around' : '2D Plan · mm · 1:1 world coordinates'}</span>
       </footer>
     </div>

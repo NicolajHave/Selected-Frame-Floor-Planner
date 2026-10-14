@@ -22,6 +22,7 @@ import { newId } from '@/lib/id';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
+import { setWallLength as resizeWall } from '@/geometry/walls';
 import { findAsset } from '@/lib/assetCatalog';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
 
@@ -58,6 +59,10 @@ interface PlannerState {
   pendingAssetRef: string | null;
   /** In-progress underlay scale calibration; null outside the calibrate tool. */
   calibration: Calibration | null;
+  /** Digits typed while drawing: the next wall's length in mm. */
+  drawLength: string;
+  /** Wall index highlighted on the canvas (e.g. hovered in the wall list). */
+  highlightedWall: number | null;
 
   /** Transient message about the last action, e.g. mounting requirements. */
   notice: Notice | null;
@@ -101,7 +106,12 @@ interface PlannerState {
 
   // room actions
   startRoom: () => void;
-  addCorner: (p: Point) => void;
+  /** `snap: false` places the corner exactly (typed lengths); default follows grid snap. */
+  addCorner: (p: Point, opts?: { snap?: boolean }) => void;
+  setDrawLength: (text: string) => void;
+  /** Wall `index` runs from corner `index` to the next corner. */
+  setWallLength: (index: number, lengthMm: number) => void;
+  setHighlightedWall: (index: number | null) => void;
   closeRoom: () => void;
   moveCorner: (cornerId: string, p: Point) => void;
   insertCorner: (afterCornerId: string, p: Point) => void;
@@ -221,6 +231,8 @@ export const usePlannerStore = create<PlannerState>()(
         pendingAssetRef: null,
         notice: null,
         calibration: null,
+        drawLength: '',
+        highlightedWall: null,
         past: [],
         future: [],
 
@@ -232,6 +244,7 @@ export const usePlannerStore = create<PlannerState>()(
             // Switching away from add-inventory abandons a pending asset pick.
             if (t !== 'add-inventory') s.pendingAssetRef = null;
             if (t !== 'calibrate') s.calibration = null;
+            if (t !== 'draw-room') s.drawLength = '';
           }),
 
         pickAsset: (assetId) =>
@@ -306,6 +319,7 @@ export const usePlannerStore = create<PlannerState>()(
         setSelection: (sel) =>
           set((s) => {
             s.selection = sel;
+            s.highlightedWall = null;
           }),
 
         setZoom: (z) =>
@@ -397,17 +411,39 @@ export const usePlannerStore = create<PlannerState>()(
             s.selection = null;
           }),
 
-        addCorner: (p) =>
+        addCorner: (p, opts) =>
           set((s) => {
             if (!s.project.room) return;
             if (s.project.room.closed) return;
             record(s);
-            const snapped = maybeSnap(s.view, p);
+            const snapped = opts?.snap === false ? p : maybeSnap(s.view, p);
+            s.drawLength = '';
             s.project.room.corners.push({
               id: newId('cor'),
               point: { x: snapped.x as Mm, y: snapped.y as Mm },
             });
             touch(s.project);
+          }),
+
+        setDrawLength: (text) =>
+          set((s) => {
+            s.drawLength = text;
+          }),
+
+        setWallLength: (index, lengthMm) =>
+          set((s) => {
+            const room = s.project.room;
+            if (!room) return;
+            const next = resizeWall(room.corners, room.closed, index, lengthMm);
+            if (next === room.corners) return;
+            record(s);
+            room.corners = next;
+            touch(s.project);
+          }),
+
+        setHighlightedWall: (index) =>
+          set((s) => {
+            s.highlightedWall = index;
           }),
 
         closeRoom: () =>
@@ -417,6 +453,7 @@ export const usePlannerStore = create<PlannerState>()(
             record(s);
             s.project.room.closed = true;
             s.tool = 'select';
+            s.drawLength = '';
             touch(s.project);
           }),
 

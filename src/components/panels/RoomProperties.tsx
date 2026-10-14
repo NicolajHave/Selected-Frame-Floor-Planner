@@ -11,6 +11,8 @@ export function RoomProperties() {
   const room = usePlannerStore((s) => s.project.room);
   const updateRoomMeta = usePlannerStore((s) => s.updateRoomMeta);
   const startRoom = usePlannerStore((s) => s.startRoom);
+  const setWallLength = usePlannerStore((s) => s.setWallLength);
+  const setHighlightedWall = usePlannerStore((s) => s.setHighlightedWall);
   const metrics = useDerivedMetrics();
   if (!room) return null;
 
@@ -29,7 +31,38 @@ export function RoomProperties() {
 
       <div className="h-px bg-wall-200" />
 
-      <Section title="Geometry (3D-ready)">
+      {metrics && metrics.wallLengths.length > 0 && (
+        <>
+          <Section title="Walls">
+            <p className="text-[11px] leading-relaxed text-ink-500">
+              Type exact lengths. The room keeps its shape: the opposite parallel wall adjusts.
+            </p>
+            <div className="grid grid-cols-2 gap-3" onMouseLeave={() => setHighlightedWall(null)}>
+              {metrics.wallLengths.map((len, i) => (
+                <div
+                  key={room.corners[i]!.id}
+                  onMouseEnter={() => setHighlightedWall(i)}
+                  onFocus={() => setHighlightedWall(i)}
+                  onBlur={() => setHighlightedWall(null)}
+                >
+                  <NumberField
+                    label={`Wall ${i + 1}`}
+                    unit="mm"
+                    value={len}
+                    step={10}
+                    min={100}
+                    onCommit={(v) => setWallLength(i, v)}
+                  />
+                </div>
+              ))}
+            </div>
+          </Section>
+
+          <div className="h-px bg-wall-200" />
+        </>
+      )}
+
+      <Section title="Geometry">
         <NumberField
           label="Wall thickness"
           unit="mm"
@@ -47,7 +80,7 @@ export function RoomProperties() {
           onCommit={(v) => updateRoomMeta({ wallHeight: mm(v) })}
         />
         <p className="text-[11px] leading-relaxed text-ink-500">
-          These values aren't shown in the 2D plan, but power the future 3D extrusion.
+          Used for the 3D view and to check wall-hung items such as logos.
         </p>
       </Section>
 
