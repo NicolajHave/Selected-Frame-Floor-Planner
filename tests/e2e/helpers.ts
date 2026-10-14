@@ -19,9 +19,10 @@ export async function openFresh(page: Page) {
 
 /** The autosaved project, i.e. exactly what the store holds. */
 export async function saved(page: Page) {
-  return page.evaluate(
-    () => JSON.parse(localStorage.getItem('sf-planner:project') ?? 'null')?.state?.project,
-  );
+  return page.evaluate(() => {
+    window.__sfFlushAutosave?.(); // autosave is batched; write it now
+    return JSON.parse(localStorage.getItem('sf-planner:project') ?? 'null')?.state?.project;
+  });
 }
 
 export function canvas(page: Page) {

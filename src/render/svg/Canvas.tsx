@@ -9,6 +9,7 @@ import { Room } from './Room';
 import { Pillar } from './Pillar';
 import { Inventory } from './Inventory';
 import { Measurements } from './Measurements';
+import { CalibrationMarks, Underlay } from './Underlay';
 import { closestPointOnPolygon } from '@/geometry/insert';
 import { boundingBox } from '@/geometry/polygon';
 import type { Point } from '@/model/geometry';
@@ -22,6 +23,7 @@ export function Canvas() {
   const view = usePlannerStore((s) => s.view);
   const tool = usePlannerStore((s) => s.tool);
   const selection = usePlannerStore((s) => s.selection);
+  const calibration = usePlannerStore((s) => s.calibration);
 
   const setSelection = usePlannerStore((s) => s.setSelection);
   const addCorner = usePlannerStore((s) => s.addCorner);
@@ -37,6 +39,8 @@ export function Canvas() {
   const endGesture = usePlannerStore((s) => s.endGesture);
   const setZoom = usePlannerStore((s) => s.setZoom);
   const setPan = usePlannerStore((s) => s.setPan);
+  const addCalibrationPoint = usePlannerStore((s) => s.addCalibrationPoint);
+  const updateUnderlay = usePlannerStore((s) => s.updateUnderlay);
 
   const metrics = useDerivedMetrics();
 
@@ -78,7 +82,8 @@ export function Canvas() {
     | { type: 'corner'; cornerId: string }
     | { type: 'pillar'; id: string; offset: Point }
     | { type: 'inventory'; id: string; offset: Point }
-    | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number };
+    | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number }
+    | { type: 'underlay'; offset: Point };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
@@ -92,6 +97,11 @@ export function Canvas() {
       // Placement tools act on any click that reaches the canvas — also
       // clicks bubbled through the room fill. Shapes that must intercept
       // (corners, objects in select mode) call stopPropagation themselves.
+      if (tool === 'calibrate') {
+        // Raw point: grid snapping would defeat the purpose.
+        addCalibrationPoint(world);
+        return;
+      }
       if (tool === 'draw-room') {
         // Closing: click the first corner. The first-corner shape itself handles that.
         addCorner(world);
@@ -123,7 +133,7 @@ export function Canvas() {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
       }
     },
-    [tool, view, addCorner, addPillarAt, addInventoryAt, setSelection, getRect],
+    [tool, view, addCorner, addPillarAt, addInventoryAt, addCalibrationPoint, setSelection, getRect],
   );
 
   const onPointerMove = useCallback(
@@ -149,6 +159,10 @@ export function Canvas() {
           { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
           { wallSnap: !e.altKey },
         );
+      } else if (d.type === 'underlay') {
+        updateUnderlay({
+          position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
+        });
       } else if (d.type === 'rotate') {
         // The handle sits on the local +y side, i.e. at angle θ + 90°.
         let angle = Math.atan2(world.y - d.cy, world.x - d.cx) - Math.PI / 2;
@@ -158,7 +172,7 @@ export function Canvas() {
         else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, getRect],
+    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, updateUnderlay, getRect],
   );
 
   const onPointerUp = useCallback(
@@ -219,6 +233,7 @@ export function Canvas() {
   const cursorClass = useMemo(() => {
     switch (tool) {
       case 'draw-room':     return 'cursor-crosshair';
+      case 'calibrate':     return 'cursor-crosshair';
       case 'add-pillar':    return 'cursor-copy';
       case 'add-inventory': return 'cursor-copy';
       default:              return 'cursor-grab active:cursor-grabbing';
@@ -310,6 +325,22 @@ export function Canvas() {
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
+  const onPointerDownUnderlay = (e: React.PointerEvent<SVGElement>) => {
+    const u = project.underlay;
+    if (tool !== 'select' || !u || u.locked) return;
+    e.stopPropagation();
+    const rect = getRect();
+    if (!rect) return;
+    const world = eventToWorld(view, rect, e.clientX, e.clientY);
+    setSelection(null);
+    beginGesture();
+    drag.current = {
+      type: 'underlay',
+      offset: { x: (world.x - u.position.x) as Mm, y: (world.y - u.position.y) as Mm },
+    };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
   const previewStroke = pxStroke(view, 1.5);
 
   return (
@@ -324,6 +355,10 @@ export function Canvas() {
       <Grid view={view} width={size.w} height={size.h} />
 
       <g data-layer="world" transform={`translate(${view.pan.x} ${view.pan.y}) scale(${view.zoom})`}>
+        {project.underlay && (
+          <Underlay underlay={project.underlay} view={view} onPointerDown={onPointerDownUnderlay} />
+        )}
+
         {room && (
           <Room
             room={room}
@@ -374,6 +409,8 @@ export function Canvas() {
         )}
 
         {room && metrics && <Measurements room={room} view={view} metrics={metrics} />}
+
+        {calibration && <CalibrationMarks calibration={calibration} hover={hoverWorld} view={view} />}
       </g>
 
       {/* Cursor coords readout, in screen space */}

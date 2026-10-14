@@ -1,13 +1,14 @@
 'use client';
 
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import type { Draft } from 'immer';
 import type {
   Project,
   ViewState,
   ViewMode,
+  PlanUnderlay,
   RoomPolygon,
   Pillar,
   InventoryItem,
@@ -22,8 +23,15 @@ import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
 import { findAsset } from '@/lib/assetCatalog';
+import { batchedLocalStorage } from '@/lib/autosaveStorage';
 
-export type Tool = 'select' | 'draw-room' | 'add-pillar' | 'add-inventory';
+export type Tool = 'select' | 'draw-room' | 'add-pillar' | 'add-inventory' | 'calibrate';
+
+/** Two clicks on the underlay that span a known real-world distance. */
+export interface Calibration {
+  a: Point | null;
+  b: Point | null;
+}
 
 export interface Notice {
   /** Changes on every new notice so the UI can restart its timer. */
@@ -48,6 +56,8 @@ interface PlannerState {
    * Cleared after one placement or when the user switches tools.
    */
   pendingAssetRef: string | null;
+  /** In-progress underlay scale calibration; null outside the calibrate tool. */
+  calibration: Calibration | null;
 
   /** Transient message about the last action, e.g. mounting requirements. */
   notice: Notice | null;
@@ -61,6 +71,14 @@ interface PlannerState {
   setTool: (t: Tool) => void;
   setSelection: (s: Selection | null) => void;
   pickAsset: (assetId: string) => void;
+
+  // plan underlay
+  setUnderlay: (u: PlanUnderlay | null) => void;
+  updateUnderlay: (patch: Partial<PlanUnderlay>) => void;
+  startCalibration: () => void;
+  addCalibrationPoint: (p: Point) => void;
+  /** Scale the underlay so the two clicked points are `distanceMm` apart. */
+  applyCalibration: (distanceMm: number) => void;
   dismissNotice: () => void;
 
   // view actions
@@ -202,6 +220,7 @@ export const usePlannerStore = create<PlannerState>()(
         selection: null,
         pendingAssetRef: null,
         notice: null,
+        calibration: null,
         past: [],
         future: [],
 
@@ -212,6 +231,7 @@ export const usePlannerStore = create<PlannerState>()(
             if (t !== 'select') s.selection = null;
             // Switching away from add-inventory abandons a pending asset pick.
             if (t !== 'add-inventory') s.pendingAssetRef = null;
+            if (t !== 'calibrate') s.calibration = null;
           }),
 
         pickAsset: (assetId) =>
@@ -219,6 +239,63 @@ export const usePlannerStore = create<PlannerState>()(
             s.pendingAssetRef = assetId;
             s.tool = 'add-inventory';
             s.selection = null;
+          }),
+
+        setUnderlay: (u) =>
+          set((s) => {
+            if (!u && !s.project.underlay) return;
+            record(s);
+            s.project.underlay = u;
+            touch(s.project);
+          }),
+
+        updateUnderlay: (patch) =>
+          set((s) => {
+            const u = s.project.underlay;
+            if (!u) return;
+            record(s);
+            Object.assign(u, patch);
+            if (patch.position) u.position = { ...patch.position };
+            touch(s.project);
+          }),
+
+        startCalibration: () =>
+          set((s) => {
+            if (!s.project.underlay) return;
+            s.tool = 'calibrate';
+            s.calibration = { a: null, b: null };
+            s.selection = null;
+            s.pendingAssetRef = null;
+          }),
+
+        addCalibrationPoint: (p) =>
+          set((s) => {
+            const c = s.calibration;
+            if (!c) return;
+            if (!c.a) c.a = { x: p.x, y: p.y };
+            else if (!c.b) c.b = { x: p.x, y: p.y };
+          }),
+
+        applyCalibration: (distanceMm) =>
+          set((s) => {
+            const c = s.calibration;
+            const u = s.project.underlay;
+            if (!c?.a || !c.b || !u || !(distanceMm > 0)) return;
+            const measured = Math.hypot(c.b.x - c.a.x, c.b.y - c.a.y);
+            if (measured < 1) return;
+            record(s);
+            const k = distanceMm / measured;
+            // Scale about the first point so it stays put on screen.
+            u.position = {
+              x: (c.a.x + (u.position.x - c.a.x) * k) as Mm,
+              y: (c.a.y + (u.position.y - c.a.y) * k) as Mm,
+            };
+            u.width = (u.width * k) as Mm;
+            u.calibrated = true;
+            u.locked = true;
+            s.calibration = null;
+            s.tool = 'select';
+            touch(s.project);
           }),
 
         dismissNotice: () =>
@@ -604,7 +681,7 @@ export const usePlannerStore = create<PlannerState>()(
       // undo history are session state.
       name: 'sf-planner:project',
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: batchedLocalStorage(),
       partialize: (s) => ({ project: s.project }),
       // Hydrate after mount (PlannerShell) so the prerendered HTML and the
       // first client render agree.

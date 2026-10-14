@@ -48,7 +48,7 @@ export function PlannerShell() {
         </aside>
 
         {/* Canvas stage */}
-        <div ref={stageRef} className="relative min-w-0 flex-1 bg-wall-100">
+        <div ref={stageRef} data-stage className="relative min-w-0 flex-1 bg-wall-100">
           {is3d ? (
             <ThreeCanvas />
           ) : (

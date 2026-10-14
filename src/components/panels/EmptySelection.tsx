@@ -5,6 +5,7 @@ import { useDerivedMetrics } from '@/store/selectors';
 import { formatArea, formatLength } from '@/model/units';
 import { Section } from '../ui/Section';
 import { PartsListSection } from './PartsListSection';
+import { PlanUnderlaySection } from './PlanUnderlaySection';
 
 export function EmptySelection() {
   const project = usePlannerStore((s) => s.project);
@@ -40,6 +41,10 @@ export function EmptySelection() {
           </>
         )}
       </Section>
+
+      <div className="h-px bg-wall-200" />
+
+      <PlanUnderlaySection />
 
       <div className="h-px bg-wall-200" />
 
