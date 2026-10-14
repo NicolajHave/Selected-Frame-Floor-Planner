@@ -21,6 +21,12 @@ export function TopBar({ getViewportSize }: Props) {
   const view = usePlannerStore((s) => s.view);
   const toggleGrid = usePlannerStore((s) => s.toggleGrid);
   const toggleSnap = usePlannerStore((s) => s.toggleSnap);
+  const setViewMode = usePlannerStore((s) => s.setViewMode);
+  const undo = usePlannerStore((s) => s.undo);
+  const redo = usePlannerStore((s) => s.redo);
+  const canUndo = usePlannerStore((s) => s.past.length > 0);
+  const canRedo = usePlannerStore((s) => s.future.length > 0);
+  const is3d = view.viewMode === '3d';
 
   const fit = useFitToPlan();
   const { save, exportData, triggerLoad, inputRef, onFileChange } = useFileIO();
@@ -104,7 +110,19 @@ export function TopBar({ getViewportSize }: Props) {
 
       <div className="h-6 w-px bg-wall-200" />
 
-      {/* Tools */}
+      {/* History */}
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" onClick={undo} disabled={!canUndo} title="Undo (⌘Z)" aria-label="Undo">
+          ↶
+        </Button>
+        <Button variant="ghost" onClick={redo} disabled={!canRedo} title="Redo (⇧⌘Z)" aria-label="Redo">
+          ↷
+        </Button>
+      </div>
+
+      <div className="h-6 w-px bg-wall-200" />
+
+      {/* Tools — room drawing needs the 2D plan; placement works in both views */}
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
@@ -116,6 +134,7 @@ export function TopBar({ getViewportSize }: Props) {
         <Button
           variant="ghost"
           active={tool === 'draw-room'}
+          disabled={is3d}
           onClick={startRoom}
         >
           Draw area
@@ -140,6 +159,7 @@ export function TopBar({ getViewportSize }: Props) {
         <Button
           variant="ghost"
           active={view.showGrid}
+          disabled={is3d}
           onClick={toggleGrid}
           title="Toggle grid"
         >
@@ -153,21 +173,31 @@ export function TopBar({ getViewportSize }: Props) {
         >
           Snap
         </Button>
-        <Button variant="ghost" onClick={() => fit(getViewportSize())}>
+        <Button variant="ghost" disabled={is3d} onClick={() => fit(getViewportSize())}>
           Fit to plan
         </Button>
 
         <div className="ml-2 h-6 w-px bg-wall-200" />
 
-        {/* Future view toggle. The 3D entry point is intentionally disabled. */}
+        {/* 2D / 3D view toggle */}
         <div className="ml-2 flex items-center rounded-[2px] border border-wall-200 bg-wall-100 p-0.5">
-          <button className="cursor-default rounded-[2px] bg-ink-900 px-2 py-1 text-[11px] font-medium text-wall-50">
+          <button
+            onClick={() => setViewMode('2d')}
+            className={
+              !is3d
+                ? 'rounded-[2px] bg-ink-900 px-2 py-1 text-[11px] font-medium text-wall-50'
+                : 'rounded-[2px] px-2 py-1 text-[11px] text-ink-500 hover:text-ink-900'
+            }
+          >
             2D Plan
           </button>
           <button
-            disabled
-            title="3D view ships in a future release"
-            className="cursor-not-allowed rounded-[2px] px-2 py-1 text-[11px] text-ink-500"
+            onClick={() => setViewMode('3d')}
+            className={
+              is3d
+                ? 'rounded-[2px] bg-ink-900 px-2 py-1 text-[11px] font-medium text-wall-50'
+                : 'rounded-[2px] px-2 py-1 text-[11px] text-ink-500 hover:text-ink-900'
+            }
           >
             3D View
           </button>

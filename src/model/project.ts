@@ -5,12 +5,15 @@ import type { RoomPolygon, Pillar, InventoryItem } from './objects';
  * View state lives in the store but is **never serialised** in the
  * exported JSON. It is a UI concern and varies per user / session.
  */
+export type ViewMode = '2d' | '3d';
+
 export interface ViewState {
   zoom: number;                       // pixels per mm
   pan: { x: number; y: number };      // screen px
   showGrid: boolean;
   snapToGrid: boolean;
   gridSize: Mm;                       // 100 mm default
+  viewMode: ViewMode;                 // 2D plan or 3D view; both edit the same project
 }
 
 /**

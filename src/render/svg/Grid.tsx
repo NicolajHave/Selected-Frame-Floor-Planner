@@ -29,7 +29,9 @@ export function Grid({ view, width, height }: Props) {
   const offsetYMajor = ((view.pan.y % majorStepPx) + majorStepPx) % majorStepPx;
 
   return (
-    <g aria-hidden="true">
+    // pointerEvents=none: the pattern-filled rects must not swallow canvas
+    // clicks — the Canvas click handler only fires when e.target is the svg.
+    <g aria-hidden="true" pointerEvents="none">
       <defs>
         <pattern
           id="grid-minor"

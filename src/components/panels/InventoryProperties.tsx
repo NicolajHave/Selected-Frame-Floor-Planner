@@ -6,14 +6,17 @@ import { Section } from '../ui/Section';
 import { NumberField } from '../ui/NumberField';
 import { TextField } from '../ui/TextField';
 import { Button } from '../ui/Button';
+import { findAsset } from '@/lib/assetCatalog';
 
 export function InventoryProperties({ id }: { id: string }) {
   const item = usePlannerStore((s) => s.project.inventory.find((i) => i.id === id));
   const updateInventory = usePlannerStore((s) => s.updateInventory);
   const duplicate = usePlannerStore((s) => s.duplicateSelected);
   const remove = usePlannerStore((s) => s.deleteSelected);
+  const wallHeight = usePlannerStore((s) => s.project.room?.wallHeight);
 
   if (!item) return null;
+  const asset = findAsset(item.assetRef);
 
   return (
     <div className="flex h-full flex-col">
@@ -30,10 +33,17 @@ export function InventoryProperties({ id }: { id: string }) {
         />
         {item.assetRef && (
           <p className="font-mono text-[10px] uppercase tracking-widest2 text-ink-500">
-            STEP · {item.assetRef}
+            3D · {item.assetRef}
           </p>
         )}
         <p className="text-[11px] text-ink-500 font-mono">{item.id}</p>
+        {asset?.minWallHeight !== undefined && (
+          <MountingNote
+            mountHeight={asset.mountHeight}
+            minWallHeight={asset.minWallHeight}
+            wallHeight={wallHeight}
+          />
+        )}
       </Section>
 
       <div className="h-px bg-wall-200" />
@@ -108,5 +118,31 @@ export function InventoryProperties({ id }: { id: string }) {
         </div>
       </Section>
     </div>
+  );
+}
+
+function MountingNote({
+  mountHeight,
+  minWallHeight,
+  wallHeight,
+}: {
+  mountHeight?: number;
+  minWallHeight: number;
+  wallHeight?: number;
+}) {
+  const tooLow = wallHeight !== undefined && wallHeight < minWallHeight;
+  const m = (n: number) => `${(n / 1000).toFixed(1)} m`;
+  return (
+    <p
+      className={
+        tooLow
+          ? 'rounded-[2px] border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-950'
+          : 'rounded-[2px] border border-wall-200 bg-wall-100 px-3 py-2 text-[11px] leading-relaxed text-ink-700'
+      }
+    >
+      {mountHeight !== undefined && <>Hangs with its bottom edge at {m(mountHeight)}. </>}
+      Walls must be at least {m(minWallHeight)} high.
+      {tooLow && <> This room&apos;s walls are only {m(wallHeight)}.</>}
+    </p>
   );
 }

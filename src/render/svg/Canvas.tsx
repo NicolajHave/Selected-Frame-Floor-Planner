@@ -12,8 +12,10 @@ import { Measurements } from './Measurements';
 import { closestPointOnPolygon } from '@/geometry/insert';
 import { boundingBox } from '@/geometry/polygon';
 import type { Point } from '@/model/geometry';
-import type { Mm } from '@/model/units';
+import type { Mm, Radians } from '@/model/units';
 import { mm } from '@/model/units';
+
+const ROTATE_STEP = Math.PI / 12; // 15°
 
 export function Canvas() {
   const project = usePlannerStore((s) => s.project);
@@ -30,6 +32,9 @@ export function Canvas() {
   const addInventoryAt = usePlannerStore((s) => s.addInventoryAt);
   const updatePillar = usePlannerStore((s) => s.updatePillar);
   const updateInventory = usePlannerStore((s) => s.updateInventory);
+  const moveInventory = usePlannerStore((s) => s.moveInventory);
+  const beginGesture = usePlannerStore((s) => s.beginGesture);
+  const endGesture = usePlannerStore((s) => s.endGesture);
   const setZoom = usePlannerStore((s) => s.setZoom);
   const setPan = usePlannerStore((s) => s.setPan);
 
@@ -72,20 +77,21 @@ export function Canvas() {
     | { type: 'pan'; startX: number; startY: number; startPanX: number; startPanY: number }
     | { type: 'corner'; cornerId: string }
     | { type: 'pillar'; id: string; offset: Point }
-    | { type: 'inventory'; id: string; offset: Point };
+    | { type: 'inventory'; id: string; offset: Point }
+    | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
 
   const onCanvasPointerDown = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
-      // Ignore clicks that bubbled from a child shape (those have their own handlers).
-      if (e.target !== e.currentTarget) return;
-
       const rect = getRect();
       if (!rect) return;
       const world = eventToWorld(view, rect, e.clientX, e.clientY);
 
+      // Placement tools act on any click that reaches the canvas — also
+      // clicks bubbled through the room fill. Shapes that must intercept
+      // (corners, objects in select mode) call stopPropagation themselves.
       if (tool === 'draw-room') {
         // Closing: click the first corner. The first-corner shape itself handles that.
         addCorner(world);
@@ -96,9 +102,13 @@ export function Canvas() {
         return;
       }
       if (tool === 'add-inventory') {
-        addInventoryAt(world);
+        addInventoryAt(world, { wallSnap: !e.altKey });
         return;
       }
+
+      // Ignore select-mode clicks that bubbled from a child shape (those
+      // have their own handlers).
+      if (e.target !== e.currentTarget) return;
 
       // Default: pan drag or clear selection
       if (e.button === 0) {
@@ -134,20 +144,34 @@ export function Canvas() {
           position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
         });
       } else if (d.type === 'inventory') {
-        updateInventory(d.id, {
-          position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
-        });
+        moveInventory(
+          d.id,
+          { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
+          { wallSnap: !e.altKey },
+        );
+      } else if (d.type === 'rotate') {
+        // The handle sits on the local +y side, i.e. at angle θ + 90°.
+        let angle = Math.atan2(world.y - d.cy, world.x - d.cx) - Math.PI / 2;
+        if (!e.altKey) angle = Math.round(angle / ROTATE_STEP) * ROTATE_STEP;
+        const rotation = angle as Radians;
+        if (d.kind === 'pillar') updatePillar(d.id, { rotation });
+        else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, getRect],
+    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, getRect],
   );
 
-  const onPointerUp = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
-    drag.current = null;
-    if ((e.currentTarget as Element).hasPointerCapture(e.pointerId)) {
-      (e.currentTarget as Element).releasePointerCapture(e.pointerId);
-    }
-  }, []);
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent<SVGSVGElement>) => {
+      const wasEditing = drag.current && drag.current.type !== 'pan';
+      drag.current = null;
+      if (wasEditing) endGesture();
+      if ((e.currentTarget as Element).hasPointerCapture(e.pointerId)) {
+        (e.currentTarget as Element).releasePointerCapture(e.pointerId);
+      }
+    },
+    [endGesture],
+  );
 
   // Wheel zoom anchored at the cursor
   const onWheel = useCallback(
@@ -210,6 +234,7 @@ export function Canvas() {
       return;
     }
     setSelection({ kind: 'corner', id: cornerId });
+    beginGesture();
     drag.current = { type: 'corner', cornerId };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
@@ -241,6 +266,7 @@ export function Canvas() {
     const world = eventToWorld(view, rect, e.clientX, e.clientY);
     const p = project.pillars.find((x) => x.id === id);
     if (!p) return;
+    beginGesture();
     drag.current = {
       type: 'pillar',
       id,
@@ -258,11 +284,29 @@ export function Canvas() {
     const world = eventToWorld(view, rect, e.clientX, e.clientY);
     const it = project.inventory.find((x) => x.id === id);
     if (!it) return;
+    beginGesture();
     drag.current = {
       type: 'inventory',
       id,
       offset: { x: (world.x - it.position.x) as Mm, y: (world.y - it.position.y) as Mm },
     };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onRotateHandleDown = (
+    kind: 'pillar' | 'inventory',
+    id: string,
+    e: React.PointerEvent<SVGElement>,
+  ) => {
+    if (tool !== 'select') return;
+    e.stopPropagation();
+    const obj =
+      kind === 'pillar'
+        ? project.pillars.find((x) => x.id === id)
+        : project.inventory.find((x) => x.id === id);
+    if (!obj) return;
+    beginGesture();
+    drag.current = { type: 'rotate', kind, id, cx: obj.position.x, cy: obj.position.y };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
@@ -299,6 +343,7 @@ export function Canvas() {
             view={view}
             selected={selection?.kind === 'pillar' && selection.id === p.id}
             onPointerDown={(e) => onPointerDownPillar(p.id, e)}
+            onRotateHandleDown={(e) => onRotateHandleDown('pillar', p.id, e)}
           />
         ))}
 
@@ -309,6 +354,7 @@ export function Canvas() {
             view={view}
             selected={selection?.kind === 'inventory' && selection.id === it.id}
             onPointerDown={(e) => onPointerDownInventory(it.id, e)}
+            onRotateHandleDown={(e) => onRotateHandleDown('inventory', it.id, e)}
           />
         ))}
 

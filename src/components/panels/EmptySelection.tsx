@@ -4,6 +4,7 @@ import { usePlannerStore } from '@/store/plannerStore';
 import { useDerivedMetrics } from '@/store/selectors';
 import { formatArea, formatLength } from '@/model/units';
 import { Section } from '../ui/Section';
+import { PartsListSection } from './PartsListSection';
 
 export function EmptySelection() {
   const project = usePlannerStore((s) => s.project);
@@ -18,7 +19,9 @@ export function EmptySelection() {
           <p className="font-display text-[18px] italic leading-tight text-ink-900">
             {project.name}
           </p>
-          <p className="text-[11px] text-ink-500">
+          {/* suppressHydrationWarning: updatedAt is minted at store init, so
+              the statically prerendered value never matches the client's. */}
+          <p className="text-[11px] text-ink-500" suppressHydrationWarning>
             {new Date(project.updatedAt).toLocaleString()}
           </p>
         </div>
@@ -40,13 +43,33 @@ export function EmptySelection() {
 
       <div className="h-px bg-wall-200" />
 
-      <Section title="Tip">
-        <p className="text-[12px] leading-relaxed text-ink-700">
-          Click anywhere on the canvas to deselect. Use the toolbar above to draw the room or
-          add objects. Select an object to edit its properties here.
+      <PartsListSection />
+
+      <div className="h-px bg-wall-200" />
+
+      <Section title="Shortcuts">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px] text-ink-700">
+          <Key k="⌘Z / ⇧⌘Z">Undo / redo</Key>
+          <Key k="R / ⇧R">Rotate selected 90°</Key>
+          <Key k="⌘D">Duplicate selected</Key>
+          <Key k="Delete">Remove selected</Key>
+          <Key k="Alt + drag">Place freely, no wall snap</Key>
+          <Key k="Esc">Cancel tool / deselect</Key>
+        </dl>
+        <p className="text-[11px] leading-relaxed text-ink-500">
+          Your plan is saved automatically in this browser. Use Save to keep a file copy.
         </p>
       </Section>
     </div>
+  );
+}
+
+function Key({ k, children }: { k: string; children: string }) {
+  return (
+    <>
+      <dt className="font-mono text-[11px] text-ink-900">{k}</dt>
+      <dd>{children}</dd>
+    </>
   );
 }
 
