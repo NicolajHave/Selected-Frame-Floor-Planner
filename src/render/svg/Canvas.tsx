@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { usePlannerStore } from '@/store/plannerStore';
+import { useShallow } from 'zustand/react/shallow';
+import { selectedMembers, usePlannerStore } from '@/store/plannerStore';
+import { membersInBox } from '@/lib/group';
 import { useDerivedMetrics, useLayoutIssues } from '@/store/selectors';
 import { eventToWorld, fitToBounds, pxStroke, screenToWorld } from './viewport';
 import { Grid } from './Grid';
@@ -11,6 +13,7 @@ import { Inventory } from './Inventory';
 import { Measurements } from './Measurements';
 import { CalibrationMarks, Underlay } from './Underlay';
 import { OpeningPreview, Openings } from './Openings';
+import { ElectricalMarks, PlanNotes } from './Electrical';
 import { GuideMarks, IssueMarks } from './LayoutMarks';
 import { clearanceGuides } from '@/lib/layout';
 import { rectCorners } from '@/geometry/transform';
@@ -30,6 +33,13 @@ export function Canvas() {
   const view = usePlannerStore((s) => s.view);
   const tool = usePlannerStore((s) => s.tool);
   const selection = usePlannerStore((s) => s.selection);
+  const members = usePlannerStore(useShallow((s) => selectedMembers(s)));
+  const grouped = members.length > 1;
+  const isSelected = (kind: string, id: string) => members.some((m) => m.kind === kind && m.id === id);
+  const toggleSelected = usePlannerStore((s) => s.toggleSelected);
+  const selectMany = usePlannerStore((s) => s.selectMany);
+  const translateSelected = usePlannerStore((s) => s.translateSelected);
+  const [marquee, setMarquee] = useState<{ a: Point; b: Point } | null>(null);
   const calibration = usePlannerStore((s) => s.calibration);
   const highlightedWall = usePlannerStore((s) => s.highlightedWall);
   const drawLength = usePlannerStore((s) => s.drawLength);
@@ -53,6 +63,10 @@ export function Canvas() {
   const addOpeningAt = usePlannerStore((s) => s.addOpeningAt);
   const moveOpening = usePlannerStore((s) => s.moveOpening);
   const resizeOpening = usePlannerStore((s) => s.resizeOpening);
+  const addElectricalAt = usePlannerStore((s) => s.addElectricalAt);
+  const moveElectrical = usePlannerStore((s) => s.moveElectrical);
+  const addNoteAt = usePlannerStore((s) => s.addNoteAt);
+  const updateNote = usePlannerStore((s) => s.updateNote);
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
 
   const metrics = useDerivedMetrics();
@@ -60,7 +74,7 @@ export function Canvas() {
 
   // Distances around the selected object (live while it is dragged).
   const guides = useMemo(() => {
-    if (tool !== 'select' || !selection) return [];
+    if (tool !== 'select' || !selection || grouped) return [];
     const obj =
       selection.kind === 'pillar'
         ? project.pillars.find((p) => p.id === selection.id)
@@ -69,7 +83,7 @@ export function Canvas() {
           : undefined;
     if (!obj) return [];
     return clearanceGuides(project, rectCorners(obj.position, obj.size, obj.rotation), obj.id);
-  }, [project, selection, tool]);
+  }, [project, selection, tool, grouped]);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -114,7 +128,13 @@ export function Canvas() {
     | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number }
     | { type: 'underlay'; offset: Point }
     | { type: 'opening'; id: string; grab: number }
-    | { type: 'opening-end'; id: string; end: 'start' | 'end' };
+    | { type: 'opening-end'; id: string; end: 'start' | 'end' }
+    | { type: 'electrical'; id: string }
+    | { type: 'note'; id: string; offset: Point }
+    | { type: 'note-target'; id: string }
+    /** Several selected objects dragged together; `last` is the previous pointer position. */
+    | { type: 'group'; last: Point }
+    | { type: 'marquee'; start: Point };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
@@ -146,6 +166,14 @@ export function Canvas() {
         addOpeningAt(world);
         return;
       }
+      if (tool === 'add-electrical') {
+        addElectricalAt(world);
+        return;
+      }
+      if (tool === 'add-note') {
+        addNoteAt(world);
+        return;
+      }
       if (tool === 'add-inventory') {
         addInventoryAt(world, { wallSnap: !e.altKey });
         return;
@@ -154,6 +182,12 @@ export function Canvas() {
       // Ignore select-mode clicks that bubbled from a child shape (those
       // have their own handlers).
       if (e.target !== e.currentTarget) return;
+
+      // Shift-drag on empty space: select everything in a box.
+      if (e.button === 0 && e.shiftKey) {
+        startMarquee(world, e.pointerId);
+        return;
+      }
 
       // Default: pan drag or clear selection
       if (e.button === 0) {
@@ -168,7 +202,7 @@ export function Canvas() {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
       }
     },
-    [tool, view, addCorner, addPillarAt, addInventoryAt, addOpeningAt, addCalibrationPoint, setSelection, getRect],
+    [tool, view, addCorner, addPillarAt, addInventoryAt, addOpeningAt, addElectricalAt, addNoteAt, addCalibrationPoint, setSelection, getRect],
   );
 
   const onPointerMove = useCallback(
@@ -198,6 +232,17 @@ export function Canvas() {
         moveOpening(d.id, world, d.grab);
       } else if (d.type === 'opening-end') {
         resizeOpening(d.id, d.end, world);
+      } else if (d.type === 'group') {
+        translateSelected(world.x - d.last.x, world.y - d.last.y);
+        d.last = world;
+      } else if (d.type === 'marquee') {
+        setMarquee({ a: d.start, b: world });
+      } else if (d.type === 'electrical') {
+        moveElectrical(d.id, world);
+      } else if (d.type === 'note') {
+        updateNote(d.id, { position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm } });
+      } else if (d.type === 'note-target') {
+        updateNote(d.id, { target: { x: world.x, y: world.y } });
       } else if (d.type === 'underlay') {
         updateUnderlay({
           position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
@@ -211,19 +256,34 @@ export function Canvas() {
         else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, updateUnderlay, getRect],
+    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, moveElectrical, updateNote, updateUnderlay, translateSelected, getRect],
   );
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
-      const wasEditing = drag.current && drag.current.type !== 'pan';
+      const d = drag.current;
+      const wasEditing = d && d.type !== 'pan' && d.type !== 'marquee';
       drag.current = null;
       if (wasEditing) endGesture();
+      if (d?.type === 'marquee') {
+        setMarquee(null);
+        const rect = getRect();
+        if (rect) {
+          const end = eventToWorld(view, rect, e.clientX, e.clientY);
+          const box = {
+            minX: Math.min(d.start.x, end.x),
+            minY: Math.min(d.start.y, end.y),
+            maxX: Math.max(d.start.x, end.x),
+            maxY: Math.max(d.start.y, end.y),
+          };
+          selectMany(membersInBox(usePlannerStore.getState().project, box), true);
+        }
+      }
       if ((e.currentTarget as Element).hasPointerCapture(e.pointerId)) {
         (e.currentTarget as Element).releasePointerCapture(e.pointerId);
       }
     },
-    [endGesture],
+    [endGesture, getRect, view, selectMany],
   );
 
   // Wheel zoom anchored at the cursor
@@ -304,6 +364,8 @@ export function Canvas() {
       case 'add-pillar':    return 'cursor-copy';
       case 'add-inventory': return 'cursor-copy';
       case 'add-opening':   return 'cursor-copy';
+      case 'add-electrical': return 'cursor-copy';
+      case 'add-note':      return 'cursor-text';
       default:              return 'cursor-grab active:cursor-grabbing';
     }
   }, [tool]);
@@ -312,7 +374,14 @@ export function Canvas() {
   const onPointerDownCorner = (cornerId: string, e: React.PointerEvent<SVGElement>) => {
     // With something to place armed, a click on a corner places it there
     // (the canvas handles it) rather than grabbing the corner.
-    if (tool === 'add-opening' || tool === 'add-inventory' || tool === 'add-pillar') return;
+    if (
+      tool === 'add-opening' ||
+      tool === 'add-inventory' ||
+      tool === 'add-pillar' ||
+      tool === 'add-electrical' ||
+      tool === 'add-note'
+    )
+      return;
     e.stopPropagation();
     // Click first corner while drawing → close polygon.
     if (tool === 'draw-room' && room && !room.closed && room.corners[0]?.id === cornerId && room.corners.length >= 3) {
@@ -323,6 +392,12 @@ export function Canvas() {
     beginGesture();
     drag.current = { type: 'corner', cornerId };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  const startMarquee = (world: Point, pointerId: number) => {
+    drag.current = { type: 'marquee', start: world };
+    setMarquee({ a: world, b: world });
+    (svgRef.current as Element).setPointerCapture(pointerId);
   };
 
   // A click selects the wall; a double-click adds a corner on it.
@@ -346,12 +421,36 @@ export function Canvas() {
   const onPointerDownRoom = (e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select' || !room) return;
     e.stopPropagation();
+    const rect = getRect();
+    if (e.shiftKey && rect) {
+      startMarquee(eventToWorld(view, rect, e.clientX, e.clientY), e.pointerId);
+      return;
+    }
     setSelection({ kind: 'room', id: room.id });
+  };
+
+  /**
+   * Shift-click adds or removes an object; pressing on one that is part of
+   * the selected group drags the whole group. Returns true when handled.
+   */
+  const groupPointerDown = (kind: 'pillar' | 'inventory' | 'note', id: string, e: React.PointerEvent<SVGElement>) => {
+    if (e.shiftKey) {
+      toggleSelected({ kind, id });
+      return true;
+    }
+    if (!grouped || !isSelected(kind, id)) return false;
+    const rect = getRect();
+    if (!rect) return true;
+    beginGesture();
+    drag.current = { type: 'group', last: eventToWorld(view, rect, e.clientX, e.clientY) };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+    return true;
   };
 
   const onPointerDownPillar = (id: string, e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select') return;
     e.stopPropagation();
+    if (groupPointerDown('pillar', id, e)) return;
     setSelection({ kind: 'pillar', id });
     const rect = getRect();
     if (!rect) return;
@@ -370,6 +469,7 @@ export function Canvas() {
   const onPointerDownInventory = (id: string, e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select') return;
     e.stopPropagation();
+    if (groupPointerDown('inventory', id, e)) return;
     setSelection({ kind: 'inventory', id });
     const rect = getRect();
     if (!rect) return;
@@ -422,6 +522,37 @@ export function Canvas() {
     e.stopPropagation();
     beginGesture();
     drag.current = { type: 'opening-end', id, end };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerDownElectrical = (id: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return;
+    e.stopPropagation();
+    setSelection({ kind: 'electrical', id });
+    beginGesture();
+    drag.current = { type: 'electrical', id };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerDownNote = (id: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return;
+    e.stopPropagation();
+    if (groupPointerDown('note', id, e)) return;
+    setSelection({ kind: 'note', id });
+    const rect = getRect();
+    const n = project.annotations?.find((x) => x.id === id);
+    if (!rect || !n) return;
+    const world = eventToWorld(view, rect, e.clientX, e.clientY);
+    beginGesture();
+    drag.current = { type: 'note', id, offset: { x: (world.x - n.position.x) as Mm, y: (world.y - n.position.y) as Mm } };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerDownNoteTarget = (id: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return;
+    e.stopPropagation();
+    beginGesture();
+    drag.current = { type: 'note-target', id };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
@@ -503,7 +634,8 @@ export function Canvas() {
             key={p.id}
             pillar={p}
             view={view}
-            selected={selection?.kind === 'pillar' && selection.id === p.id}
+            selected={isSelected('pillar', p.id)}
+            grouped={grouped}
             onPointerDown={(e) => onPointerDownPillar(p.id, e)}
             onRotateHandleDown={(e) => onRotateHandleDown('pillar', p.id, e)}
           />
@@ -514,7 +646,8 @@ export function Canvas() {
             key={it.id}
             item={it}
             view={view}
-            selected={selection?.kind === 'inventory' && selection.id === it.id}
+            selected={isSelected('inventory', it.id)}
+            grouped={grouped}
             onPointerDown={(e) => onPointerDownInventory(it.id, e)}
             onRotateHandleDown={(e) => onRotateHandleDown('inventory', it.id, e)}
           />
@@ -535,10 +668,47 @@ export function Canvas() {
           />
         )}
 
+        {/* On top of fixtures: a socket behind a wall unit still shows. */}
+        {project.electrical && project.electrical.length > 0 && (
+          <ElectricalMarks
+            room={room}
+            points={project.electrical}
+            view={view}
+            selectedId={selection?.kind === 'electrical' ? selection.id : null}
+            onPointerDown={onPointerDownElectrical}
+          />
+        )}
+
+        {project.annotations && project.annotations.length > 0 && (
+          <PlanNotes
+            notes={project.annotations}
+            view={view}
+            selectedIds={members.filter((m) => m.kind === 'note').map((m) => m.id)}
+            onPointerDown={onPointerDownNote}
+            onPointerDownTarget={onPointerDownNoteTarget}
+          />
+        )}
+
         {room && metrics && <Measurements room={room} view={view} metrics={metrics} />}
 
         {view.showLayoutCheck && <IssueMarks project={project} issues={issues} view={view} />}
         <GuideMarks guides={guides} view={view} />
+
+        {marquee && (
+          <rect
+            data-marquee
+            x={Math.min(marquee.a.x, marquee.b.x)}
+            y={Math.min(marquee.a.y, marquee.b.y)}
+            width={Math.abs(marquee.b.x - marquee.a.x)}
+            height={Math.abs(marquee.b.y - marquee.a.y)}
+            fill="var(--selection)"
+            fillOpacity={0.06}
+            stroke="var(--selection)"
+            strokeWidth={pxStroke(view, 1)}
+            strokeDasharray={`${pxStroke(view, 4)} ${pxStroke(view, 3)}`}
+            pointerEvents="none"
+          />
+        )}
 
         {calibration && <CalibrationMarks calibration={calibration} hover={hoverWorld} view={view} />}
       </g>

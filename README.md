@@ -64,20 +64,31 @@ URL. No environment variables are needed.
    and click next to a wall: the rack snaps to it as one piece. Select it
    and **Edit rack…** to change its units later; the parts list and PDF
    count each unit.
-6. **Fixtures**: pick a catalog item and click the floor. Wall units and
+6. **Electrical & notes** (library): sockets, double sockets, network,
+   LED logo power, screens and switches go on a wall at a height you set
+   (with a note for the electrician); floor boxes go anywhere on the
+   floor. **Note** writes text on the plan, with an arrow if you want
+   one. The PDF gets an **Electrical Plan** page (E1, E2… with type,
+   wall, height and note), the outlets are drawn into the wall
+   elevations at their height, and notes appear on the plan view.
+7. **Fixtures**: pick a catalog item and click the floor. Wall units and
    logos snap to the nearest wall (`Alt` places freely); logos hang at
    2.4 m and need walls of at least 2.6 m.
-7. **Distances and layout check**: the selected object shows its
+8. **Several at once**: shift-click fixtures, pillars or notes, or
+   shift-drag a box on the floor (`⌘A` selects all). Drag one to move
+   them all; the panel lines them up (left, centre, right, top, middle,
+   bottom), spaces them out evenly, rotates, duplicates or deletes them.
+9. **Distances and layout check**: the selected object shows its
    distance to the nearest wall or object in each direction. The panel
    (nothing selected) lists overlaps, objects in walls, blocked doors and
    aisles narrower than the minimum (900 mm by default, editable); they
    are marked on the plan and counted in the footer.
-8. **3D View** shows the room with openings and the catalog models;
+10. **3D View** shows the room with openings and the catalog models;
    objects can be selected, dragged and placed there too. Walls facing
    the camera are cut away so you can always see into the shop.
-9. **Parts list** (right panel, nothing selected) totals units, weight
+11. **Parts list** (right panel, nothing selected) totals units, weight
    and hanger capacity, and exports a CSV for Excel.
-10. **PDF** (top bar) exports an A3 presentation: cover, what the concept
+12. **PDF** (top bar) exports an A3 presentation: cover, what the concept
    asks of the site plus your notes for this draft, the shop in 3D from
    four sides and as an isometric, the plan to scale (numbered fixtures,
    wall dimensions, title block), an elevation of every wall with a
@@ -87,7 +98,7 @@ URL. No environment variables are needed.
    (the same one on every export) that opens the latest version straight
    in 3D, so a partner or sales rep can walk around the shop while
    reading the PDF.
-11. **Cloud plans** (sign in with the same @bestseller.com account as the
+13. **Cloud plans** (sign in with the same @bestseller.com account as the
     other Selected tools): **Cloud → Save to cloud** keeps the plan in the
     shared database and saves every change automatically. **Share**
     invites colleagues as editors or viewers, or creates a view-only link

@@ -59,6 +59,16 @@ export function useKeyboard() {
         return;
       }
 
+      if (meta && key === 'a') {
+        e.preventDefault();
+        s.selectMany([
+          ...s.project.inventory.map((x) => ({ kind: 'inventory' as const, id: x.id })),
+          ...s.project.pillars.map((x) => ({ kind: 'pillar' as const, id: x.id })),
+          ...(s.project.annotations ?? []).map((x) => ({ kind: 'note' as const, id: x.id })),
+        ]);
+        return;
+      }
+
       if (meta && key === 's') {
         e.preventDefault();
         downloadJson(`${s.project.name || 'plan'}.sf`, s.project);

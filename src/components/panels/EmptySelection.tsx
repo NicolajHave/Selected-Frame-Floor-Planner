@@ -62,6 +62,9 @@ export function EmptySelection() {
           <Key k="⌘Z / ⇧⌘Z">Undo / redo</Key>
           <Key k="R / ⇧R">Rotate 90° · doors: flip hinge / swing</Key>
           <Key k="123 + Enter">While drawing: exact wall length</Key>
+          <Key k="⇧ + click">Select several</Key>
+          <Key k="⇧ + drag">Select everything in a box</Key>
+          <Key k="⌘A">Select all fixtures, pillars and notes</Key>
           <Key k="⌘D">Duplicate selected</Key>
           <Key k="Delete">Remove selected</Key>
           <Key k="Alt + drag">Place freely, no wall snap</Key>

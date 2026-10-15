@@ -3,13 +3,15 @@
 import type { jsPDF as JsPdf } from 'jspdf';
 import type { Point } from '@/model/geometry';
 import type { Project } from '@/model/project';
-import type { RoomPolygon } from '@/model/objects';
+import type { ElectricalPoint, RoomPolygon } from '@/model/objects';
 import type { Mm } from '@/model/units';
 import { rectCorners } from '@/geometry/transform';
 import { openingSpan, wallFrame } from '@/geometry/openings';
 import { polygonArea } from '@/geometry/polygon';
 import { wallLengths } from '@/geometry/walls';
 import { findAsset } from './assetCatalog';
+import { electricalType } from './electricalTypes';
+import { electricalAnchor } from '@/geometry/electrical';
 import { rackContents } from './racks';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { buildPartsList, type PartsList } from './partsList';
@@ -39,6 +41,7 @@ const FOOTER = 14;
 const DIM_SPACE = 14;
 
 const WALL: [number, number, number] = [43, 46, 49];
+const EL_INK: [number, number, number] = [180, 83, 9];
 const ITEM_FILL: [number, number, number] = [233, 235, 227];
 const FLOOR: [number, number, number] = [246, 244, 238];
 
@@ -120,7 +123,20 @@ export async function buildPlanPdf(project: Project, opts: PdfOptions): Promise<
 
   doc.addPage('a3', 'landscape');
   drawPlanPage(doc, info, project, parts, numberOf, opts, GState);
-  drawElevationPages(doc, info, elevations, images, layout);
+  const elLabels = electricalLabels(project);
+  if (elLabels.size > 0) {
+    doc.addPage('a3', 'landscape');
+    drawPlanPage(doc, info, project, parts, numberOf, opts, GState, elLabels);
+  }
+  drawElevationPages(doc, info, elevations, images, layout, (spec) =>
+    (project.electrical ?? [])
+      .filter((e) => e.wallStartCornerId === spec.wallStartCornerId && !e.position)
+      .map((e) => ({
+        x: spec.sign * ((e.offset ?? 0) - spec.length / 2),
+        height: e.height,
+        label: elLabels.get(e.id) ?? '',
+      })),
+  );
   drawListPages(doc, info, project, parts);
   numberPages(doc);
   return doc;
@@ -148,6 +164,8 @@ function drawPlanPage(
   numberOf: Map<string, string>,
   opts: PdfOptions,
   GState: GStateCtor,
+  /** The electrical plan: fixtures faint, outlets numbered E1…, their legend in the column. */
+  electrical: Map<string, string> | null = null,
 ) {
   const room = project.room;
   const area = {
@@ -158,7 +176,16 @@ function drawPlanPage(
   };
 
   // The title block in the column carries the brand.
-  pageFrame(doc, info, 'Plan View', { brand: false });
+  pageFrame(doc, info, electrical ? 'Electrical Plan' : 'Plan View', { brand: false });
+  const column = (scale: number | null) =>
+    electrical
+      ? drawColumn(doc, project, parts, scale, {
+          heading: 'ELECTRICAL',
+          rows: electricalLegend(project, electrical),
+          empty: 'No electrical points.',
+          more: 'see the elevations',
+        })
+      : drawColumn(doc, project, parts, scale);
 
   // World extent of everything that gets drawn
   const pts: Point[] = [];
@@ -180,7 +207,7 @@ function drawPlanPage(
   if (pts.length === 0) {
     doc.setFontSize(12);
     doc.text('Nothing to draw yet — draw the room and place fixtures first.', area.x, area.y + 20);
-    drawColumn(doc, project, parts, null);
+    column(null);
     return;
   }
 
@@ -232,20 +259,102 @@ function drawPlanPage(
 
   for (const it of project.inventory) {
     const corners = rectCorners(it.position, it.size, it.rotation).map(P);
-    polygon(doc, corners, ITEM_FILL, SAGE, 0.2);
+    // On the electrical plan fixtures are only there for orientation.
+    polygon(doc, corners, electrical ? [250, 250, 248] : ITEM_FILL, electrical ? [190, 192, 186] : SAGE, 0.2);
+    if (electrical) continue;
     // Back edge: the side that goes against a wall.
     doc.setDrawColor(...SAGE);
     doc.setLineWidth(0.6);
     doc.line(...corners[0]!, ...corners[1]!);
   }
-  // Numbers last so they sit on top of everything.
-  for (const it of project.inventory) {
-    const n = numberOf.get(it.id);
-    if (n !== undefined) badge(doc, X(it.position.x), Y(it.position.y), n);
+  if (electrical) {
+    drawElectricalPoints(doc, project, electrical, P);
+  } else {
+    // Numbers last so they sit on top of everything.
+    for (const it of project.inventory) {
+      const n = numberOf.get(it.id);
+      if (n !== undefined) badge(doc, X(it.position.x), Y(it.position.y), n);
+    }
+    drawPlanNotes(doc, project, P);
   }
 
   drawScaleBar(doc, scale, area.x, PAGE_H - MARGIN - 4);
-  drawColumn(doc, project, parts, scale);
+  column(scale);
+}
+
+/** Electrical points numbered along the walls (wall 1 first, from its start), floor boxes last. */
+export function electricalLabels(project: Project): Map<string, string> {
+  const room = project.room;
+  const order = (e: ElectricalPoint) => {
+    const i = room && e.wallStartCornerId ? room.corners.findIndex((c) => c.id === e.wallStartCornerId) : -1;
+    return i < 0 ? 1e9 : i * 1e6 + (e.offset ?? 0);
+  };
+  const sorted = [...(project.electrical ?? [])].sort((a, b) => order(a) - order(b));
+  return new Map(sorted.map((e, k) => [e.id, `E${k + 1}`]));
+}
+
+function electricalLegend(project: Project, labels: Map<string, string>): LegendRow[] {
+  const room = project.room;
+  return [...(project.electrical ?? [])]
+    .sort((a, b) => Number(labels.get(a.id)!.slice(1)) - Number(labels.get(b.id)!.slice(1)))
+    .map((e) => {
+      const t = electricalType(e.kind);
+      const a = electricalAnchor(room, e);
+      const where = a?.index != null ? `wall ${a.index + 1} · ${num(e.height)} mm up` : 'in the floor';
+      return { badge: labels.get(e.id)!, title: t.name, sub: e.note ? `${where} · ${e.note}` : where };
+    });
+}
+
+function drawElectricalPoints(
+  doc: JsPdf,
+  project: Project,
+  labels: Map<string, string>,
+  P: (p: Point) => readonly [number, number],
+) {
+  for (const e of project.electrical ?? []) {
+    const a = electricalAnchor(project.room, e);
+    if (!a) continue;
+    const [x, y] = P(a.point);
+    // Badge just inside the room, a tick to the wall.
+    const bx = x + a.nx * 4;
+    const by = y + a.ny * 4;
+    doc.setDrawColor(...EL_INK);
+    doc.setLineWidth(0.3);
+    if (a.index !== null) doc.line(x, y, bx, by);
+    doc.setFillColor(255, 248, 238);
+    doc.circle(bx, by, 2.6, 'FD');
+    font(doc, 6, 'bold', EL_INK);
+    doc.text(labels.get(e.id) ?? '', bx, by, { align: 'center', baseline: 'middle' });
+  }
+}
+
+/** Notes written on the plan: a boxed text and an arrow. */
+function drawPlanNotes(doc: JsPdf, project: Project, P: (p: Point) => readonly [number, number]) {
+  for (const n of project.annotations ?? []) {
+    if (!n.text.trim()) continue;
+    const [x, y] = P(n.position);
+    font(doc, 7);
+    const lines = n.text.split('\n').flatMap((l) => doc.splitTextToSize(l, 48) as string[]);
+    const w = Math.max(...lines.map((l) => doc.getTextWidth(l))) + 4;
+    const h = lines.length * 3.1 + 2.4;
+    if (n.target) {
+      const [tx, ty] = P(n.target);
+      const len = Math.hypot(tx - x, ty - y) || 1;
+      const ux = (tx - x) / len;
+      const uy = (ty - y) / len;
+      doc.setDrawColor(...INK);
+      doc.setFillColor(...INK);
+      doc.setLineWidth(0.25);
+      doc.line(x, y, tx - ux * 1.8, ty - uy * 1.8);
+      doc.triangle(tx, ty, tx - ux * 1.8 - uy * 0.8, ty - uy * 1.8 + ux * 0.8, tx - ux * 1.8 + uy * 0.8, ty - uy * 1.8 - ux * 0.8, 'F');
+    }
+    doc.setFillColor(255, 253, 247);
+    doc.setDrawColor(...INK);
+    doc.setLineWidth(0.25);
+    doc.rect(x - w / 2, y - h / 2, w, h, 'FD');
+    font(doc, 7);
+    lines.forEach((l, i) => doc.text(l, x, y - h / 2 + 3.4 + i * 3.1, { align: 'center' }));
+  }
 }
 
 function polygon(
@@ -448,53 +557,68 @@ function drawScaleBar(doc: JsPdf, scale: number, x: number, y: number) {
   doc.text(`Scale 1:${scale} on A3`, x + paper + 6, y);
 }
 
-/** Legend of numbered fixtures and the title block. */
-function drawColumn(doc: JsPdf, project: Project, parts: PartsList, scale: number | null) {
+interface LegendRow {
+  badge: string;
+  title: string;
+  sub: string;
+}
+
+/** Wall racks (R1…) then fixtures by parts-list row. */
+function fixtureLegend(project: Project, parts: PartsList): LegendRow[] {
+  return [
+    ...project.inventory
+      .filter((it) => it.modules?.length)
+      .map((it, k) => ({ badge: `R${k + 1}`, title: it.name, sub: rackContents(it.modules!) })),
+    ...parts.rows.map((r, i) => ({
+      badge: String(i + 1),
+      title: `${r.quantity}× ${r.name}`,
+      sub: r.catalog ? r.itemNumber || 'no item number' : 'not in catalog',
+    })),
+  ];
+}
+
+/** A numbered legend (fixtures, or electrical points) and the title block. */
+function drawColumn(
+  doc: JsPdf,
+  project: Project,
+  parts: PartsList,
+  scale: number | null,
+  legend: { heading: string; rows: LegendRow[]; empty: string; more: string } = {
+    heading: 'FIXTURES',
+    rows: fixtureLegend(project, parts),
+    empty: 'No fixtures placed.',
+    more: 'see the parts list',
+  },
+) {
   const x = PAGE_W - MARGIN - COLUMN;
   let y = MARGIN + HEADER;
   doc.setDrawColor(...MUTED);
   doc.setLineWidth(0.2);
   doc.line(x - GUTTER / 2, MARGIN, x - GUTTER / 2, PAGE_H - MARGIN);
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...INK);
-  doc.text('FIXTURES', x, y);
+  font(doc, 9, 'bold');
+  doc.text(legend.heading, x, y);
   y += 6;
 
   const titleTop = PAGE_H - MARGIN - 62;
   const rowH = 6.2;
-  const racks = project.inventory.filter((it) => it.modules?.length);
-  racks.forEach((it, k) => {
-    badge(doc, x + 2.4, y - 1, `R${k + 1}`);
-    font(doc, 8);
-    doc.text(fit(doc, it.name, COLUMN - 8), x + 7, y - 1.6);
-    font(doc, 6, 'normal', MUTED);
-    doc.text(fit(doc, rackContents(it.modules!), COLUMN - 8), x + 7, y + 1.2);
-    y += rowH;
-  });
+  const entries = legend.rows;
   const fits = Math.max(0, Math.floor((titleTop - y - 8) / rowH));
-  const shown = parts.rows.length > fits ? fits - 1 : parts.rows.length;
-  parts.rows.slice(0, Math.max(0, shown)).forEach((r, i) => {
-    badge(doc, x + 2.4, y - 1, String(i + 1));
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...INK);
-    doc.text(fit(doc, `${r.quantity}× ${r.name}`, COLUMN - 8), x + 7, y - 1.6);
-    doc.setFontSize(6);
-    doc.setTextColor(...MUTED);
-    doc.text(r.catalog ? r.itemNumber || 'no item number' : 'not in catalog', x + 7, y + 1.2);
+  const shown = entries.length > fits ? fits - 1 : entries.length;
+  entries.slice(0, Math.max(0, shown)).forEach((r) => {
+    badge(doc, x + 2.4, y - 1, r.badge);
+    font(doc, 8);
+    doc.text(fit(doc, r.title, COLUMN - 8), x + 7, y - 1.6);
+    font(doc, 6, 'normal', MUTED);
+    doc.text(fit(doc, r.sub, COLUMN - 8), x + 7, y + 1.2);
     y += rowH;
   });
-  if (parts.rows.length === 0) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text('No fixtures placed.', x, y);
-  } else if (shown < parts.rows.length) {
-    doc.setFontSize(7);
-    doc.setTextColor(...MUTED);
-    doc.text(`+ ${parts.rows.length - shown} more — see the parts list`, x, y);
+  if (entries.length === 0) {
+    font(doc, 8, 'normal', MUTED);
+    doc.text(legend.empty, x, y);
+  } else if (shown < entries.length) {
+    font(doc, 7, 'normal', MUTED);
+    doc.text(`+ ${entries.length - shown} more — ${legend.more}`, x, y);
   }
 
   // Title block

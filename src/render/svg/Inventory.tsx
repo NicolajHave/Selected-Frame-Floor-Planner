@@ -11,11 +11,13 @@ interface Props {
   item: InventoryItem;
   view: ViewState;
   selected: boolean;
+  /** Part of a group: outlined, but no rotate handle of its own. */
+  grouped?: boolean;
   onPointerDown: (e: React.PointerEvent<SVGElement>) => void;
   onRotateHandleDown: (e: React.PointerEvent<SVGElement>) => void;
 }
 
-export function Inventory({ item, view, selected, onPointerDown, onRotateHandleDown }: Props) {
+export function Inventory({ item, view, selected, grouped, onPointerDown, onRotateHandleDown }: Props) {
   const { width, depth } = item.size;
   const x = item.position.x - width / 2;
   const y = item.position.y - depth / 2;
@@ -96,7 +98,7 @@ export function Inventory({ item, view, selected, onPointerDown, onRotateHandleD
           pointerEvents="none"
         />
       </g>
-      {selected && (
+      {selected && !grouped && (
         <RotateHandle
           cx={item.position.x}
           cy={item.position.y}

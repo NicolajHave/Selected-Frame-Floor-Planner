@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { findAsset } from '@/lib/assetCatalog';
 import { openingType } from '@/lib/openingTypes';
+import { electricalType } from '@/lib/electricalTypes';
 
 export function ToolOverlay() {
   const tool = usePlannerStore((s) => s.tool);
   const room = usePlannerStore((s) => s.project.room);
   const pendingAssetRef = usePlannerStore((s) => s.pendingAssetRef);
   const rack = usePlannerStore((s) => s.pendingRack);
+  const pendingElectrical = usePlannerStore((s) => s.pendingElectrical);
   const calibration = usePlannerStore((s) => s.calibration);
   const drawLength = usePlannerStore((s) => s.drawLength);
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
@@ -42,6 +44,14 @@ export function ToolOverlay() {
     }
   } else if (tool === 'add-opening' && pendingOpening) {
     hint = `Click on a wall to place the ${openingType(pendingOpening).name.toLowerCase()}.`;
+  } else if (tool === 'add-electrical' && pendingElectrical) {
+    const t = electricalType(pendingElectrical);
+    hint =
+      t.mount === 'floor'
+        ? `Click on the floor to place the ${t.name.toLowerCase()}.`
+        : `Click on a wall to place the ${t.name.toLowerCase()} (${t.height.toLocaleString('da-DK')} mm up — change it after).`;
+  } else if (tool === 'add-note') {
+    hint = 'Click where the note should go, then type it in the panel.';
   } else if (tool === 'add-pillar') {
     hint = 'Click anywhere to drop a pillar.';
   } else if (tool === 'add-inventory') {

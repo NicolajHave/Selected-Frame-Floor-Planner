@@ -81,7 +81,51 @@ export interface InventoryItem extends PlacedObjectBase {
 }
 
 export type PlacedObject = Pillar | InventoryItem;
-export type SelectionKind = 'corner' | 'pillar' | 'inventory' | 'room' | 'opening' | 'wall';
+export type SelectionKind =
+  | 'corner'
+  | 'pillar'
+  | 'inventory'
+  | 'room'
+  | 'opening'
+  | 'wall'
+  | 'electrical'
+  | 'note';
+
+export type ElectricalKind =
+  | 'socket'
+  | 'double-socket'
+  | 'data'
+  | 'logo-power'
+  | 'screen-power'
+  | 'switch'
+  | 'floor-box';
+
+/**
+ * A point the electrician needs to know about. Wall points are anchored
+ * like openings (start corner + distance along the wall) and sit on the
+ * wall's inside face; floor boxes have a floor position instead.
+ */
+export interface ElectricalPoint {
+  id: string;
+  kind: ElectricalKind;
+  wallStartCornerId?: string;
+  offset?: Mm;
+  /** Floor boxes only. */
+  position?: Point;
+  /** Centre above the floor (0 for floor boxes). */
+  height: Mm;
+  /** E.g. "hidden connection behind the logo". */
+  note?: string;
+}
+
+/** A text note on the plan, optionally pointing at something. */
+export interface PlanNote {
+  id: string;
+  position: Point;
+  text: string;
+  /** Tip of the arrow, if the note points at something. */
+  target?: Point;
+}
 
 export interface Selection {
   kind: SelectionKind;

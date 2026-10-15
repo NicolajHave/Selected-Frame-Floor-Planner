@@ -14,6 +14,9 @@ import type {
   InventoryItem,
   Opening,
   OpeningKind,
+  ElectricalKind,
+  ElectricalPoint,
+  PlanNote,
   Selection,
   Point,
   Mm,
@@ -39,8 +42,11 @@ import {
   wallFrame,
 } from '@/geometry/openings';
 import { openingType } from '@/lib/openingTypes';
+import { electricalType } from '@/lib/electricalTypes';
+import { clampToWall, electricalAnchor, reanchorElectrical, wallAnchorAt } from '@/geometry/electrical';
 import { findAsset } from '@/lib/assetCatalog';
 import { RACK_CATEGORY, itemMount, rackSize } from '@/lib/racks';
+import { alignPositions, distributePositions, isGroupable, rotatePositions, type AlignMode } from '@/lib/group';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
 import type { CloudProject, CloudRole, SaveResult, SharedProject } from '@/lib/cloud/api';
 
@@ -50,6 +56,8 @@ export type Tool =
   | 'add-pillar'
   | 'add-inventory'
   | 'add-opening'
+  | 'add-electrical'
+  | 'add-note'
   | 'calibrate';
 
 /** Two clicks on the underlay that span a known real-world distance. */
@@ -101,6 +109,11 @@ interface PlannerState {
   tool: Tool;
   selection: Selection | null;
   /**
+   * Several objects selected together (shift-click, shift-drag a box). Only
+   * counts while it contains `selection`; see `selectedMembers`.
+   */
+  multi: Selection[];
+  /**
    * When set, the next click in `add-inventory` mode places this asset (with
    * its catalog name + size + assetRef) instead of the generic placeholder.
    * Cleared after one placement or when the user switches tools.
@@ -112,6 +125,8 @@ interface PlannerState {
   rackBuilder: { editId: string | null } | null;
   /** Kind of door/opening/window the next click on a wall places. */
   pendingOpening: OpeningKind | null;
+  /** Kind of electrical point the next click places. */
+  pendingElectrical: ElectricalKind | null;
   /** In-progress underlay scale calibration; null outside the calibrate tool. */
   calibration: Calibration | null;
   /** Digits typed while drawing: the next wall's length in mm. */
@@ -138,9 +153,19 @@ interface PlannerState {
 
   // tool actions
   setTool: (t: Tool) => void;
-  setSelection: (s: Selection | null) => void;
+  setSelection: (sel: Selection | null) => void;
+  /** Shift-click: add to or take out of the selection. */
+  toggleSelected: (sel: Selection) => void;
+  /** Box select; `add` keeps what was already selected. */
+  selectMany: (sels: Selection[], add?: boolean) => void;
+  /** Move everything selected by (dx, dy) mm. */
+  translateSelected: (dx: number, dy: number) => void;
+  alignSelected: (mode: AlignMode) => void;
+  /** Equal gaps along x or y (three or more selected). */
+  distributeSelected: (axis: 'x' | 'y') => void;
   pickAsset: (assetId: string) => void;
   pickOpening: (kind: OpeningKind) => void;
+  pickElectrical: (kind: ElectricalKind) => void;
 
   // plan underlay
   setUnderlay: (u: PlanUnderlay | null) => void;
@@ -207,6 +232,17 @@ interface PlannerState {
   moveOpening: (id: string, p: Point, grab?: number) => void;
   /** Drag one end of an opening to change its width; the other end stays. */
   resizeOpening: (id: string, end: 'start' | 'end', p: Point) => void;
+
+  // electrical points and plan notes
+  /** Place the pending electrical point on the wall nearest `p` (floor boxes: at `p`). */
+  addElectricalAt: (p: Point) => void;
+  updateElectrical: (id: string, patch: Partial<Omit<ElectricalPoint, 'id'>>) => void;
+  /** Drag along (or onto another) wall; floor boxes move freely. */
+  moveElectrical: (id: string, p: Point) => void;
+  addNoteAt: (p: Point) => void;
+  updateNote: (id: string, patch: Partial<Omit<PlanNote, 'id'>>) => void;
+  /** Show or hide the note's arrow. */
+  toggleNoteArrow: (id: string) => void;
   /** Objects: rotate by `delta`. Doors: positive flips the hinge side, negative the swing. */
   rotateSelected: (delta: number) => void;
   duplicateSelected: () => void;
@@ -268,6 +304,30 @@ const metres = (n: number) => `${(n / 1000).toFixed(1)} m`;
 let noticeSeq = 0;
 
 /** Mounting requirement shown when an item with a minimum wall height is placed. */
+const sameSel = (a: Selection, b: Selection) => a.kind === b.kind && a.id === b.id;
+
+/** Everything selected: the group, if it holds the current selection, else just the selection. */
+export function selectedMembers(s: Pick<PlannerState, 'selection' | 'multi'>): Selection[] {
+  const sel = s.selection;
+  if (!sel) return [];
+  if (s.multi.length > 1 && s.multi.some((m) => sameSel(m, sel))) return s.multi;
+  return [sel];
+}
+
+function applyPositions(s: Draft<PlannerState>, positions: Map<string, Point>) {
+  for (const [id, p] of positions) {
+    const o =
+      s.project.pillars.find((x) => x.id === id) ??
+      s.project.inventory.find((x) => x.id === id) ??
+      s.project.annotations?.find((x) => x.id === id);
+    if (!o) continue;
+    const dx = p.x - o.position.x;
+    const dy = p.y - o.position.y;
+    o.position = { x: p.x, y: p.y };
+    if ('target' in o && o.target) o.target = { x: (o.target.x + dx) as Mm, y: (o.target.y + dy) as Mm };
+  }
+}
+
 /** How far from a wall (mm) a click still counts as on it: ~25 px or 600 mm. */
 const openingReach = (zoom: number) => Math.max(600, 25 / zoom);
 
@@ -325,6 +385,17 @@ function touch(p: Project): void {
 
 /** Drop a selection that points at something that no longer exists. */
 function pruneSelection(s: Draft<PlannerState>): void {
+  if (s.multi.length) {
+    const p = s.project;
+    s.multi = s.multi.filter((m) =>
+      m.kind === 'pillar'
+        ? p.pillars.some((x) => x.id === m.id)
+        : m.kind === 'inventory'
+          ? p.inventory.some((x) => x.id === m.id)
+          : !!p.annotations?.some((x) => x.id === m.id),
+    );
+    if (s.multi.length < 2) s.multi = [];
+  }
   const sel = s.selection;
   if (!sel) return;
   const { project } = s;
@@ -334,7 +405,9 @@ function pruneSelection(s: Draft<PlannerState>): void {
     (sel.kind === 'corner' && !!project.room?.corners.some((c) => c.id === sel.id)) ||
     (sel.kind === 'room' && !!project.room) ||
     (sel.kind === 'opening' && !!project.room?.openings.some((o) => o.id === sel.id)) ||
-    (sel.kind === 'wall' && !!project.room?.corners.some((c) => c.id === sel.id));
+    (sel.kind === 'wall' && !!project.room?.corners.some((c) => c.id === sel.id)) ||
+    (sel.kind === 'electrical' && !!project.electrical?.some((e) => e.id === sel.id)) ||
+    (sel.kind === 'note' && !!project.annotations?.some((n) => n.id === sel.id));
   if (!exists) s.selection = null;
 }
 
@@ -386,10 +459,12 @@ export const usePlannerStore = create<PlannerState>()(
         view: { ...DEFAULT_VIEW },
         tool: 'select',
         selection: null,
+        multi: [],
         pendingAssetRef: null,
         pendingRack: null,
         rackBuilder: null,
         pendingOpening: null,
+        pendingElectrical: null,
         notice: null,
         cloud: null,
         cloudStatus: 'idle',
@@ -414,6 +489,7 @@ export const usePlannerStore = create<PlannerState>()(
               s.pendingRack = null;
             }
             if (t !== 'add-opening') s.pendingOpening = null;
+            if (t !== 'add-electrical') s.pendingElectrical = null;
             if (t !== 'calibrate') s.calibration = null;
             if (t !== 'draw-room') s.drawLength = '';
           }),
@@ -423,6 +499,16 @@ export const usePlannerStore = create<PlannerState>()(
             s.pendingAssetRef = assetId;
             s.pendingRack = null;
             s.tool = 'add-inventory';
+            s.selection = null;
+          }),
+
+        pickElectrical: (kind) =>
+          set((s) => {
+            s.pendingElectrical = kind;
+            s.pendingAssetRef = null;
+            s.pendingRack = null;
+            s.pendingOpening = null;
+            s.tool = 'add-electrical';
             s.selection = null;
           }),
 
@@ -552,6 +638,134 @@ export const usePlannerStore = create<PlannerState>()(
             touch(s.project);
           }),
 
+        addElectricalAt: (p) =>
+          set((s) => {
+            const kind = s.pendingElectrical;
+            if (!kind) return;
+            const t = electricalType(kind);
+            const room = s.project.room;
+            let point: ElectricalPoint | null = null;
+            const id = newId('el');
+            if (t.mount === 'floor') {
+              const at = maybeSnap(s.view, p);
+              point = { id, kind, position: { x: at.x as Mm, y: at.y as Mm }, height: mm(0) };
+            } else {
+              const anchor = room ? wallAnchorAt(room, p, openingReach(s.view.zoom)) : null;
+              if (!anchor) {
+                s.notice = info(
+                  room?.closed
+                    ? `Click on a wall to place the ${t.name.toLowerCase()}.`
+                    : 'Draw and close the room first — wall points go on its walls.',
+                );
+                return;
+              }
+              point = { id, kind, ...anchor, height: mm(t.height) };
+            }
+            record(s);
+            (s.project.electrical ??= []).push(point);
+            s.selection = { kind: 'electrical', id };
+            s.tool = 'select';
+            s.pendingElectrical = null;
+            s.notice = null;
+            touch(s.project);
+          }),
+
+        updateElectrical: (id, patch) =>
+          set((s) => {
+            const e = s.project.electrical?.find((x) => x.id === id);
+            if (!e) return;
+            record(s);
+            const wasFloor = electricalType(e.kind).mount === 'floor';
+            Object.assign(e, patch);
+            const isFloor = electricalType(e.kind).mount === 'floor';
+            // Changing between a wall point and a floor box moves it accordingly.
+            if (isFloor !== wasFloor) {
+              const a = electricalAnchor(s.project.room, { ...e, position: wasFloor ? e.position : undefined });
+              if (isFloor && a) {
+                e.position = {
+                  x: (a.point.x + a.nx * 300) as Mm,
+                  y: (a.point.y + a.ny * 300) as Mm,
+                };
+                delete e.wallStartCornerId;
+                delete e.offset;
+                e.height = mm(0);
+              } else if (!isFloor && e.position && s.project.room) {
+                const anchor = wallAnchorAt(s.project.room, e.position, Infinity);
+                if (anchor) {
+                  Object.assign(e, anchor);
+                  delete e.position;
+                  e.height = mm(electricalType(e.kind).height);
+                }
+              }
+            }
+            if (e.offset !== undefined && s.project.room && e.wallStartCornerId) {
+              const index = s.project.room.corners.findIndex((c) => c.id === e.wallStartCornerId);
+              const w = wallFrame(s.project.room, index);
+              if (w) e.offset = clampToWall(w.length, s.project.room.wallThickness, e.offset) as Mm;
+            }
+            touch(s.project);
+          }),
+
+        moveElectrical: (id, p) =>
+          set((s) => {
+            const e = s.project.electrical?.find((x) => x.id === id);
+            const room = s.project.room;
+            if (!e) return;
+            if (e.position) {
+              record(s);
+              e.position = { x: p.x, y: p.y };
+              touch(s.project);
+              return;
+            }
+            if (!room) return;
+            // Stay on the current wall while the pointer is near it.
+            const current = room.corners.findIndex((c) => c.id === e.wallStartCornerId);
+            const onCurrent = projectOnWall(room, current, p);
+            const w = wallFrame(room, current);
+            let anchor: { wallStartCornerId: string; offset: Mm } | null;
+            if (onCurrent && w && onCurrent.distance <= openingReach(s.view.zoom)) {
+              anchor = {
+                wallStartCornerId: e.wallStartCornerId!,
+                offset: Math.round(clampToWall(w.length, room.wallThickness, onCurrent.along)) as Mm,
+              };
+            } else {
+              anchor = wallAnchorAt(room, p, Infinity);
+            }
+            if (!anchor) return;
+            record(s);
+            Object.assign(e, anchor);
+            touch(s.project);
+          }),
+
+        addNoteAt: (p) =>
+          set((s) => {
+            record(s);
+            const id = newId('note');
+            (s.project.annotations ??= []).push({ id, position: { x: p.x, y: p.y }, text: '' });
+            s.selection = { kind: 'note', id };
+            s.tool = 'select';
+            touch(s.project);
+          }),
+
+        updateNote: (id, patch) =>
+          set((s) => {
+            const n = s.project.annotations?.find((x) => x.id === id);
+            if (!n) return;
+            record(s);
+            Object.assign(n, patch);
+            touch(s.project);
+          }),
+
+        toggleNoteArrow: (id) =>
+          set((s) => {
+            const n = s.project.annotations?.find((x) => x.id === id);
+            if (!n) return;
+            record(s);
+            if (n.target) delete n.target;
+            else n.target = { x: (n.position.x + 1000) as Mm, y: (n.position.y - 800) as Mm };
+            touch(s.project);
+          }),
+
         setUnderlay: (u) =>
           set((s) => {
             if (!u && !s.project.underlay) return;
@@ -617,7 +831,66 @@ export const usePlannerStore = create<PlannerState>()(
         setSelection: (sel) =>
           set((s) => {
             s.selection = sel;
+            s.multi = [];
             s.highlightedWall = null;
+          }),
+
+        toggleSelected: (sel) =>
+          set((s) => {
+            const current = selectedMembers(s).filter(isGroupable);
+            const has = current.some((m) => sameSel(m, sel));
+            const next = has ? current.filter((m) => !sameSel(m, sel)) : [...current, sel];
+            s.multi = next.length > 1 ? next : [];
+            s.selection = has ? (next.at(-1) ?? null) : sel;
+            s.highlightedWall = null;
+          }),
+
+        selectMany: (sels, add = false) =>
+          set((s) => {
+            const base = add ? selectedMembers(s).filter(isGroupable) : [];
+            const next = [...base, ...sels.filter((x) => !base.some((m) => sameSel(m, x)))];
+            s.multi = next.length > 1 ? next : [];
+            s.selection = next.at(-1) ?? null;
+            s.highlightedWall = null;
+          }),
+
+        translateSelected: (dx, dy) =>
+          set((s) => {
+            const members = selectedMembers(s);
+            if (members.length === 0 || (dx === 0 && dy === 0)) return;
+            record(s);
+            for (const m of members) {
+              const o =
+                m.kind === 'pillar'
+                  ? s.project.pillars.find((x) => x.id === m.id)
+                  : m.kind === 'inventory'
+                    ? s.project.inventory.find((x) => x.id === m.id)
+                    : m.kind === 'note'
+                      ? s.project.annotations?.find((x) => x.id === m.id)
+                      : undefined;
+              if (!o) continue;
+              o.position = { x: (o.position.x + dx) as Mm, y: (o.position.y + dy) as Mm };
+              if ('target' in o && o.target) o.target = { x: (o.target.x + dx) as Mm, y: (o.target.y + dy) as Mm };
+            }
+            touch(s.project);
+          }),
+
+        alignSelected: (mode) =>
+          set((s) => {
+            const members = selectedMembers(s);
+            if (members.length < 2) return;
+            record(s);
+            applyPositions(s, alignPositions(get().project, members, mode));
+            touch(s.project);
+          }),
+
+        distributeSelected: (axis) =>
+          set((s) => {
+            const members = selectedMembers(s);
+            if (members.length < 3) return;
+            record(s);
+            applyPositions(s, distributePositions(get().project, members, axis));
+            touch(s.project);
           }),
 
         setZoom: (z) =>
@@ -810,6 +1083,14 @@ export const usePlannerStore = create<PlannerState>()(
               id,
               Math.hypot(snapped.x - start.x, snapped.y - start.y),
             );
+            if (s.project.electrical) {
+              s.project.electrical = reanchorAfterInsert(
+                s.project.electrical,
+                afterCornerId,
+                id,
+                Math.hypot(snapped.x - start.x, snapped.y - start.y),
+              );
+            }
             // Both halves of a split wall keep its height and look.
             const style = room.walls?.[afterCornerId];
             if (style) room.walls![id] = { ...style };
@@ -827,10 +1108,11 @@ export const usePlannerStore = create<PlannerState>()(
             const before = get().project.room!;
             room.corners = room.corners.filter((c) => c.id !== cornerId);
             if (room.walls?.[cornerId]) delete room.walls[cornerId];
-            room.openings = reanchorByPosition(before, {
-              ...before,
-              corners: before.corners.filter((c) => c.id !== cornerId),
-            });
+            const after = { ...before, corners: before.corners.filter((c) => c.id !== cornerId) };
+            room.openings = reanchorByPosition(before, after);
+            if (s.project.electrical) {
+              s.project.electrical = reanchorElectrical(get().project.electrical ?? [], before, after);
+            }
             if (s.selection?.kind === 'corner' && s.selection.id === cornerId) {
               s.selection = null;
             }
@@ -988,6 +1270,28 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const sel = s.selection;
             if (!sel) return;
+            const members = selectedMembers(s);
+            if (members.length > 1) {
+              record(s);
+              const next = rotatePositions(get().project, members, delta);
+              for (const m of members) {
+                const r = next.get(m.id);
+                if (!r) continue;
+                if (m.kind === 'note') {
+                  applyPositions(s, new Map([[m.id, r.position]]));
+                  continue;
+                }
+                const o =
+                  m.kind === 'pillar'
+                    ? s.project.pillars.find((x) => x.id === m.id)
+                    : s.project.inventory.find((x) => x.id === m.id);
+                if (!o) continue;
+                o.position = r.position;
+                o.rotation = r.rotation;
+              }
+              touch(s.project);
+              return;
+            }
             if (sel.kind === 'opening') {
               const o = s.project.room?.openings.find((x) => x.id === sel.id);
               if (!o || (o.kind !== 'door' && o.kind !== 'double-door')) return;
@@ -1014,6 +1318,48 @@ export const usePlannerStore = create<PlannerState>()(
             const sel = s.selection;
             if (!sel) return;
             const offset = mm(300) as number;
+            const members = selectedMembers(s);
+            if (members.length > 1) {
+              record(s);
+              const copies: Selection[] = [];
+              const shift = (p: Point): Point => ({ x: (p.x + offset) as Mm, y: (p.y + offset) as Mm });
+              for (const m of members) {
+                if (m.kind === 'pillar') {
+                  const o = s.project.pillars.find((x) => x.id === m.id);
+                  if (!o) continue;
+                  const id = newId('pil');
+                  s.project.pillars.push({ ...o, id, position: shift(o.position), size: { ...o.size } });
+                  copies.push({ kind: 'pillar', id });
+                } else if (m.kind === 'inventory') {
+                  const o = s.project.inventory.find((x) => x.id === m.id);
+                  if (!o) continue;
+                  const id = newId('inv');
+                  s.project.inventory.push({
+                    ...o,
+                    id,
+                    position: shift(o.position),
+                    size: { ...o.size },
+                    ...(o.modules ? { modules: [...o.modules] } : {}),
+                  });
+                  copies.push({ kind: 'inventory', id });
+                } else if (m.kind === 'note') {
+                  const o = s.project.annotations?.find((x) => x.id === m.id);
+                  if (!o) continue;
+                  const id = newId('note');
+                  s.project.annotations!.push({
+                    ...o,
+                    id,
+                    position: shift(o.position),
+                    ...(o.target ? { target: shift(o.target) } : {}),
+                  });
+                  copies.push({ kind: 'note', id });
+                }
+              }
+              s.multi = copies.length > 1 ? copies : [];
+              s.selection = copies.at(-1) ?? null;
+              touch(s.project);
+              return;
+            }
             if (sel.kind === 'pillar') {
               const orig = s.project.pillars.find((x) => x.id === sel.id);
               if (!orig) return;
@@ -1048,6 +1394,23 @@ export const usePlannerStore = create<PlannerState>()(
         deleteSelected: () => {
           const sel = get().selection;
           if (!sel) return;
+          const members = selectedMembers(get());
+          if (members.length > 1) {
+            set((s) => {
+              record(s);
+              const gone = (kind: string) => new Set(members.filter((m) => m.kind === kind).map((m) => m.id));
+              const pillars = gone('pillar');
+              const items = gone('inventory');
+              const notes = gone('note');
+              s.project.pillars = s.project.pillars.filter((x) => !pillars.has(x.id));
+              s.project.inventory = s.project.inventory.filter((x) => !items.has(x.id));
+              if (s.project.annotations) s.project.annotations = s.project.annotations.filter((x) => !notes.has(x.id));
+              s.selection = null;
+              s.multi = [];
+              touch(s.project);
+            });
+            return;
+          }
           if (sel.kind === 'corner') {
             get().deleteCorner(sel.id);
             return;
@@ -1066,6 +1429,14 @@ export const usePlannerStore = create<PlannerState>()(
               if (!room?.openings.some((x) => x.id === sel.id)) return;
               record(s);
               room.openings = room.openings.filter((x) => x.id !== sel.id);
+            } else if (sel.kind === 'electrical') {
+              if (!s.project.electrical?.some((x) => x.id === sel.id)) return;
+              record(s);
+              s.project.electrical = s.project.electrical.filter((x) => x.id !== sel.id);
+            } else if (sel.kind === 'note') {
+              if (!s.project.annotations?.some((x) => x.id === sel.id)) return;
+              record(s);
+              s.project.annotations = s.project.annotations.filter((x) => x.id !== sel.id);
             } else {
               return;
             }
