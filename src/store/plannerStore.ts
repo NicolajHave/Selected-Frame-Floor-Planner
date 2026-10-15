@@ -35,6 +35,7 @@ import {
 import { openingType } from '@/lib/openingTypes';
 import { findAsset } from '@/lib/assetCatalog';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
+import type { CloudProject, CloudRole, SaveResult, SharedProject } from '@/lib/cloud/api';
 
 export type Tool =
   | 'select'
@@ -62,6 +63,26 @@ export interface PlaceOptions {
   wallSnap?: boolean;
 }
 
+/** The cloud project the open plan is saved to. */
+export interface CloudLink {
+  projectId: string;
+  version: number;
+  role: CloudRole;
+  ownerEmail: string;
+  /** Local edits not saved to the cloud yet. */
+  dirty: boolean;
+  lastSavedAt: string | null;
+}
+
+export type CloudStatus = 'idle' | 'saving' | 'saved' | 'error' | 'conflict';
+
+/** Someone else saved a newer version while we had unsaved edits. */
+export interface CloudConflict {
+  version: number;
+  updatedAt: string;
+  updatedByEmail: string;
+}
+
 interface PlannerState {
   project: Project;
   view: ViewState;
@@ -84,6 +105,15 @@ interface PlannerState {
 
   /** Transient message about the last action, e.g. mounting requirements. */
   notice: Notice | null;
+
+  cloud: CloudLink | null;
+  cloudStatus: CloudStatus;
+  cloudError: string | null;
+  cloudConflict: CloudConflict | null;
+  /** Viewing without edit rights (viewer role or a share link): edits are ignored. */
+  readOnly: boolean;
+  /** Set while showing a plan opened from a share link. */
+  shared: { name: string; ownerEmail: string; updatedAt: string } | null;
 
   /** Undo stack: project snapshots before each edit, oldest first. */
   past: Project[];
@@ -160,6 +190,16 @@ interface PlannerState {
   newProject: () => void;
   renameProject: (name: string) => void;
   loadProject: (p: unknown) => void;
+
+  // cloud
+  openCloudProject: (p: CloudProject) => void;
+  linkCloud: (link: Omit<CloudLink, 'dirty'>) => void;
+  unlinkCloud: () => void;
+  setCloudStatus: (status: CloudStatus, error?: string | null) => void;
+  /** After a successful save of `saved`; still dirty if the plan changed meanwhile. */
+  markSynced: (result: SaveResult, saved: Project) => void;
+  setCloudConflict: (c: CloudConflict) => void;
+  openShared: (p: SharedProject) => void;
 }
 
 const DEFAULT_VIEW: ViewState = {
@@ -234,12 +274,37 @@ function pruneSelection(s: Draft<PlannerState>): void {
   if (!exists) s.selection = null;
 }
 
+function detach(s: Draft<PlannerState>): void {
+  s.cloud = null;
+  s.readOnly = false;
+  s.shared = null;
+  s.cloudStatus = 'idle';
+  s.cloudError = null;
+  s.cloudConflict = null;
+}
+
 /** Project as it stood when the current gesture began; null outside a gesture. */
 let gestureStart: Project | null = null;
 
 export const usePlannerStore = create<PlannerState>()(
   persist(
-    immer((set, get) => {
+    immer((setState, get) => {
+      /**
+       * All actions go through this. While read-only, whatever a recipe does
+       * to the project or its history is rolled back; selection, tools and
+       * view still work so the plan can be explored.
+       */
+      const set = (recipe: (s: Draft<PlannerState>) => void) =>
+        setState((s) => {
+          const { readOnly, project, past, future } = get();
+          recipe(s);
+          if (readOnly) {
+            s.project = project;
+            s.past = past;
+            s.future = future;
+          }
+        });
+
       /**
        * Call inside a `set` recipe, after validating and before mutating
        * `s.project`. Pushes the pre-edit project onto the undo stack.
@@ -260,6 +325,12 @@ export const usePlannerStore = create<PlannerState>()(
         pendingAssetRef: null,
         pendingOpening: null,
         notice: null,
+        cloud: null,
+        cloudStatus: 'idle',
+        cloudError: null,
+        cloudConflict: null,
+        readOnly: false,
+        shared: null,
         calibration: null,
         drawLength: '',
         highlightedWall: null,
@@ -832,12 +903,15 @@ export const usePlannerStore = create<PlannerState>()(
           });
         },
 
+        // New and Load start a separate plan: they work even while read-only
+        // and detach from any cloud project or shared view.
         newProject: () =>
-          set((s) => {
+          setState((s) => {
             record(s);
             s.project = makeProject();
             s.selection = null;
             s.tool = 'select';
+            detach(s);
           }),
 
         renameProject: (name) =>
@@ -849,30 +923,112 @@ export const usePlannerStore = create<PlannerState>()(
           }),
 
         loadProject: (raw) =>
-          set((s) => {
+          setState((s) => {
             const p = migrate(raw);
             record(s);
             s.project = p;
             s.selection = null;
             s.tool = 'select';
+            detach(s);
+          }),
+
+        // Opening a plan from the cloud or a link replaces the session: it
+        // bypasses the read-only guard and starts a fresh history.
+        openCloudProject: (cp) =>
+          setState((s) => {
+            s.project = { ...migrate(cp.data), name: cp.name };
+            s.past = [];
+            s.future = [];
+            s.selection = null;
+            s.tool = 'select';
+            s.pendingAssetRef = null;
+            s.pendingOpening = null;
+            s.cloud = {
+              projectId: cp.id,
+              version: cp.version,
+              role: cp.role,
+              ownerEmail: cp.owner_email,
+              dirty: false,
+              lastSavedAt: cp.updated_at,
+            };
+            s.readOnly = cp.role === 'viewer';
+            s.shared = null;
+            s.cloudStatus = 'saved';
+            s.cloudError = null;
+            s.cloudConflict = null;
+          }),
+
+        linkCloud: (link) =>
+          setState((s) => {
+            s.cloud = { ...link, dirty: false };
+            s.readOnly = link.role === 'viewer';
+            s.cloudStatus = 'saved';
+            s.cloudError = null;
+            s.cloudConflict = null;
+          }),
+
+        unlinkCloud: () =>
+          setState((s) => {
+            s.cloud = null;
+            s.readOnly = false;
+            s.cloudStatus = 'idle';
+            s.cloudError = null;
+            s.cloudConflict = null;
+          }),
+
+        setCloudStatus: (status, error = null) =>
+          setState((s) => {
+            s.cloudStatus = status;
+            s.cloudError = error;
+          }),
+
+        markSynced: (result, saved) =>
+          setState((s) => {
+            if (!s.cloud) return;
+            s.cloud.version = result.version;
+            s.cloud.lastSavedAt = result.updated_at;
+            s.cloud.dirty = get().project !== saved;
+            s.cloudStatus = 'saved';
+            s.cloudError = null;
+            s.cloudConflict = null;
+          }),
+
+        setCloudConflict: (c) =>
+          setState((s) => {
+            s.cloudConflict = c;
+            s.cloudStatus = 'conflict';
+          }),
+
+        openShared: (sp) =>
+          setState((s) => {
+            s.project = { ...migrate(sp.data), name: sp.name };
+            s.past = [];
+            s.future = [];
+            s.selection = null;
+            s.tool = 'select';
+            s.cloud = null;
+            s.readOnly = true;
+            s.shared = { name: sp.name, ownerEmail: sp.owner_email, updatedAt: sp.updated_at };
           }),
       };
     }),
     {
-      // Autosave: only the project goes to localStorage. View, tool and
-      // undo history are session state.
+      // Autosave: the project and which cloud project it belongs to go to
+      // localStorage. View, tool and undo history are session state.
       name: 'sf-planner:project',
       version: 1,
       storage: batchedLocalStorage(),
-      partialize: (s) => ({ project: s.project }),
+      partialize: (s) => ({ project: s.project, cloud: s.cloud }),
       // Hydrate after mount (PlannerShell) so the prerendered HTML and the
       // first client render agree.
       skipHydration: true,
       merge: (persisted, current) => {
-        const raw = (persisted as { project?: unknown } | undefined)?.project;
+        const saved = persisted as { project?: unknown; cloud?: CloudLink | null } | undefined;
+        const raw = saved?.project;
         if (!raw) return current;
         try {
-          return { ...current, project: migrate(raw) };
+          const cloud = saved?.cloud?.projectId ? saved.cloud : null;
+          return { ...current, project: migrate(raw), cloud, readOnly: cloud?.role === 'viewer' };
         } catch {
           // Corrupt or incompatible save: start fresh rather than crash.
           return current;
@@ -881,6 +1037,22 @@ export const usePlannerStore = create<PlannerState>()(
     },
   ),
 );
+
+// Any edit to a plan that is linked to the cloud marks it as unsaved there.
+// Switching to another plan (link changes along with the project) doesn't.
+usePlannerStore.subscribe((state, prev) => {
+  if (
+    state.project !== prev.project &&
+    state.cloud &&
+    !state.cloud.dirty &&
+    state.cloud.projectId === prev.cloud?.projectId &&
+    !state.readOnly
+  ) {
+    usePlannerStore.setState((s) => {
+      if (s.cloud) s.cloud.dirty = true;
+    });
+  }
+});
 
 // expose Radians type for callers that need to type-assert
 export type { Radians };

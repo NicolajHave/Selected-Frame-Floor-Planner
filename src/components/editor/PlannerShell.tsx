@@ -12,6 +12,11 @@ import { useKeyboard } from '@/hooks/useKeyboard';
 import { usePlannerStore } from '@/store/plannerStore';
 import { AUTOSAVE_EVENT, type AutosaveStatus } from '@/lib/autosaveStorage';
 import { useLayoutIssues } from '@/store/selectors';
+import { CLOUD_ENABLED } from '@/lib/cloud/config';
+import { cloud } from '@/lib/cloud/api';
+import { useCloudUser } from '@/lib/cloud/useCloudUser';
+import { useCloudSync } from '@/lib/cloud/sync';
+import { CloudBanners } from '../cloud/CloudBanners';
 
 // WebGL only exists in the browser; keep three out of the server bundle.
 const ThreeCanvas = dynamic(
@@ -27,11 +32,34 @@ export function PlannerShell() {
   const issueCount = useLayoutIssues().length;
   const clearSelection = usePlannerStore((s) => s.setSelection);
 
-  // Restore the autosaved plan once we're on the client.
+  const { user, ready: authReady } = useCloudUser();
+  const readOnly = usePlannerStore((s) => s.readOnly);
+
+  // A ?share=… link shows that plan read-only and leaves this browser's own
+  // autosaved plan untouched. Otherwise, restore the autosaved plan.
+  const [shareToken, setShareToken] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
   const [restored, setRestored] = useState(false);
   useEffect(() => {
-    void Promise.resolve(usePlannerStore.persist.rehydrate()).finally(() => setRestored(true));
+    const token = CLOUD_ENABLED ? new URLSearchParams(window.location.search).get('share') : null;
+    if (!token) {
+      void Promise.resolve(usePlannerStore.persist.rehydrate()).finally(() => setRestored(true));
+      return;
+    }
+    setShareToken(token);
+    usePlannerStore.persist.setOptions({
+      storage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    });
+    cloud
+      .getShared(token)
+      .then((p) => {
+        if (p) usePlannerStore.getState().openShared(p);
+        else setShareError('This link has been revoked or does not exist.');
+      })
+      .catch((e: unknown) => setShareError(e instanceof Error ? e.message : 'Could not open the shared plan.'));
   }, []);
+
+  useCloudSync(user, CLOUD_ENABLED && restored && !shareToken);
 
   const [autosave, setAutosave] = useState<AutosaveStatus>('saved');
   useEffect(() => {
@@ -50,12 +78,14 @@ export function PlannerShell() {
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-wall-50 text-ink-900">
-      <TopBar getViewportSize={getViewportSize} />
+      <TopBar getViewportSize={getViewportSize} user={user} authReady={authReady} />
 
       <div className="flex min-h-0 flex-1">
         {/* Asset library */}
         <aside className="w-[240px] shrink-0 overflow-hidden border-r border-wall-200 bg-wall-50">
-          <AssetLibrary />
+          <fieldset disabled={readOnly} className={readOnly ? 'h-full opacity-50' : 'h-full'}>
+            <AssetLibrary />
+          </fieldset>
         </aside>
 
         {/* Canvas stage */}
@@ -69,11 +99,22 @@ export function PlannerShell() {
             </>
           )}
           <NoticeToast />
+          <CloudBanners user={user} />
+          {shareError && (
+            <div className="absolute inset-0 z-20 flex items-center justify-center bg-wall-100/90">
+              <div role="alert" className="max-w-sm rounded-[2px] border border-wall-200 bg-wall-50 p-5 text-center shadow-panel">
+                <p className="text-[13px] text-ink-900">{shareError}</p>
+                <a href="/" className="mt-3 inline-block text-[12px] underline">Open your own planner</a>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Right panel */}
         <aside className="w-[320px] shrink-0 overflow-y-auto border-l border-wall-200 bg-wall-50">
-          <RightPanel />
+          <fieldset disabled={readOnly} className="min-w-0">
+            <RightPanel />
+          </fieldset>
         </aside>
       </div>
 
@@ -81,6 +122,7 @@ export function PlannerShell() {
         <span>
           Internal · MVP
           {restored && autosave === 'saved' && ' · Autosaved in this browser'}
+          {shareToken && ' · Shared plan, view only'}
           {autosave === 'failed' && (
             <span className="text-red-700"> · Autosave failed (plan too large for this browser) — use Save</span>
           )}

@@ -344,7 +344,42 @@ Implementation order, each phase end-to-end usable:
 
 ---
 
-## 7. Testing
+## 7. Cloud plans
+
+Plans can be saved to the shared SELECTED Supabase project, next to the
+other internal Selected apps, and use the same accounts.
+
+**Database** (`supabase/migrations/*_fp_cloud_projects.sql`): three tables,
+`fp_projects` (the plan as JSON plus a `version`), `fp_project_members`
+(email + `editor`/`viewer`) and `fp_share_links` (revocable tokens). The
+tables have RLS on and no policies or grants: clients cannot touch them.
+Everything goes through `fp_*` security-definer functions, each of which
+checks the caller's role (`fp_require`) and that they are a confirmed
+@bestseller.com account. `fp_get_shared_project(token)` is the only
+function open to signed-out visitors. The migration touches nothing
+outside its `fp_` objects.
+
+**Client** (`src/lib/cloud/`): `api.ts` wraps the functions; the Supabase
+client is loaded on demand and keeps its session under its own storage
+key. The store keeps a `cloud` link (project id, version, role, dirty)
+next to the autosaved project. `sync.ts` saves 1.5 s after the last edit
+with the version it last saw; if the database has a newer version,
+`fp_save_project` refuses and the UI offers to load theirs, keep mine
+(overwrite) or save mine as a copy.
+
+**Read-only** (viewer role or `?share=` link): the store's `set` wrapper
+rolls back any change to the project or its history, and the UI hides
+editing tools and disables the panels. A shared link never writes to the
+visitor's own autosave.
+
+**Tests** use `tests/e2e/fakeCloud.ts`, an in-memory stand-in for the auth
+endpoints and the `fp_*` functions with the same rules, wired in with
+`page.route`. `openFresh()` blocks all real Supabase traffic, so tests
+never reach the shared database.
+
+---
+
+## 8. Testing
 
 `npm test` runs two Playwright projects (see `playwright.config.ts`):
 
@@ -361,9 +396,9 @@ two folders.
 
 ---
 
-## 8. Non-goals (MVP)
+## 9. Non-goals (MVP)
 
-Quotes, PDFs, auth, backend, multi-user sync, room drawing in 3D.
+Quotes, real-time co-editing, room drawing in 3D.
 Each is unblocked by the architecture above; none are built.
 
 Shipped since the original MVP scope: the full SIS catalog with generated

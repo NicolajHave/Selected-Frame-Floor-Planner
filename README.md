@@ -69,9 +69,18 @@ URL. No environment variables are needed.
 9. **PDF** (top bar) exports an A3 drawing to scale with numbered
    fixtures, wall dimensions and a title block, followed by the parts
    list and the layout check.
+10. **Cloud plans** (sign in with the same @bestseller.com account as the
+    other Selected tools): **Cloud → Save to cloud** keeps the plan in the
+    shared database and saves every change automatically. **Share**
+    invites colleagues as editors or viewers, or creates a view-only link
+    for people without an account (e.g. the store or the installer);
+    links can be revoked. If someone else saved a newer version while you
+    had unsaved changes, you choose: load theirs, keep yours, or save
+    yours as a copy.
 
-The plan autosaves in the browser. **Save** / **Load** round-trip a file;
-**Export** writes the plan plus derived metrics for other tools.
+The plan autosaves in the browser. **File → Save file copy / Open file**
+round-trip a file; **File → Export data** writes the plan plus derived
+metrics for other tools.
 
 ### Shortcuts
 
