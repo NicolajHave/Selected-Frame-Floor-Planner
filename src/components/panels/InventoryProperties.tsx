@@ -7,6 +7,7 @@ import { NumberField } from '../ui/NumberField';
 import { TextField } from '../ui/TextField';
 import { Button } from '../ui/Button';
 import { findAsset } from '@/lib/assetCatalog';
+import { wallHeightNear } from '@/geometry/wallStyle';
 import { ObjectIssues } from './LayoutCheckSection';
 
 export function InventoryProperties({ id }: { id: string }) {
@@ -14,7 +15,7 @@ export function InventoryProperties({ id }: { id: string }) {
   const updateInventory = usePlannerStore((s) => s.updateInventory);
   const duplicate = usePlannerStore((s) => s.duplicateSelected);
   const remove = usePlannerStore((s) => s.deleteSelected);
-  const wallHeight = usePlannerStore((s) => s.project.room?.wallHeight);
+  const room = usePlannerStore((s) => s.project.room);
 
   if (!item) return null;
   const asset = findAsset(item.assetRef);
@@ -43,7 +44,7 @@ export function InventoryProperties({ id }: { id: string }) {
           <MountingNote
             mountHeight={asset.mountHeight}
             minWallHeight={asset.minWallHeight}
-            wallHeight={wallHeight}
+            wallHeight={room ? wallHeightNear(room, item.position) : undefined}
           />
         )}
       </Section>
@@ -144,7 +145,7 @@ function MountingNote({
     >
       {mountHeight !== undefined && <>Hangs with its bottom edge at {m(mountHeight)}. </>}
       Walls must be at least {m(minWallHeight)} high.
-      {tooLow && <> This room&apos;s walls are only {m(wallHeight)}.</>}
+      {tooLow && <> This wall is only {m(wallHeight)}.</>}
     </p>
   );
 }

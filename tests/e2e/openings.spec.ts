@@ -97,9 +97,12 @@ test('clicking away from any wall explains where doors go', async ({ page }) => 
 test('a corner inserted into the wall keeps the door in place', async ({ page }) => {
   await placeOpening(page, 'Door', room.minX + 7000, room.minY + 150);
   await page.keyboard.press('Escape');
-  // Clicking a wall in select mode inserts a corner there.
+  // A click selects the wall; a double-click inserts a corner there.
   const split = await toScreen(page, room.minX + 3000, room.minY);
   await page.mouse.click(split.x, split.y);
+  expect((await saved(page)).room.corners).toHaveLength(4);
+  await expect(page.locator('aside').last()).toContainText('Wall 1');
+  await page.mouse.dblclick(split.x, split.y);
   const p = await saved(page);
   expect(p.room.corners).toHaveLength(5);
   const [door] = p.room.openings;

@@ -2,6 +2,7 @@ import type { jsPDF as JsPdf } from 'jspdf';
 import type { Project } from '@/model/project';
 import type { ElevationSpec } from '../views';
 import { wallFrame } from '@/geometry/openings';
+import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import {
   CONTACT,
   CONTENT_BOTTOM,
@@ -280,7 +281,7 @@ export function elevationLayout(project: Project): ElevationLayout {
   if (room) {
     room.corners.forEach((_, i) => {
       const w = wallFrame(room, i);
-      if (w) widest = Math.max(widest, (w.length + 1000) / (room.wallHeight + 600));
+      if (w) widest = Math.max(widest, (w.length + 1000) / (wallHeightOf(room, i) + 600));
     });
   }
   const cols = widest > 2.4 ? 1 : 2;
@@ -323,7 +324,7 @@ function drawElevation(
   const label = `Wall ${spec.wallIndex + 1}`;
   font(doc, 8, 'normal', MUTED);
   doc.text(
-    `${num(spec.length / 1000, 2, true)} m long · ${num(spec.height / 1000, 2, true)} m high · seen from inside`,
+    `${num(spec.length / 1000, 2, true)} m long · ${num(spec.height / 1000, 2, true)} m high${spec.transparent ? ' · transparent' : ''} · seen from inside`,
     x + doc.getTextWidth(label) + 9,
     y + 4,
   );

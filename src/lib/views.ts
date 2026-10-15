@@ -3,6 +3,7 @@ import type { Point } from '@/model/geometry';
 import { rectCorners } from '@/geometry/transform';
 import { wallFrame } from '@/geometry/openings';
 import { findAsset } from './assetCatalog';
+import { tallestWall, wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 
 /** A camera for one picture, in scene metres (x, y up, z). */
 export type ShotSpec =
@@ -38,6 +39,7 @@ export interface ElevationSpec extends ViewSpec {
   frustumMm: { left: number; right: number; top: number; bottom: number };
   /** Heights (mm) worth dimensioning on this wall, ascending. */
   heights: number[];
+  transparent: boolean;
 }
 
 const M = 0.001;
@@ -53,7 +55,7 @@ function extent(project: Project) {
   const xs = pts.map((p) => p.x);
   const ys = pts.map((p) => p.y);
   const tallest = Math.max(
-    project.room?.wallHeight ?? 0,
+    project.room ? tallestWall(project.room) : 0,
     ...project.inventory.map((i) => (findAsset(i.assetRef)?.mountHeight ?? 0) + i.size.height),
     ...project.pillars.map((p) => p.size.height),
   );
@@ -159,11 +161,11 @@ const NEAR_WALL = 600;
 export function elevationShots(project: Project, aspect: number): ElevationSpec[] {
   const room = project.room;
   if (!room?.closed) return [];
-  const H = room.wallHeight;
   const out: ElevationSpec[] = [];
   room.corners.forEach((_, i) => {
     const w = wallFrame(room, i);
     if (!w || w.length < 1000) return;
+    const H = wallHeightOf(room, i);
     const mid = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 };
     // Depth of the room in front of this wall: place the camera just inside the far side.
     const depth = Math.max(...room.corners.map((c) => (c.point.x - mid.x) * w.nx + (c.point.y - mid.y) * w.ny));
@@ -180,6 +182,7 @@ export function elevationShots(project: Project, aspect: number): ElevationSpec[
       height: H,
       frustumMm,
       heights: wallHeights(project, i),
+      transparent: !!wallStyle(room, i).transparent,
       shot: {
         id: `elev-${i}`,
         kind: 'ortho',
@@ -205,7 +208,7 @@ export function wallHeights(project: Project, i: number): number[] {
   const room = project.room;
   const w = room ? wallFrame(room, i) : null;
   if (!room || !w) return [];
-  const heights: number[] = [room.wallHeight];
+  const heights: number[] = [wallHeightOf(room, i)];
   const consider = (outline: Point[], bottom: number, top: number, hung: boolean) => {
     const dists = outline.map((p) => (p.x - w.a.x) * w.nx + (p.y - w.a.y) * w.ny);
     const alongs = outline.map((p) => (p.x - w.a.x) * w.ux + (p.y - w.a.y) * w.uy);

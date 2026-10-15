@@ -10,6 +10,7 @@ import { openingSpan, wallFrame } from '@/geometry/openings';
 import { polygonArea } from '@/geometry/polygon';
 import { wallLengths } from '@/geometry/walls';
 import { findAsset } from './assetCatalog';
+import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { buildPartsList, type PartsList } from './partsList';
 import { DEFAULT_MIN_AISLE, innerOutline, layoutIssues } from './layout';
 import { elevationShots, overviewShots, type ElevationSpec, type ViewSpec } from './views';
@@ -283,11 +284,22 @@ function drawWalls(doc: JsPdf, room: RoomPolygon, P: (p: Point) => readonly [num
       .map((o) => openingSpan(room, o))
       .filter((s): s is NonNullable<typeof s> => !!s)
       .sort((a, b) => a.offset - b.offset);
+    const clear = !!wallStyle(room, i).transparent;
     const piece = (from: number, to: number) => {
       if (to - from < 1) return;
       const at = (d: number, side: number) =>
         pt(w.a.x + w.ux * d + w.nx * half * side, w.a.y + w.uy * d + w.ny * half * side);
-      polygon(doc, [at(from, -1), at(to, -1), at(to, 1), at(from, 1)].map(P), WALL, null);
+      if (!clear) {
+        polygon(doc, [at(from, -1), at(to, -1), at(to, 1), at(from, 1)].map(P), WALL, null);
+        return;
+      }
+      // See-through wall: outline only, dashed.
+      doc.setDrawColor(...WALL);
+      doc.setLineWidth(0.2);
+      doc.setLineDashPattern([1.2, 0.8], 0);
+      doc.line(...P(at(from, -1)), ...P(at(to, -1)));
+      doc.line(...P(at(from, 1)), ...P(at(to, 1)));
+      doc.setLineDashPattern([], 0);
     };
     let cursor = -half;
     for (const s of holes) {
@@ -384,6 +396,14 @@ function drawWallDimensions(doc: JsPdf, room: RoomPolygon, P: (p: Point) => read
   });
 }
 
+/** The room's wall height, or the range when walls differ. */
+function wallHeightLabel(room: RoomPolygon): string {
+  const hs = room.corners.map((_, i) => wallHeightOf(room, i));
+  const lo = Math.min(...hs);
+  const hi = Math.max(...hs);
+  return lo === hi ? `${num(lo)} mm` : `${num(lo)}–${num(hi)} mm`;
+}
+
 /** "Wall n" just inside each wall, matching the elevation pages. */
 function drawWallNumbers(doc: JsPdf, room: RoomPolygon, P: (p: Point) => readonly [number, number]) {
   room.corners.forEach((_, i) => {
@@ -474,7 +494,7 @@ function drawColumn(doc: JsPdf, project: Project, parts: PartsList, scale: numbe
     ['Scale', scale ? `1:${scale} (A3)` : '—'],
     ['Floor area', room?.closed ? `${num(areaM2, 2, true)} m²` : '—'],
     ['Wall length', room ? `${num(walls / 1000, 2, true)} m` : '—'],
-    ['Wall height', room ? `${num(room.wallHeight)} mm` : '—'],
+    ['Wall height', room ? wallHeightLabel(room) : '—'],
     ['Fixtures', `${parts.totalUnits} units · ${num(parts.totalWeightKg, 1)} kg`],
     ['Hanger capacity', parts.totalHangers ? num(parts.totalHangers) : '—'],
   ];

@@ -10,6 +10,19 @@ export interface RoomPolygon {
   wallThickness: Mm;     // for 3D extrusion
   wallHeight: Mm;        // for 3D extrusion
   openings: Opening[];   // doors, passages and windows cut into the walls
+  /**
+   * Per-wall settings, keyed by the wall's start corner id (like openings,
+   * so they follow the wall when corners are added or moved). Walls without
+   * an entry are solid and `wallHeight` high.
+   */
+  walls?: Record<string, WallStyle>;
+}
+
+export interface WallStyle {
+  /** This wall's height; the room's `wallHeight` when absent. */
+  height?: Mm;
+  /** Glass or an open side: see-through in 3D, dashed on the plan. */
+  transparent?: boolean;
 }
 
 export type OpeningKind = 'door' | 'double-door' | 'opening' | 'window';
@@ -62,7 +75,7 @@ export interface InventoryItem extends PlacedObjectBase {
 }
 
 export type PlacedObject = Pillar | InventoryItem;
-export type SelectionKind = 'corner' | 'pillar' | 'inventory' | 'room' | 'opening';
+export type SelectionKind = 'corner' | 'pillar' | 'inventory' | 'room' | 'opening' | 'wall';
 
 export interface Selection {
   kind: SelectionKind;

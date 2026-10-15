@@ -80,7 +80,8 @@ export function RoomProperties() {
           onCommit={(v) => updateRoomMeta({ wallHeight: mm(v) })}
         />
         <p className="text-[11px] leading-relaxed text-ink-500">
-          Used for the 3D view and to check wall-hung items such as logos.
+          The height of every wall, unless a wall has its own: click a wall on the plan to give it
+          its own height, make it transparent or add doors and windows to it.
         </p>
       </Section>
 

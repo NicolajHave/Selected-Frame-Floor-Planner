@@ -25,12 +25,18 @@ import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
 import { setWallLength as resizeWall } from '@/geometry/walls';
+import { wallHeightNear } from '@/geometry/wallStyle';
 import {
-  clampOffset,
+  MIN_OPENING_WIDTH,
+  fitOpening,
   nearestWall,
   openingSpan,
+  placeOpening,
+  projectOnWall,
   reanchorAfterInsert,
   reanchorByPosition,
+  stretchAround,
+  wallFrame,
 } from '@/geometry/openings';
 import { openingType } from '@/lib/openingTypes';
 import { findAsset } from '@/lib/assetCatalog';
@@ -169,6 +175,8 @@ interface PlannerState {
   insertCorner: (afterCornerId: string, p: Point) => void;
   deleteCorner: (cornerId: string) => void;
   updateRoomMeta: (patch: Partial<Pick<RoomPolygon, 'wallThickness' | 'wallHeight'>>) => void;
+  /** Wall `index`: its own height (null = the room's) and whether it is see-through. */
+  updateWall: (index: number, patch: { height?: number | null; transparent?: boolean }) => void;
 
   // object actions
   addPillarAt: (p: Point) => void;
@@ -179,9 +187,16 @@ interface PlannerState {
   moveInventory: (id: string, p: Point, opts?: PlaceOptions) => void;
   /** Place the pending opening on the wall nearest `p`. */
   addOpeningAt: (p: Point) => void;
+  /** Put a new opening on wall `index`, as near its middle as there is room. */
+  addOpeningOnWall: (index: number, kind: OpeningKind) => void;
   updateOpening: (id: string, patch: Partial<Omit<Opening, 'id'>>) => void;
-  /** Drag an opening along (or onto another) wall. */
-  moveOpening: (id: string, p: Point) => void;
+  /**
+   * Drag an opening along (or onto another) wall. `grab` is how far the
+   * opening's centre was from the pointer, along the wall, when the drag began.
+   */
+  moveOpening: (id: string, p: Point, grab?: number) => void;
+  /** Drag one end of an opening to change its width; the other end stays. */
+  resizeOpening: (id: string, end: 'start' | 'end', p: Point) => void;
   /** Objects: rotate by `delta`. Doors: positive flips the hinge side, negative the swing. */
   rotateSelected: (delta: number) => void;
   duplicateSelected: () => void;
@@ -235,19 +250,48 @@ const metres = (n: number) => `${(n / 1000).toFixed(1)} m`;
 let noticeSeq = 0;
 
 /** Mounting requirement shown when an item with a minimum wall height is placed. */
+/** How far from a wall (mm) a click still counts as on it: ~25 px or 600 mm. */
+const openingReach = (zoom: number) => Math.max(600, 25 / zoom);
+
+const formatMm = (v: number) => `${Math.round(v).toLocaleString('da-DK')} mm`;
+
+function info(message: string): Notice {
+  return { id: ++noticeSeq, tone: 'info', message };
+}
+
+/** Adds an opening of `kind` with its default size; returns its id. */
+function newOpening(room: Draft<RoomPolygon>, kind: OpeningKind, cornerId: string, offset: number): string {
+  const t = openingType(kind);
+  const id = newId('opn');
+  room.openings.push({
+    id,
+    kind,
+    wallStartCornerId: cornerId,
+    offset: offset as Mm,
+    width: mm(t.width),
+    height: mm(t.height),
+    sillHeight: mm(t.sillHeight),
+    hinge: 'start',
+    swing: 'in',
+  });
+  return id;
+}
+
 function mountingNotice(
   name: string,
   mountHeight: number | undefined,
   minWallHeight: number,
   room: RoomPolygon | null,
+  at: Point,
 ): Notice {
   const hang = mountHeight !== undefined ? `${name} hangs with its bottom edge at ${metres(mountHeight)}. ` : '';
   const base = `${hang}Walls must be at least ${metres(minWallHeight)} high.`;
-  if (room && room.wallHeight < minWallHeight) {
+  const wall = room ? wallHeightNear(room, at) : null;
+  if (wall !== null && wall < minWallHeight) {
     return {
       id: ++noticeSeq,
       tone: 'warning',
-      message: `${base} This room's walls are only ${metres(room.wallHeight)} — raise the wall height in the room properties.`,
+      message: `${base} This wall is only ${metres(wall)} — raise it in the wall's properties (click the wall).`,
     };
   }
   return { id: ++noticeSeq, tone: 'info', message: base };
@@ -271,7 +315,8 @@ function pruneSelection(s: Draft<PlannerState>): void {
     (sel.kind === 'inventory' && project.inventory.some((i) => i.id === sel.id)) ||
     (sel.kind === 'corner' && !!project.room?.corners.some((c) => c.id === sel.id)) ||
     (sel.kind === 'room' && !!project.room) ||
-    (sel.kind === 'opening' && !!project.room?.openings.some((o) => o.id === sel.id));
+    (sel.kind === 'opening' && !!project.room?.openings.some((o) => o.id === sel.id)) ||
+    (sel.kind === 'wall' && !!project.room?.corners.some((c) => c.id === sel.id));
   if (!exists) s.selection = null;
 }
 
@@ -370,36 +415,41 @@ export const usePlannerStore = create<PlannerState>()(
             const room = s.project.room;
             const kind = s.pendingOpening;
             if (!kind) return;
-            const hit = room?.closed ? nearestWall(room, p) : null;
-            // Accept clicks up to ~25 px or 600 mm from a wall, whichever is larger.
-            const reach = Math.max(600, 25 / s.view.zoom);
-            if (!room || !hit || hit.distance > reach) {
-              s.notice = {
-                id: Date.now(),
-                tone: 'info',
-                message: room?.closed
-                  ? `Click on a wall to place the ${openingType(kind).name.toLowerCase()}.`
-                  : 'Draw and close the room first — doors and windows go in its walls.',
-              };
+            const t = openingType(kind);
+            const where = room?.closed ? placeOpening(room, p, t.width, openingReach(s.view.zoom)) : null;
+            if (!room || !where?.ok) {
+              s.notice = info(
+                !room?.closed
+                  ? 'Draw and close the room first — doors and windows go in its walls.'
+                  : where && !where.ok && where.reason === 'full'
+                    ? `No room for a ${formatMm(t.width)} ${t.name.toLowerCase()} on wall ${where.index! + 1}. Move or narrow what is there, or pick another wall.`
+                    : `Click on a wall to place the ${t.name.toLowerCase()}.`,
+              );
               return;
             }
             record(s);
-            const t = openingType(kind);
-            const id = newId('opn');
-            room.openings.push({
-              id,
-              kind,
-              wallStartCornerId: hit.cornerId,
-              offset: clampOffset(hit.length, t.width, hit.along) as Mm,
-              width: mm(t.width),
-              height: mm(t.height),
-              sillHeight: mm(t.sillHeight),
-              hinge: 'start',
-              swing: 'in',
-            });
+            const id = newOpening(room, kind, where.cornerId, where.offset);
             s.selection = { kind: 'opening', id };
             s.tool = 'select';
             s.pendingOpening = null;
+            s.notice = null;
+            touch(s.project);
+          }),
+
+        addOpeningOnWall: (index, kind) =>
+          set((s) => {
+            const room = s.project.room;
+            const w = room ? wallFrame(room, index) : null;
+            if (!room || !w) return;
+            const t = openingType(kind);
+            const offset = fitOpening(room, index, t.width, w.length / 2);
+            if (offset === null) {
+              s.notice = info(`No room for a ${formatMm(t.width)} ${t.name.toLowerCase()} on wall ${index + 1}.`);
+              return;
+            }
+            record(s);
+            const id = newOpening(room, kind, room.corners[index]!.id, offset);
+            s.selection = { kind: 'opening', id };
             s.notice = null;
             touch(s.project);
           }),
@@ -411,21 +461,70 @@ export const usePlannerStore = create<PlannerState>()(
             if (!room || !o) return;
             record(s);
             Object.assign(o, patch);
+            o.width = mm(Math.max(MIN_OPENING_WIDTH, o.width));
             if (o.sillHeight >= o.height) o.sillHeight = mm(Math.max(0, o.height - 100));
-            const span = openingSpan(room, o);
-            if (span) o.offset = clampOffset(span.length, o.width, o.offset) as Mm;
+            const index = room.corners.findIndex((c) => c.id === o.wallStartCornerId);
+            // Keep it clear of the corners and the other openings: slide it
+            // if that is enough, otherwise make it as wide as the gap allows.
+            let offset = fitOpening(room, index, o.width, o.offset, o.id);
+            if (offset === null) {
+              const gap = stretchAround(room, index, o.offset, o.id);
+              if (gap && gap[1] - gap[0] >= MIN_OPENING_WIDTH) {
+                o.width = mm(Math.floor(gap[1] - gap[0]));
+                offset = (gap[0] + gap[1]) / 2;
+                s.notice = info(`Narrowed to ${formatMm(o.width)}: that is all the room there is on this wall.`);
+              }
+            }
+            if (offset !== null) o.offset = offset as Mm;
             touch(s.project);
           }),
 
-        moveOpening: (id, p) =>
+        moveOpening: (id, p, grab = 0) =>
           set((s) => {
             const room = s.project.room;
             const o = room?.openings.find((x) => x.id === id);
-            const hit = room ? nearestWall(room, p) : null;
-            if (!room || !o || !hit) return;
+            if (!room || !o) return;
+            // Stay on the current wall while the pointer is near it, so it
+            // doesn't jump to the next wall when dragged towards a corner.
+            const current = room.corners.findIndex((c) => c.id === o.wallStartCornerId);
+            const onCurrent = projectOnWall(room, current, p);
+            let index: number;
+            let want: number;
+            if (onCurrent && onCurrent.distance <= openingReach(s.view.zoom)) {
+              index = current;
+              want = onCurrent.along + grab;
+            } else {
+              const hit = nearestWall(room, p);
+              if (!hit) return;
+              index = hit.index;
+              want = hit.along;
+            }
+            const offset = fitOpening(room, index, o.width, want, o.id);
+            if (offset === null) return; // no room there: it stays where it was
             record(s);
-            o.wallStartCornerId = hit.cornerId;
-            o.offset = clampOffset(hit.length, o.width, hit.along) as Mm;
+            o.wallStartCornerId = room.corners[index]!.id;
+            o.offset = offset as Mm;
+            touch(s.project);
+          }),
+
+        resizeOpening: (id, end, p) =>
+          set((s) => {
+            const room = s.project.room;
+            const o = room?.openings.find((x) => x.id === id);
+            const span = room && o ? openingSpan(room, o) : null;
+            if (!room || !o || !span) return;
+            const hit = projectOnWall(room, span.index, p);
+            const gap = stretchAround(room, span.index, span.offset, o.id);
+            if (!hit || !gap) return;
+            const dir = end === 'end' ? 1 : -1;
+            const fixed = span.offset - (dir * span.width) / 2;
+            let edge = Math.max(gap[0], Math.min(gap[1], hit.along));
+            if ((edge - fixed) * dir < MIN_OPENING_WIDTH) edge = fixed + dir * MIN_OPENING_WIDTH;
+            const width = Math.round(Math.abs(edge - fixed) / 10) * 10;
+            if (width === o.width) return;
+            record(s);
+            o.width = mm(width);
+            o.offset = (fixed + (dir * width) / 2) as Mm;
             touch(s.project);
           }),
 
@@ -687,6 +786,10 @@ export const usePlannerStore = create<PlannerState>()(
               id,
               Math.hypot(snapped.x - start.x, snapped.y - start.y),
             );
+            // Both halves of a split wall keep its height and look.
+            const style = room.walls?.[afterCornerId];
+            if (style) room.walls![id] = { ...style };
+            s.selection = { kind: 'corner', id };
             touch(s.project);
           }),
 
@@ -699,6 +802,7 @@ export const usePlannerStore = create<PlannerState>()(
             record(s);
             const before = get().project.room!;
             room.corners = room.corners.filter((c) => c.id !== cornerId);
+            if (room.walls?.[cornerId]) delete room.walls[cornerId];
             room.openings = reanchorByPosition(before, {
               ...before,
               corners: before.corners.filter((c) => c.id !== cornerId),
@@ -715,6 +819,27 @@ export const usePlannerStore = create<PlannerState>()(
             record(s);
             if (patch.wallThickness !== undefined) s.project.room.wallThickness = patch.wallThickness;
             if (patch.wallHeight !== undefined) s.project.room.wallHeight = patch.wallHeight;
+            touch(s.project);
+          }),
+
+        updateWall: (index, patch) =>
+          set((s) => {
+            const room = s.project.room;
+            const corner = room?.corners[index];
+            if (!room || !corner || !wallFrame(room, index)) return;
+            record(s);
+            const walls = (room.walls ??= {});
+            const style = { ...walls[corner.id] };
+            if (patch.height !== undefined) {
+              if (patch.height === null || patch.height === room.wallHeight) delete style.height;
+              else style.height = mm(patch.height);
+            }
+            if (patch.transparent !== undefined) {
+              if (patch.transparent) style.transparent = true;
+              else delete style.transparent;
+            }
+            if (Object.keys(style).length) walls[corner.id] = style;
+            else delete walls[corner.id];
             touch(s.project);
           }),
 
@@ -772,7 +897,7 @@ export const usePlannerStore = create<PlannerState>()(
             }
             s.project.inventory.push(item);
             s.notice = asset?.minWallHeight
-              ? mountingNotice(asset.name, asset.mountHeight, asset.minWallHeight, s.project.room)
+              ? mountingNotice(asset.name, asset.mountHeight, asset.minWallHeight, s.project.room, item.position)
               : null;
             s.selection = { kind: 'inventory', id };
             s.tool = 'select';
