@@ -9,8 +9,11 @@ import { Room } from './Room';
 import { Pillar } from './Pillar';
 import { Inventory } from './Inventory';
 import { Measurements } from './Measurements';
+import { CalibrationMarks, Underlay } from './Underlay';
+import { Openings } from './Openings';
 import { closestPointOnPolygon } from '@/geometry/insert';
 import { boundingBox } from '@/geometry/polygon';
+import { pointAtDistance } from '@/geometry/snap';
 import type { Point } from '@/model/geometry';
 import type { Mm, Radians } from '@/model/units';
 import { mm } from '@/model/units';
@@ -22,6 +25,9 @@ export function Canvas() {
   const view = usePlannerStore((s) => s.view);
   const tool = usePlannerStore((s) => s.tool);
   const selection = usePlannerStore((s) => s.selection);
+  const calibration = usePlannerStore((s) => s.calibration);
+  const highlightedWall = usePlannerStore((s) => s.highlightedWall);
+  const drawLength = usePlannerStore((s) => s.drawLength);
 
   const setSelection = usePlannerStore((s) => s.setSelection);
   const addCorner = usePlannerStore((s) => s.addCorner);
@@ -37,12 +43,18 @@ export function Canvas() {
   const endGesture = usePlannerStore((s) => s.endGesture);
   const setZoom = usePlannerStore((s) => s.setZoom);
   const setPan = usePlannerStore((s) => s.setPan);
+  const addCalibrationPoint = usePlannerStore((s) => s.addCalibrationPoint);
+  const updateUnderlay = usePlannerStore((s) => s.updateUnderlay);
+  const addOpeningAt = usePlannerStore((s) => s.addOpeningAt);
+  const moveOpening = usePlannerStore((s) => s.moveOpening);
 
   const metrics = useDerivedMetrics();
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [hoverWorld, setHoverWorld] = useState<Point | null>(null);
+  const hoverRef = useRef<Point | null>(null);
+  hoverRef.current = hoverWorld;
 
   // Track container size for the grid pattern.
   useLayoutEffect(() => {
@@ -78,7 +90,9 @@ export function Canvas() {
     | { type: 'corner'; cornerId: string }
     | { type: 'pillar'; id: string; offset: Point }
     | { type: 'inventory'; id: string; offset: Point }
-    | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number };
+    | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number }
+    | { type: 'underlay'; offset: Point }
+    | { type: 'opening'; id: string };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
@@ -92,6 +106,11 @@ export function Canvas() {
       // Placement tools act on any click that reaches the canvas — also
       // clicks bubbled through the room fill. Shapes that must intercept
       // (corners, objects in select mode) call stopPropagation themselves.
+      if (tool === 'calibrate') {
+        // Raw point: grid snapping would defeat the purpose.
+        addCalibrationPoint(world);
+        return;
+      }
       if (tool === 'draw-room') {
         // Closing: click the first corner. The first-corner shape itself handles that.
         addCorner(world);
@@ -99,6 +118,10 @@ export function Canvas() {
       }
       if (tool === 'add-pillar') {
         addPillarAt(world);
+        return;
+      }
+      if (tool === 'add-opening') {
+        addOpeningAt(world);
         return;
       }
       if (tool === 'add-inventory') {
@@ -123,7 +146,7 @@ export function Canvas() {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
       }
     },
-    [tool, view, addCorner, addPillarAt, addInventoryAt, setSelection, getRect],
+    [tool, view, addCorner, addPillarAt, addInventoryAt, addOpeningAt, addCalibrationPoint, setSelection, getRect],
   );
 
   const onPointerMove = useCallback(
@@ -149,6 +172,12 @@ export function Canvas() {
           { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
           { wallSnap: !e.altKey },
         );
+      } else if (d.type === 'opening') {
+        moveOpening(d.id, world);
+      } else if (d.type === 'underlay') {
+        updateUnderlay({
+          position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
+        });
       } else if (d.type === 'rotate') {
         // The handle sits on the local +y side, i.e. at angle θ + 90°.
         let angle = Math.atan2(world.y - d.cy, world.x - d.cx) - Math.PI / 2;
@@ -158,7 +187,7 @@ export function Canvas() {
         else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, getRect],
+    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, updateUnderlay, getRect],
   );
 
   const onPointerUp = useCallback(
@@ -206,21 +235,51 @@ export function Canvas() {
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
+  // ---- typed wall lengths while drawing ----
+  useEffect(() => {
+    if (tool !== 'draw-room') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.target as HTMLElement | null)?.matches('input, textarea, [contenteditable="true"]')) return;
+      const s = usePlannerStore.getState();
+      const r = s.project.room;
+      if (!r || r.closed || r.corners.length === 0) return;
+      const buf = s.drawLength;
+      if (/^[0-9]$/.test(e.key) || ((e.key === '.' || e.key === ',') && !buf.includes('.'))) {
+        e.preventDefault();
+        s.setDrawLength(buf + (e.key === ',' ? '.' : e.key));
+      } else if (e.key === 'Backspace' && buf) {
+        e.preventDefault();
+        s.setDrawLength(buf.slice(0, -1));
+      } else if (e.key === 'Enter' && Number(buf) > 0) {
+        e.preventDefault();
+        const last = r.corners[r.corners.length - 1]!.point;
+        s.addCorner(pointAtDistance(last, hoverRef.current, Number(buf), !e.altKey), { snap: false });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [tool]);
+
   // ---- preview line in draw-room mode ----
   const room = project.room;
   const previewLine = useMemo(() => {
     if (tool !== 'draw-room') return null;
     if (!room || room.closed) return null;
-    if (room.corners.length === 0 || !hoverWorld) return null;
+    if (room.corners.length === 0) return null;
     const last = room.corners[room.corners.length - 1]!.point;
-    return { x1: last.x, y1: last.y, x2: hoverWorld.x, y2: hoverWorld.y };
-  }, [tool, room, hoverWorld]);
+    const typed = Number(drawLength);
+    const end = typed > 0 ? pointAtDistance(last, hoverWorld, typed, true) : hoverWorld;
+    if (!end) return null;
+    return { x1: last.x, y1: last.y, x2: end.x, y2: end.y };
+  }, [tool, room, hoverWorld, drawLength]);
 
   const cursorClass = useMemo(() => {
     switch (tool) {
       case 'draw-room':     return 'cursor-crosshair';
+      case 'calibrate':     return 'cursor-crosshair';
       case 'add-pillar':    return 'cursor-copy';
       case 'add-inventory': return 'cursor-copy';
+      case 'add-opening':   return 'cursor-copy';
       default:              return 'cursor-grab active:cursor-grabbing';
     }
   }, [tool]);
@@ -310,6 +369,31 @@ export function Canvas() {
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
+  const onPointerDownOpening = (id: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return; // let placement clicks through
+    e.stopPropagation();
+    setSelection({ kind: 'opening', id });
+    beginGesture();
+    drag.current = { type: 'opening', id };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerDownUnderlay = (e: React.PointerEvent<SVGElement>) => {
+    const u = project.underlay;
+    if (tool !== 'select' || !u || u.locked) return;
+    e.stopPropagation();
+    const rect = getRect();
+    if (!rect) return;
+    const world = eventToWorld(view, rect, e.clientX, e.clientY);
+    setSelection(null);
+    beginGesture();
+    drag.current = {
+      type: 'underlay',
+      offset: { x: (world.x - u.position.x) as Mm, y: (world.y - u.position.y) as Mm },
+    };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
   const previewStroke = pxStroke(view, 1.5);
 
   return (
@@ -323,16 +407,31 @@ export function Canvas() {
     >
       <Grid view={view} width={size.w} height={size.h} />
 
-      <g transform={`translate(${view.pan.x} ${view.pan.y}) scale(${view.zoom})`}>
+      <g data-layer="world" transform={`translate(${view.pan.x} ${view.pan.y}) scale(${view.zoom})`}>
+        {project.underlay && (
+          <Underlay underlay={project.underlay} view={view} onPointerDown={onPointerDownUnderlay} />
+        )}
+
         {room && (
           <Room
             room={room}
             view={view}
             selectedKind={selection?.kind === 'corner' || selection?.kind === 'room' ? selection.kind : null}
             selectedId={selection?.id ?? null}
+            showWallNumbers={selection?.kind === 'room' || highlightedWall !== null}
+            highlightedWall={highlightedWall}
             onPointerDownCorner={onPointerDownCorner}
             onPointerDownEdge={onPointerDownEdge}
             onPointerDownRoom={onPointerDownRoom}
+          />
+        )}
+
+        {room && room.openings.length > 0 && (
+          <Openings
+            room={room}
+            view={view}
+            selectedId={selection?.kind === 'opening' ? selection.id : null}
+            onPointerDown={onPointerDownOpening}
           />
         )}
 
@@ -374,6 +473,8 @@ export function Canvas() {
         )}
 
         {room && metrics && <Measurements room={room} view={view} metrics={metrics} />}
+
+        {calibration && <CalibrationMarks calibration={calibration} hover={hoverWorld} view={view} />}
       </g>
 
       {/* Cursor coords readout, in screen space */}

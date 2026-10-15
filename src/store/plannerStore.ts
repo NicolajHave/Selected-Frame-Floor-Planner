@@ -1,16 +1,19 @@
 'use client';
 
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
+import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 import type { Draft } from 'immer';
 import type {
   Project,
   ViewState,
   ViewMode,
+  PlanUnderlay,
   RoomPolygon,
   Pillar,
   InventoryItem,
+  Opening,
+  OpeningKind,
   Selection,
   Point,
   Mm,
@@ -21,9 +24,31 @@ import { newId } from '@/lib/id';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
+import { setWallLength as resizeWall } from '@/geometry/walls';
+import {
+  clampOffset,
+  nearestWall,
+  openingSpan,
+  reanchorAfterInsert,
+  reanchorByPosition,
+} from '@/geometry/openings';
+import { openingType } from '@/lib/openingTypes';
 import { findAsset } from '@/lib/assetCatalog';
+import { batchedLocalStorage } from '@/lib/autosaveStorage';
 
-export type Tool = 'select' | 'draw-room' | 'add-pillar' | 'add-inventory';
+export type Tool =
+  | 'select'
+  | 'draw-room'
+  | 'add-pillar'
+  | 'add-inventory'
+  | 'add-opening'
+  | 'calibrate';
+
+/** Two clicks on the underlay that span a known real-world distance. */
+export interface Calibration {
+  a: Point | null;
+  b: Point | null;
+}
 
 export interface Notice {
   /** Changes on every new notice so the UI can restart its timer. */
@@ -48,6 +73,14 @@ interface PlannerState {
    * Cleared after one placement or when the user switches tools.
    */
   pendingAssetRef: string | null;
+  /** Kind of door/opening/window the next click on a wall places. */
+  pendingOpening: OpeningKind | null;
+  /** In-progress underlay scale calibration; null outside the calibrate tool. */
+  calibration: Calibration | null;
+  /** Digits typed while drawing: the next wall's length in mm. */
+  drawLength: string;
+  /** Wall index highlighted on the canvas (e.g. hovered in the wall list). */
+  highlightedWall: number | null;
 
   /** Transient message about the last action, e.g. mounting requirements. */
   notice: Notice | null;
@@ -61,6 +94,15 @@ interface PlannerState {
   setTool: (t: Tool) => void;
   setSelection: (s: Selection | null) => void;
   pickAsset: (assetId: string) => void;
+  pickOpening: (kind: OpeningKind) => void;
+
+  // plan underlay
+  setUnderlay: (u: PlanUnderlay | null) => void;
+  updateUnderlay: (patch: Partial<PlanUnderlay>) => void;
+  startCalibration: () => void;
+  addCalibrationPoint: (p: Point) => void;
+  /** Scale the underlay so the two clicked points are `distanceMm` apart. */
+  applyCalibration: (distanceMm: number) => void;
   dismissNotice: () => void;
 
   // view actions
@@ -83,7 +125,12 @@ interface PlannerState {
 
   // room actions
   startRoom: () => void;
-  addCorner: (p: Point) => void;
+  /** `snap: false` places the corner exactly (typed lengths); default follows grid snap. */
+  addCorner: (p: Point, opts?: { snap?: boolean }) => void;
+  setDrawLength: (text: string) => void;
+  /** Wall `index` runs from corner `index` to the next corner. */
+  setWallLength: (index: number, lengthMm: number) => void;
+  setHighlightedWall: (index: number | null) => void;
   closeRoom: () => void;
   moveCorner: (cornerId: string, p: Point) => void;
   insertCorner: (afterCornerId: string, p: Point) => void;
@@ -97,6 +144,12 @@ interface PlannerState {
   updateInventory: (id: string, patch: Partial<InventoryItem>) => void;
   /** Drag-move an inventory item; applies wall snapping for wall-mounted assets. */
   moveInventory: (id: string, p: Point, opts?: PlaceOptions) => void;
+  /** Place the pending opening on the wall nearest `p`. */
+  addOpeningAt: (p: Point) => void;
+  updateOpening: (id: string, patch: Partial<Omit<Opening, 'id'>>) => void;
+  /** Drag an opening along (or onto another) wall. */
+  moveOpening: (id: string, p: Point) => void;
+  /** Objects: rotate by `delta`. Doors: positive flips the hinge side, negative the swing. */
   rotateSelected: (delta: number) => void;
   duplicateSelected: () => void;
   deleteSelected: () => void;
@@ -173,7 +226,8 @@ function pruneSelection(s: Draft<PlannerState>): void {
     (sel.kind === 'pillar' && project.pillars.some((p) => p.id === sel.id)) ||
     (sel.kind === 'inventory' && project.inventory.some((i) => i.id === sel.id)) ||
     (sel.kind === 'corner' && !!project.room?.corners.some((c) => c.id === sel.id)) ||
-    (sel.kind === 'room' && !!project.room);
+    (sel.kind === 'room' && !!project.room) ||
+    (sel.kind === 'opening' && !!project.room?.openings.some((o) => o.id === sel.id));
   if (!exists) s.selection = null;
 }
 
@@ -201,7 +255,11 @@ export const usePlannerStore = create<PlannerState>()(
         tool: 'select',
         selection: null,
         pendingAssetRef: null,
+        pendingOpening: null,
         notice: null,
+        calibration: null,
+        drawLength: '',
+        highlightedWall: null,
         past: [],
         future: [],
 
@@ -212,6 +270,9 @@ export const usePlannerStore = create<PlannerState>()(
             if (t !== 'select') s.selection = null;
             // Switching away from add-inventory abandons a pending asset pick.
             if (t !== 'add-inventory') s.pendingAssetRef = null;
+            if (t !== 'add-opening') s.pendingOpening = null;
+            if (t !== 'calibrate') s.calibration = null;
+            if (t !== 'draw-room') s.drawLength = '';
           }),
 
         pickAsset: (assetId) =>
@@ -219,6 +280,135 @@ export const usePlannerStore = create<PlannerState>()(
             s.pendingAssetRef = assetId;
             s.tool = 'add-inventory';
             s.selection = null;
+          }),
+
+        pickOpening: (kind) =>
+          set((s) => {
+            s.pendingOpening = kind;
+            s.pendingAssetRef = null;
+            s.tool = 'add-opening';
+            s.selection = null;
+          }),
+
+        addOpeningAt: (p) =>
+          set((s) => {
+            const room = s.project.room;
+            const kind = s.pendingOpening;
+            if (!kind) return;
+            const hit = room?.closed ? nearestWall(room, p) : null;
+            // Accept clicks up to ~25 px or 600 mm from a wall, whichever is larger.
+            const reach = Math.max(600, 25 / s.view.zoom);
+            if (!room || !hit || hit.distance > reach) {
+              s.notice = {
+                id: Date.now(),
+                tone: 'info',
+                message: room?.closed
+                  ? `Click on a wall to place the ${openingType(kind).name.toLowerCase()}.`
+                  : 'Draw and close the room first — doors and windows go in its walls.',
+              };
+              return;
+            }
+            record(s);
+            const t = openingType(kind);
+            const id = newId('opn');
+            room.openings.push({
+              id,
+              kind,
+              wallStartCornerId: hit.cornerId,
+              offset: clampOffset(hit.length, t.width, hit.along) as Mm,
+              width: mm(t.width),
+              height: mm(t.height),
+              sillHeight: mm(t.sillHeight),
+              hinge: 'start',
+              swing: 'in',
+            });
+            s.selection = { kind: 'opening', id };
+            s.tool = 'select';
+            s.pendingOpening = null;
+            s.notice = null;
+            touch(s.project);
+          }),
+
+        updateOpening: (id, patch) =>
+          set((s) => {
+            const room = s.project.room;
+            const o = room?.openings.find((x) => x.id === id);
+            if (!room || !o) return;
+            record(s);
+            Object.assign(o, patch);
+            if (o.sillHeight >= o.height) o.sillHeight = mm(Math.max(0, o.height - 100));
+            const span = openingSpan(room, o);
+            if (span) o.offset = clampOffset(span.length, o.width, o.offset) as Mm;
+            touch(s.project);
+          }),
+
+        moveOpening: (id, p) =>
+          set((s) => {
+            const room = s.project.room;
+            const o = room?.openings.find((x) => x.id === id);
+            const hit = room ? nearestWall(room, p) : null;
+            if (!room || !o || !hit) return;
+            record(s);
+            o.wallStartCornerId = hit.cornerId;
+            o.offset = clampOffset(hit.length, o.width, hit.along) as Mm;
+            touch(s.project);
+          }),
+
+        setUnderlay: (u) =>
+          set((s) => {
+            if (!u && !s.project.underlay) return;
+            record(s);
+            s.project.underlay = u;
+            touch(s.project);
+          }),
+
+        updateUnderlay: (patch) =>
+          set((s) => {
+            const u = s.project.underlay;
+            if (!u) return;
+            record(s);
+            Object.assign(u, patch);
+            if (patch.position) u.position = { ...patch.position };
+            touch(s.project);
+          }),
+
+        startCalibration: () =>
+          set((s) => {
+            if (!s.project.underlay) return;
+            s.tool = 'calibrate';
+            s.calibration = { a: null, b: null };
+            s.selection = null;
+            s.pendingAssetRef = null;
+          }),
+
+        addCalibrationPoint: (p) =>
+          set((s) => {
+            const c = s.calibration;
+            if (!c) return;
+            if (!c.a) c.a = { x: p.x, y: p.y };
+            else if (!c.b) c.b = { x: p.x, y: p.y };
+          }),
+
+        applyCalibration: (distanceMm) =>
+          set((s) => {
+            const c = s.calibration;
+            const u = s.project.underlay;
+            if (!c?.a || !c.b || !u || !(distanceMm > 0)) return;
+            const measured = Math.hypot(c.b.x - c.a.x, c.b.y - c.a.y);
+            if (measured < 1) return;
+            record(s);
+            const k = distanceMm / measured;
+            // Scale about the first point so it stays put on screen.
+            u.position = {
+              x: (c.a.x + (u.position.x - c.a.x) * k) as Mm,
+              y: (c.a.y + (u.position.y - c.a.y) * k) as Mm,
+            };
+            u.width = (u.width * k) as Mm;
+            u.calibrated = true;
+            u.locked = true;
+            s.calibration = null;
+            s.tool = 'select';
+            touch(s.project);
           }),
 
         dismissNotice: () =>
@@ -229,6 +419,7 @@ export const usePlannerStore = create<PlannerState>()(
         setSelection: (sel) =>
           set((s) => {
             s.selection = sel;
+            s.highlightedWall = null;
           }),
 
         setZoom: (z) =>
@@ -309,28 +500,52 @@ export const usePlannerStore = create<PlannerState>()(
                 closed: false,
                 wallThickness: mm(120),
                 wallHeight: mm(2700),
+                openings: [],
               };
             } else if (s.project.room.corners.length > 0) {
               // Reset existing room when user explicitly redraws.
               record(s);
               s.project.room.corners = [];
               s.project.room.closed = false;
+              s.project.room.openings = [];
             }
             s.tool = 'draw-room';
             s.selection = null;
           }),
 
-        addCorner: (p) =>
+        addCorner: (p, opts) =>
           set((s) => {
             if (!s.project.room) return;
             if (s.project.room.closed) return;
             record(s);
-            const snapped = maybeSnap(s.view, p);
+            const snapped = opts?.snap === false ? p : maybeSnap(s.view, p);
+            s.drawLength = '';
             s.project.room.corners.push({
               id: newId('cor'),
               point: { x: snapped.x as Mm, y: snapped.y as Mm },
             });
             touch(s.project);
+          }),
+
+        setDrawLength: (text) =>
+          set((s) => {
+            s.drawLength = text;
+          }),
+
+        setWallLength: (index, lengthMm) =>
+          set((s) => {
+            const room = s.project.room;
+            if (!room) return;
+            const next = resizeWall(room.corners, room.closed, index, lengthMm);
+            if (next === room.corners) return;
+            record(s);
+            room.corners = next;
+            touch(s.project);
+          }),
+
+        setHighlightedWall: (index) =>
+          set((s) => {
+            s.highlightedWall = index;
           }),
 
         closeRoom: () =>
@@ -340,6 +555,7 @@ export const usePlannerStore = create<PlannerState>()(
             record(s);
             s.project.room.closed = true;
             s.tool = 'select';
+            s.drawLength = '';
             touch(s.project);
           }),
 
@@ -363,10 +579,18 @@ export const usePlannerStore = create<PlannerState>()(
             if (idx < 0) return;
             record(s);
             const snapped = maybeSnap(s.view, p);
+            const start = room.corners[idx]!.point;
+            const id = newId('cor');
             room.corners.splice(idx + 1, 0, {
-              id: newId('cor'),
+              id,
               point: { x: snapped.x as Mm, y: snapped.y as Mm },
             });
+            room.openings = reanchorAfterInsert(
+              room.openings,
+              afterCornerId,
+              id,
+              Math.hypot(snapped.x - start.x, snapped.y - start.y),
+            );
             touch(s.project);
           }),
 
@@ -377,7 +601,12 @@ export const usePlannerStore = create<PlannerState>()(
             if (room.corners.length <= 3 && room.closed) return; // refuse to break a triangle
             if (!room.corners.some((c) => c.id === cornerId)) return;
             record(s);
+            const before = get().project.room!;
             room.corners = room.corners.filter((c) => c.id !== cornerId);
+            room.openings = reanchorByPosition(before, {
+              ...before,
+              corners: before.corners.filter((c) => c.id !== cornerId),
+            });
             if (s.selection?.kind === 'corner' && s.selection.id === cornerId) {
               s.selection = null;
             }
@@ -502,6 +731,15 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const sel = s.selection;
             if (!sel) return;
+            if (sel.kind === 'opening') {
+              const o = s.project.room?.openings.find((x) => x.id === sel.id);
+              if (!o || (o.kind !== 'door' && o.kind !== 'double-door')) return;
+              record(s);
+              if (delta > 0) o.hinge = o.hinge === 'start' ? 'end' : 'start';
+              else o.swing = o.swing === 'in' ? 'out' : 'in';
+              touch(s.project);
+              return;
+            }
             const target =
               sel.kind === 'pillar'
                 ? s.project.pillars.find((x) => x.id === sel.id)
@@ -565,6 +803,11 @@ export const usePlannerStore = create<PlannerState>()(
               if (!s.project.inventory.some((x) => x.id === sel.id)) return;
               record(s);
               s.project.inventory = s.project.inventory.filter((x) => x.id !== sel.id);
+            } else if (sel.kind === 'opening') {
+              const room = s.project.room;
+              if (!room?.openings.some((x) => x.id === sel.id)) return;
+              record(s);
+              room.openings = room.openings.filter((x) => x.id !== sel.id);
             } else {
               return;
             }
@@ -604,7 +847,7 @@ export const usePlannerStore = create<PlannerState>()(
       // undo history are session state.
       name: 'sf-planner:project',
       version: 1,
-      storage: createJSONStorage(() => localStorage),
+      storage: batchedLocalStorage(),
       partialize: (s) => ({ project: s.project }),
       // Hydrate after mount (PlannerShell) so the prerendered HTML and the
       // first client render agree.

@@ -5,6 +5,7 @@ import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import { usePlannerStore } from '@/store/plannerStore';
 import { boundingBox } from '@/geometry/polygon';
 import { findAsset } from '@/lib/assetCatalog';
+import { openingType } from '@/lib/openingTypes';
 import { OrbitView } from './controls/OrbitView';
 import { Lights } from './scene/Lights';
 import { Floor } from './scene/Floor';
@@ -55,14 +56,18 @@ export function ThreeCanvas() {
     if (!p) return;
     if (s.tool === 'add-pillar') s.addPillarAt(p);
     else if (s.tool === 'add-inventory') s.addInventoryAt(p, { wallSnap: !e.nativeEvent.altKey });
+    else if (s.tool === 'add-opening') s.addOpeningAt(p);
     else s.setSelection(null);
   };
 
-  const armed = tool === 'add-pillar' || tool === 'add-inventory';
+  const pendingOpening = usePlannerStore((s) => s.pendingOpening);
+  const armed = tool === 'add-pillar' || tool === 'add-inventory' || tool === 'add-opening';
   const pendingName = findAsset(pendingAssetRef ?? undefined)?.name;
   const hint =
     tool === 'add-pillar'
       ? 'Click the floor to place a pillar.'
+      : tool === 'add-opening' && pendingOpening
+        ? `Click next to a wall to place the ${openingType(pendingOpening).name.toLowerCase()}.`
       : tool === 'add-inventory'
         ? `Click the floor to place ${pendingName ?? 'an inventory placeholder'}.`
         : 'Drag items to move them · R rotates 90° · Delete removes · drag empty space to orbit, scroll to zoom.';

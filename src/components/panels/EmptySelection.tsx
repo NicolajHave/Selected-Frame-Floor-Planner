@@ -5,6 +5,7 @@ import { useDerivedMetrics } from '@/store/selectors';
 import { formatArea, formatLength } from '@/model/units';
 import { Section } from '../ui/Section';
 import { PartsListSection } from './PartsListSection';
+import { PlanUnderlaySection } from './PlanUnderlaySection';
 
 export function EmptySelection() {
   const project = usePlannerStore((s) => s.project);
@@ -43,6 +44,10 @@ export function EmptySelection() {
 
       <div className="h-px bg-wall-200" />
 
+      <PlanUnderlaySection />
+
+      <div className="h-px bg-wall-200" />
+
       <PartsListSection />
 
       <div className="h-px bg-wall-200" />
@@ -50,7 +55,8 @@ export function EmptySelection() {
       <Section title="Shortcuts">
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[12px] text-ink-700">
           <Key k="⌘Z / ⇧⌘Z">Undo / redo</Key>
-          <Key k="R / ⇧R">Rotate selected 90°</Key>
+          <Key k="R / ⇧R">Rotate 90° · doors: flip hinge / swing</Key>
+          <Key k="123 + Enter">While drawing: exact wall length</Key>
           <Key k="⌘D">Duplicate selected</Key>
           <Key k="Delete">Remove selected</Key>
           <Key k="Alt + drag">Place freely, no wall snap</Key>

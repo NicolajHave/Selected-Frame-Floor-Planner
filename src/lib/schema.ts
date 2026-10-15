@@ -24,5 +24,10 @@ export function migrate(payload: unknown): Project {
   if (!('inventory' in candidate) || !Array.isArray(candidate.inventory)) {
     throw new Error('Invalid project file: missing inventory[].');
   }
-  return candidate as Project;
+  const project = candidate as Project;
+  // Rooms saved before doors and openings existed have no openings array.
+  if (project.room && !Array.isArray(project.room.openings)) {
+    project.room = { ...project.room, openings: [] };
+  }
+  return project;
 }

@@ -4,14 +4,20 @@ import { clsx } from 'clsx';
 import { ASSET_CATALOG, ASSET_CATEGORIES, type AssetEntry } from '@/lib/assetCatalog';
 import { usePlannerStore } from '@/store/plannerStore';
 import { formatLength } from '@/model/units';
+import { OPENING_TYPES, type OpeningType } from '@/lib/openingTypes';
+import type { OpeningKind } from '@/model/objects';
 
 export function AssetLibrary() {
   const pendingAssetRef = usePlannerStore((s) => s.pendingAssetRef);
   const tool = usePlannerStore((s) => s.tool);
   const pickAsset = usePlannerStore((s) => s.pickAsset);
   const setTool = usePlannerStore((s) => s.setTool);
+  const pendingOpening = usePlannerStore((s) => s.pendingOpening);
+  const pickOpening = usePlannerStore((s) => s.pickOpening);
 
-  const armed = tool === 'add-inventory' && pendingAssetRef !== null;
+  const armed =
+    (tool === 'add-inventory' && pendingAssetRef !== null) ||
+    (tool === 'add-opening' && pendingOpening !== null);
 
   return (
     <div className="flex h-full flex-col">
@@ -34,6 +40,22 @@ export function AssetLibrary() {
       </div>
 
       <div className="flex flex-col overflow-y-auto p-3 pb-6">
+        <section>
+          <h4 className="px-1 pb-2 pt-1 text-[10px] font-medium uppercase tracking-widest2 text-ink-500">
+            Doors &amp; windows
+          </h4>
+          <div className="grid grid-cols-2 gap-2">
+            {OPENING_TYPES.map((t) => (
+              <OpeningCard
+                key={t.kind}
+                type={t}
+                active={tool === 'add-opening' && pendingOpening === t.kind}
+                onPick={() => pickOpening(t.kind)}
+              />
+            ))}
+          </div>
+        </section>
+
         {ASSET_CATEGORIES.map((category) => {
           const entries = ASSET_CATALOG.filter((a) => a.category === category);
           if (entries.length === 0) return null;
@@ -133,5 +155,55 @@ function FootprintThumbnail({ asset, active }: { asset: AssetEntry; active: bool
         3D
       </span>
     </div>
+  );
+}
+
+function OpeningCard({ type, active, onPick }: { type: OpeningType; active: boolean; onPick: () => void }) {
+  return (
+    <button
+      onClick={onPick}
+      title={`Place ${type.name}`}
+      className={clsx(
+        'flex flex-col items-center gap-1 rounded-[2px] border bg-wall-50 px-2 py-2 text-center transition-colors',
+        active ? 'border-ink-900 bg-wall-100' : 'border-wall-200 hover:border-ink-500 hover:bg-wall-100',
+      )}
+    >
+      <OpeningIcon kind={type.kind} />
+      <span className="text-[11px] font-medium text-ink-900">{type.name}</span>
+      <span className="font-mono text-[9px] text-ink-500">{formatLength(type.width)}</span>
+    </button>
+  );
+}
+
+/** Plan symbol for each opening kind, on a 48 × 28 box with the wall along the bottom. */
+function OpeningIcon({ kind }: { kind: OpeningKind }) {
+  const wall = 'var(--wall-stroke, #16181A)';
+  return (
+    <svg width={48} height={28} viewBox="0 0 48 28" aria-hidden>
+      <line x1={0} y1={26} x2={10} y2={26} stroke={wall} strokeWidth={2} />
+      <line x1={38} y1={26} x2={48} y2={26} stroke={wall} strokeWidth={2} />
+      {kind === 'door' && (
+        <>
+          <line x1={10} y1={26} x2={10} y2={2} stroke={wall} strokeWidth={1.5} />
+          <path d="M 10 2 A 24 24 0 0 1 34 26" fill="none" stroke={wall} strokeWidth={1} strokeDasharray="2 1.5" />
+        </>
+      )}
+      {kind === 'double-door' && (
+        <>
+          <line x1={10} y1={26} x2={10} y2={12} stroke={wall} strokeWidth={1.5} />
+          <line x1={38} y1={26} x2={38} y2={12} stroke={wall} strokeWidth={1.5} />
+          <path d="M 10 12 A 14 14 0 0 1 24 26 A 14 14 0 0 1 38 12" fill="none" stroke={wall} strokeWidth={1} strokeDasharray="2 1.5" />
+        </>
+      )}
+      {kind === 'opening' && (
+        <line x1={10} y1={26} x2={38} y2={26} stroke={wall} strokeWidth={1} strokeDasharray="3 2" />
+      )}
+      {kind === 'window' && (
+        <>
+          <line x1={10} y1={23.5} x2={38} y2={23.5} stroke={wall} strokeWidth={1} />
+          <line x1={10} y1={26} x2={38} y2={26} stroke={wall} strokeWidth={1} />
+        </>
+      )}
+    </svg>
   );
 }

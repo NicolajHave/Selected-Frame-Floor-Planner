@@ -1,5 +1,6 @@
 import type { Mm } from './units';
 import type { RoomPolygon, Pillar, InventoryItem } from './objects';
+import type { Point } from './geometry';
 
 /**
  * View state lives in the store but is **never serialised** in the
@@ -26,6 +27,22 @@ export interface DerivedMetrics {
   area: number;            // mm²
 }
 
+/**
+ * A scanned or exported floor plan (PDF page or image) drawn under the
+ * room so it can be traced. Stored inline as a data URL so saved files
+ * and autosave are self-contained.
+ */
+export interface PlanUnderlay {
+  src: string;             // data URL, JPEG or PNG
+  fileName: string;
+  position: Point;         // top-left corner, world mm
+  width: Mm;               // world width; height = width * aspect
+  aspect: number;          // image height / image width
+  opacity: number;         // 0..1
+  locked: boolean;         // locked underlays ignore the pointer
+  calibrated: boolean;     // scale set from a known distance
+}
+
 export interface Project {
   schemaVersion: 1;
   id: string;
@@ -36,6 +53,7 @@ export interface Project {
   room: RoomPolygon | null;
   pillars: Pillar[];
   inventory: InventoryItem[];
+  underlay?: PlanUnderlay | null;
 }
 
 /** Shape produced by the export action. Includes derived metrics so

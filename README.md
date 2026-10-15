@@ -1,10 +1,10 @@
 # Selected Frame — Shop Planner
 
-Internal MVP planning tool for shop layouts. **2D-first, 3D-ready.**
+Internal tool for planning Selected Frame shop layouts in 2D and 3D.
 
-Draw a shop area as a polygon, place pillars and inventory placeholders,
-edit everything, and export structured plan data as JSON. The data model
-is built so a 3D view can be added later without schema changes.
+Import the store's floor plan, trace the room with exact wall lengths,
+add doors and windows, place fixtures from the SIS catalog, check the
+result in 3D and export a parts list.
 
 > Read [`ARCHITECTURE.md`](./ARCHITECTURE.md) before changing the data
 > model or adding a new render adapter.
@@ -23,102 +23,84 @@ Other scripts:
 npm run build      # production build
 npm run start      # serve the production build
 npm run typecheck  # tsc --noEmit
-npm run lint       # next lint
+npm test           # unit + end-to-end tests (run `npm run build` first)
+npm run test:unit  # pure TypeScript tests, no browser
+npm run test:e2e   # drives the production build in headless Chromium
 ```
 
-## Deploy to Vercel
+The first e2e run needs a browser: `npx playwright install chromium`.
+CI (`.github/workflows/ci.yml`) runs typecheck, unit tests, build and
+e2e tests on every pull request and push to `main`.
 
-The repo is a stock Next.js 14 app. From the project root:
+## Deploy
 
-1. Push to GitHub.
-2. Import the repo in Vercel — accept the defaults; no env vars needed.
-3. Deploy.
+Vercel deploys `main` to production and every pull request to a preview
+URL. No environment variables are needed.
 
 ## How it works
 
-- **Top bar** — brand slot, project name, file actions (New/Save/Load/Export),
-  tool buttons (Select / Draw area / + Pillar / + Inventory),
-  view toggles (Grid / Snap / Fit to plan), and a 2D / 3D toggle stub.
-- **Canvas** — SVG editor with pan, cursor-anchored zoom, two-tier grid,
-  and live measurements (wall lengths, corner angles, total area).
-- **Right panel** — selection-driven property forms for the room,
-  individual corners, pillars, and inventory items.
+1. **Import the plan** (right panel, nothing selected): a PDF (first
+   page) or image of the store. Click two ends of a known distance — a
+   dimension line or a wall — and type its real length to set the scale.
+   Use **Move** to drag the plan, the slider to fade it.
+2. **Draw the room**: click **Draw area**, click the first corner, then
+   click further corners — or type a length in mm and press `Enter` to
+   place the next wall exactly, in the cursor's direction (snapped to
+   45°). Close by clicking the first corner or pressing `Esc`.
+3. **Fix the walls**: click the room to number its walls and edit each
+   length in the panel. The room keeps its shape — the opposite parallel
+   wall absorbs the change.
+4. **Doors & windows**: pick one at the top of the library and click a
+   wall. Drag it along the wall or onto another; set width, height,
+   sill, hinge and swing in the panel.
+5. **Fixtures**: pick a catalog item and click the floor. Wall units and
+   logos snap to the nearest wall (`Alt` places freely); logos hang at
+   2.4 m and need walls of at least 2.6 m.
+6. **3D View** shows the room with openings and the catalog models;
+   objects can be selected, dragged and placed there too.
+7. **Parts list** (right panel, nothing selected) totals units, weight
+   and hanger capacity, and exports a CSV for Excel.
 
-### Key shortcuts
+The plan autosaves in the browser. **Save** / **Load** round-trip a file;
+**Export** writes the plan plus derived metrics for other tools.
 
-| Action                  | Shortcut          |
-| ----------------------- | ----------------- |
-| Cancel tool / clear sel | `Esc`             |
-| Finish drawing room     | `Esc` (≥ 3 corners) |
-| Delete selected         | `Delete` / `Backspace` |
-| Duplicate selected      | `Cmd/Ctrl + D`    |
-| Save project            | `Cmd/Ctrl + S`    |
+### Shortcuts
 
-### Drawing a room
-
-1. Click **Draw area** in the top bar.
-2. Click on the canvas to drop corners.
-3. Click the first corner (or press `Esc`) once you have at least three.
-
-After closing, hover an edge to insert a corner mid-edge, drag any
-corner handle to move it, or click the room body to edit wall thickness
-/ height in the right panel.
+| Action                              | Shortcut                 |
+| ----------------------------------- | ------------------------ |
+| Undo / redo                         | `Cmd/Ctrl + Z` / `Shift + Cmd/Ctrl + Z` |
+| Rotate selected ±90°                | `R` / `Shift + R`        |
+| Door: flip hinge / swing            | `R` / `Shift + R`        |
+| Exact wall length while drawing     | type mm, then `Enter`    |
+| Place without wall snapping         | hold `Alt`               |
+| Duplicate selected                  | `Cmd/Ctrl + D`           |
+| Delete selected                     | `Delete` / `Backspace`   |
+| Cancel tool / clear selection       | `Esc`                    |
+| Finish drawing room                 | `Esc` (≥ 3 corners)      |
+| Save project file                   | `Cmd/Ctrl + S`           |
 
 ## File formats
 
-Two distinct outputs:
+- **Save** (`*.sf.json`) — the raw `Project`, including the plan
+  underlay as an embedded image, for round-tripping via **Load**.
+- **Export** (`*.export.json`) — `ExportPayload`: the `Project` plus
+  derived metrics (wall lengths, corner angles, area) and a timestamp.
+- **Parts list** (`*-parts-list.csv`) — semicolon-separated with decimal
+  commas, for Excel with Danish regional settings.
 
-- **Save** (`*.sf.json`) — raw `Project` for round-tripping into the
-  app via **Load**.
-- **Export** (`*.export.json`) — `ExportPayload` containing the
-  `Project` plus precomputed `derived` metrics (wall lengths, corner
-  angles, area) and an `exportedAt` timestamp. This is the format
-  downstream consumers (3D viewer, quote engine) should read.
+Projects carry `schemaVersion`; `src/lib/schema.ts` validates and
+upgrades older files.
 
-Both are versioned with `schemaVersion` (`Project.schemaVersion`).
-Migrations live in `src/lib/schema.ts`.
+## Catalog and 3D models
 
-## Folder structure
-
-```
-app/                        # Next.js App Router shell
-src/
-├── model/                  # Pure types (mm, geometry, objects, project)
-├── geometry/               # Pure functions (area, walls, corners, snap…)
-├── store/                  # Zustand store + memoized selectors
-├── render/
-│   ├── svg/                # MVP 2D renderer (Canvas, Room, Pillar, …)
-│   └── three/              # Stub for the future 3D adapter (README only)
-├── components/
-│   ├── editor/             # PlannerShell, ToolOverlay
-│   ├── topbar/             # TopBar
-│   ├── panels/             # RightPanel + property forms
-│   └── ui/                 # Button, NumberField, TextField, Section
-├── hooks/                  # useKeyboard, useFileIO, usePanZoom
-└── lib/                    # id, io, schema
-```
+The SIS catalog lives in `src/lib/assetCatalog.ts` (dimensions, item
+numbers, materials, weights, HS codes, hanger counts, mounting). The
+models in `public/assets/3d/*.glb` are generated from those dimensions
+by `node scripts/generate-assets.mjs`; replace any file with a real CAD
+export to upgrade it.
 
 ## Design language
 
-The palette and typography aim for "calm, architectural, precise":
-
-- **Wall** — soft warm off-white, NCS S 1005-G30Y inspired.
-- **Sage** — muted green accent, NCS S 2010-G20Y inspired.
-- **Ink** — charcoal for lines, text, handles.
-- Display: **Fraunces** (italic optical-size axis). Body: **Inter**.
-
-## Roadmap (post-MVP)
-
-- 3D view via `react-three-fiber`, behind the existing 2D / 3D toggle.
-  All extrusion data (`wallThickness`, `wallHeight`, object `height`)
-  is already on the model.
-- Replace inventory placeholders with SVG / GLTF assets via `assetRef`.
-- Snapping: edge / midpoint / object-edge alignment.
-- Inventory library + categories.
-- Backend persistence and multi-user.
-- Quote / PDF export pipeline reading `ExportPayload`.
-
-## Non-goals (MVP)
-
-3D editor, quotes, PDFs, auth, backend, full catalog, advanced snapping.
-Each is unblocked by the architecture in `ARCHITECTURE.md`.
+Calm, architectural, precise: warm off-white walls (NCS S 1005-G30Y
+inspired), a muted sage accent (NCS S 2010-G20Y inspired) and charcoal
+ink for lines and text.

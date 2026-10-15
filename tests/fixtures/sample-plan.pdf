@@ -1,0 +1,39 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 462 >>
+stream
+1 w 0 0 0 RG
+60 80 m 343.46456692913387 80 l 343.46456692913387 278.4251968503937 l 173.38582677165357 278.4251968503937 l S
+198.8976377952756 278.4251968503937 m 60 278.4251968503937 l 60 80 l S
+4 w 60 80 m 343.46456692913387 80 l S
+0.5 w 60 55 m 343.46456692913387 55 l S
+60 50 m 60 60 l S 343.46456692913387 50 m 343.46456692913387 60 l S
+BT /F1 10 Tf 189.73228346456693 40 Td (10000) Tj ET
+BT /F1 14 Tf 60 308.4251968503937 Td (Sample store plan 1:100) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000754 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+824
+%%EOF
