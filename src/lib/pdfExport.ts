@@ -10,6 +10,7 @@ import { openingSpan, wallFrame } from '@/geometry/openings';
 import { polygonArea } from '@/geometry/polygon';
 import { wallLengths } from '@/geometry/walls';
 import { findAsset } from './assetCatalog';
+import { rackContents } from './racks';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { buildPartsList, type PartsList } from './partsList';
 import { DEFAULT_MIN_AISLE, innerOutline, layoutIssues } from './layout';
@@ -70,8 +71,11 @@ export async function buildPlanPdf(project: Project, opts: PdfOptions): Promise<
   const info: DocInfo = { name: project.name || 'Untitled plan', date: today(), liveUrl: opts.liveUrl ?? null };
 
   const parts = buildPartsList(project.inventory);
-  const numberOf = new Map<string, number>();
-  parts.rows.forEach((r, i) => r.itemIds.forEach((id) => numberOf.set(id, i + 1)));
+  // Fixtures are numbered by parts-list row; wall racks are R1, R2, …
+  const numberOf = new Map<string, string>();
+  const racks = project.inventory.filter((it) => it.modules?.length);
+  racks.forEach((it, k) => numberOf.set(it.id, `R${k + 1}`));
+  parts.rows.forEach((r, i) => r.itemIds.forEach((id) => numberOf.has(id) || numberOf.set(id, String(i + 1))));
 
   // Pictures first: the slow part, and it can fail without WebGL.
   const extraNotes: string[] = [];
@@ -141,7 +145,7 @@ function drawPlanPage(
   info: DocInfo,
   project: Project,
   parts: PartsList,
-  numberOf: Map<string, number>,
+  numberOf: Map<string, string>,
   opts: PdfOptions,
   GState: GStateCtor,
 ) {
@@ -237,7 +241,7 @@ function drawPlanPage(
   // Numbers last so they sit on top of everything.
   for (const it of project.inventory) {
     const n = numberOf.get(it.id);
-    if (n !== undefined) badge(doc, X(it.position.x), Y(it.position.y), String(n));
+    if (n !== undefined) badge(doc, X(it.position.x), Y(it.position.y), n);
   }
 
   drawScaleBar(doc, scale, area.x, PAGE_H - MARGIN - 4);
@@ -460,6 +464,15 @@ function drawColumn(doc: JsPdf, project: Project, parts: PartsList, scale: numbe
 
   const titleTop = PAGE_H - MARGIN - 62;
   const rowH = 6.2;
+  const racks = project.inventory.filter((it) => it.modules?.length);
+  racks.forEach((it, k) => {
+    badge(doc, x + 2.4, y - 1, `R${k + 1}`);
+    font(doc, 8);
+    doc.text(fit(doc, it.name, COLUMN - 8), x + 7, y - 1.6);
+    font(doc, 6, 'normal', MUTED);
+    doc.text(fit(doc, rackContents(it.modules!), COLUMN - 8), x + 7, y + 1.2);
+    y += rowH;
+  });
   const fits = Math.max(0, Math.floor((titleTop - y - 8) / rowH));
   const shown = parts.rows.length > fits ? fits - 1 : parts.rows.length;
   parts.rows.slice(0, Math.max(0, shown)).forEach((r, i) => {

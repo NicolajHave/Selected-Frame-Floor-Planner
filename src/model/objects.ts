@@ -71,7 +71,13 @@ export interface InventoryItem extends PlacedObjectBase {
   type: 'inventory';
   name: string;          // user label
   category?: string;     // future taxonomy ('frame' | 'shelf' | …)
-  assetRef?: string;     // future: swap placeholder for SVG / GLTF
+  assetRef?: string;     // catalog entry (lib/assetCatalog)
+  /**
+   * A wall rack: catalog wall units standing side by side, left to right as
+   * seen from the front. Size is their combined footprint; there is no
+   * `assetRef`. See lib/racks.ts.
+   */
+  modules?: string[];
 }
 
 export type PlacedObject = Pillar | InventoryItem;

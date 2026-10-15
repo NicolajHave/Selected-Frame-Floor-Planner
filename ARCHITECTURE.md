@@ -118,9 +118,15 @@ interface RoomPolygon {
   id: string;
   corners: Corner[];               // ordered, closed implicitly
   wallThickness: Mm;               // for 3D extrusion
-  wallHeight: Mm;                  // for 3D extrusion
+  wallHeight: Mm;                  // default height of every wall
   closed: boolean;
   openings: Opening[];             // doors, passages, windows
+  walls?: Record<string, WallStyle>; // per wall, keyed by its start corner id
+}
+
+interface WallStyle {
+  height?: Mm;                     // this wall's own height
+  transparent?: boolean;           // glass / open side: see-through in 3D, dashed in 2D
 }
 
 interface Opening {
@@ -152,10 +158,18 @@ interface InventoryItem {
   name: string;                    // user label
   category?: string;
   assetRef?: string;               // SIS catalog id → model, mounting, weight
+  modules?: string[];              // wall rack: catalog wall units, left → right
   position: Point;
   size: Size3D;
   rotation: Radians;
 }
+
+Openings are kept between the inside faces of the corners and clear of
+each other (`freeStretches` / `fitOpening` in `geometry/openings.ts`);
+placing, dragging, resizing and typing a width all go through them. A
+wall rack is one inventory item whose size is its units' combined
+footprint (`lib/racks.ts`): it snaps to walls like a wall unit, renders
+each unit's model in 3D, and the parts list counts its units.
 
 interface PlanUnderlay {           // imported PDF page / image to trace
   src: string;                     // JPEG data URL, so files are self-contained

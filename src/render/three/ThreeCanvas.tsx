@@ -59,7 +59,8 @@ export function ThreeCanvas() {
 
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
   const armed = tool === 'add-pillar' || tool === 'add-inventory' || tool === 'add-opening';
-  const pendingName = findAsset(pendingAssetRef ?? undefined)?.name;
+  const pendingRack = usePlannerStore((s) => s.pendingRack);
+  const pendingName = pendingRack?.name ?? findAsset(pendingAssetRef ?? undefined)?.name;
   const hint =
     tool === 'add-pillar'
       ? 'Click the floor to place a pillar.'

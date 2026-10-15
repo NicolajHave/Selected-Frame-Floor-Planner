@@ -39,15 +39,21 @@ export interface PartsList {
 export function buildPartsList(inventory: InventoryItem[]): PartsList {
   const byKey = new Map<string, PartsListRow>();
 
-  for (const item of inventory) {
-    const asset = findAsset(item.assetRef);
+  // A wall rack counts as each of its units.
+  const units = inventory.flatMap((item) =>
+    item.modules?.length
+      ? item.modules.map((ref) => ({ item, asset: findAsset(ref) })).filter((u) => u.asset)
+      : [{ item, asset: findAsset(item.assetRef) }],
+  );
+
+  for (const { item, asset } of units) {
     const key = asset
       ? `asset:${asset.id}`
       : `custom:${item.name}:${item.size.width}x${item.size.depth}x${item.size.height}`;
     const existing = byKey.get(key);
     if (existing) {
       existing.quantity += 1;
-      existing.itemIds.push(item.id);
+      if (!existing.itemIds.includes(item.id)) existing.itemIds.push(item.id);
       continue;
     }
     byKey.set(

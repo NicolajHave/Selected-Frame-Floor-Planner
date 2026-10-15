@@ -11,6 +11,7 @@ import { MM } from '../units';
 import { useFloorDrag } from './useFloorDrag';
 import { SelectionBox } from './SelectionBox';
 import { useSceneMode } from './mode';
+import { rackSlots } from '@/lib/racks';
 
 export function InventoryMeshes({ items }: { items: InventoryItem[] }) {
   const selectedId = usePlannerStore((s) =>
@@ -39,7 +40,9 @@ function InventoryMesh({ item, selected }: { item: InventoryItem; selected: bool
 
   return (
     <group position={position} rotation={rotation} {...(interactive ? handlers : {})}>
-      {asset?.glbUrl ? (
+      {item.modules?.length ? (
+        <RackModels modules={item.modules} interactive={interactive} />
+      ) : asset?.glbUrl ? (
         interactive ? (
           <Suspense fallback={<PlaceholderBox item={item} />}>
             <GlbModel url={asset.glbUrl} />
@@ -55,6 +58,36 @@ function InventoryMesh({ item, selected }: { item: InventoryItem; selected: bool
         <SelectionBox w={item.size.width * MM} h={item.size.height * MM} d={item.size.depth * MM} />
       )}
     </group>
+  );
+}
+
+/** The units of a wall rack side by side, their backs lined up. */
+function RackModels({ modules, interactive }: { modules: string[]; interactive: boolean }) {
+  return (
+    <>
+      {rackSlots(modules).map((slot, i) => {
+        const a = slot.asset;
+        const pos: [number, number, number] = [slot.x * MM, 0, slot.y * MM];
+        const box = (
+          <mesh position={[pos[0], (a.size.height * MM) / 2, pos[2]]} castShadow receiveShadow>
+            <boxGeometry args={[a.size.width * MM, a.size.height * MM, a.size.depth * MM]} />
+            <meshStandardMaterial color="#AEB59F" roughness={0.8} metalness={0} />
+          </mesh>
+        );
+        if (!a.glbUrl) return <group key={i}>{box}</group>;
+        return (
+          <group key={i} position={pos}>
+            {interactive ? (
+              <Suspense fallback={<group position={[-pos[0], 0, -pos[2]]}>{box}</group>}>
+                <GlbModel url={a.glbUrl} />
+              </Suspense>
+            ) : (
+              <GlbModel url={a.glbUrl} />
+            )}
+          </group>
+        );
+      })}
+    </>
   );
 }
 

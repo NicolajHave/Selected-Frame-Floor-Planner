@@ -14,9 +14,11 @@ export function AssetLibrary() {
   const setTool = usePlannerStore((s) => s.setTool);
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
   const pickOpening = usePlannerStore((s) => s.pickOpening);
+  const openRackBuilder = usePlannerStore((s) => s.openRackBuilder);
+  const pendingRack = usePlannerStore((s) => s.pendingRack);
 
   const armed =
-    (tool === 'add-inventory' && pendingAssetRef !== null) ||
+    (tool === 'add-inventory' && (pendingAssetRef !== null || pendingRack !== null)) ||
     (tool === 'add-opening' && pendingOpening !== null);
 
   return (
@@ -40,6 +42,21 @@ export function AssetLibrary() {
       </div>
 
       <div className="flex flex-col overflow-y-auto p-3 pb-6">
+        <section className="pb-3">
+          <h4 className="px-1 pb-2 pt-1 text-[10px] font-medium uppercase tracking-widest2 text-ink-500">
+            Wall racks
+          </h4>
+          <button
+            onClick={() => openRackBuilder()}
+            className="flex w-full flex-col gap-0.5 rounded-[2px] border border-wall-200 bg-wall-50 p-2 text-left hover:border-ink-500 hover:bg-wall-100"
+          >
+            <span className="text-[12px] font-medium text-ink-900">Build a wall rack…</span>
+            <span className="text-[11px] leading-snug text-ink-500">
+              Put wall units together side by side, then place them on the plan as one piece.
+            </span>
+          </button>
+        </section>
+
         <section>
           <h4 className="px-1 pb-2 pt-1 text-[10px] font-medium uppercase tracking-widest2 text-ink-500">
             Doors &amp; windows

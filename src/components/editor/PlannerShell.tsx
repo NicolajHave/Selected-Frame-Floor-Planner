@@ -17,6 +17,7 @@ import { cloud } from '@/lib/cloud/api';
 import { useCloudUser } from '@/lib/cloud/useCloudUser';
 import { useCloudSync } from '@/lib/cloud/sync';
 import { CloudBanners } from '../cloud/CloudBanners';
+import { RackBuilder } from '../racks/RackBuilder';
 
 // WebGL only exists in the browser; keep three out of the server bundle.
 const ThreeCanvas = dynamic(
@@ -34,6 +35,7 @@ export function PlannerShell() {
 
   const { user, ready: authReady } = useCloudUser();
   const readOnly = usePlannerStore((s) => s.readOnly);
+  const rackBuilderOpen = usePlannerStore((s) => !!s.rackBuilder);
 
   // A ?share=… link shows that plan read-only and leaves this browser's own
   // autosaved plan untouched. Otherwise, restore the autosaved plan.
@@ -84,6 +86,7 @@ export function PlannerShell() {
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-wall-50 text-ink-900">
       <TopBar getViewportSize={getViewportSize} user={user} authReady={authReady} />
+      {rackBuilderOpen && !readOnly && <RackBuilder />}
 
       <div className="flex min-h-0 flex-1">
         {/* Asset library */}

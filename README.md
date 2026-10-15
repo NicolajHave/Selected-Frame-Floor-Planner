@@ -50,24 +50,34 @@ URL. No environment variables are needed.
    45°). Close by clicking the first corner or pressing `Esc`.
 3. **Fix the walls**: click the room to number its walls and edit each
    length in the panel. The room keeps its shape — the opposite parallel
-   wall absorbs the change.
-4. **Doors & windows**: pick one at the top of the library and click a
-   wall. Drag it along the wall or onto another; set width, height,
-   sill, hinge and swing in the panel.
-5. **Fixtures**: pick a catalog item and click the floor. Wall units and
+   wall absorbs the change. **Click a wall** to give it its own height,
+   make it **transparent** (glass or an open side: dashed on the plan,
+   see-through in 3D) or add a door or window to it. Double-click a wall
+   to add a corner there.
+4. **Doors & windows**: pick one in the library and click a wall — a
+   preview shows where it goes. Openings stay clear of corners and of
+   each other. Drag one along its wall (or onto another), drag its
+   square ends to change the width, and set height, sill (windows),
+   hinge and swing in the panel.
+5. **Wall racks**: **Build a wall rack…** at the top of the library puts
+   wall units together side by side with a 3D preview. **Place on plan**
+   and click next to a wall: the rack snaps to it as one piece. Select it
+   and **Edit rack…** to change its units later; the parts list and PDF
+   count each unit.
+6. **Fixtures**: pick a catalog item and click the floor. Wall units and
    logos snap to the nearest wall (`Alt` places freely); logos hang at
    2.4 m and need walls of at least 2.6 m.
-6. **Distances and layout check**: the selected object shows its
+7. **Distances and layout check**: the selected object shows its
    distance to the nearest wall or object in each direction. The panel
    (nothing selected) lists overlaps, objects in walls, blocked doors and
    aisles narrower than the minimum (900 mm by default, editable); they
    are marked on the plan and counted in the footer.
-7. **3D View** shows the room with openings and the catalog models;
+8. **3D View** shows the room with openings and the catalog models;
    objects can be selected, dragged and placed there too. Walls facing
    the camera are cut away so you can always see into the shop.
-8. **Parts list** (right panel, nothing selected) totals units, weight
+9. **Parts list** (right panel, nothing selected) totals units, weight
    and hanger capacity, and exports a CSV for Excel.
-9. **PDF** (top bar) exports an A3 presentation: cover, what the concept
+10. **PDF** (top bar) exports an A3 presentation: cover, what the concept
    asks of the site plus your notes for this draft, the shop in 3D from
    four sides and as an isometric, the plan to scale (numbered fixtures,
    wall dimensions, title block), an elevation of every wall with a
@@ -77,7 +87,7 @@ URL. No environment variables are needed.
    (the same one on every export) that opens the latest version straight
    in 3D, so a partner or sales rep can walk around the shop while
    reading the PDF.
-10. **Cloud plans** (sign in with the same @bestseller.com account as the
+11. **Cloud plans** (sign in with the same @bestseller.com account as the
     other Selected tools): **Cloud → Save to cloud** keeps the plan in the
     shared database and saves every change automatically. **Share**
     invites colleagues as editors or viewers, or creates a view-only link

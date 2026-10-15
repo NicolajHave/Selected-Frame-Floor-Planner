@@ -40,6 +40,7 @@ import {
 } from '@/geometry/openings';
 import { openingType } from '@/lib/openingTypes';
 import { findAsset } from '@/lib/assetCatalog';
+import { RACK_CATEGORY, itemMount, rackSize } from '@/lib/racks';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
 import type { CloudProject, CloudRole, SaveResult, SharedProject } from '@/lib/cloud/api';
 
@@ -55,6 +56,11 @@ export type Tool =
 export interface Calibration {
   a: Point | null;
   b: Point | null;
+}
+
+export interface PendingRack {
+  name: string;
+  modules: string[];
 }
 
 export interface Notice {
@@ -100,6 +106,10 @@ interface PlannerState {
    * Cleared after one placement or when the user switches tools.
    */
   pendingAssetRef: string | null;
+  /** Wall rack the next click places (from the rack builder). */
+  pendingRack: PendingRack | null;
+  /** The rack builder dialog: a new rack, or editing a placed one. */
+  rackBuilder: { editId: string | null } | null;
   /** Kind of door/opening/window the next click on a wall places. */
   pendingOpening: OpeningKind | null;
   /** In-progress underlay scale calibration; null outside the calibrate tool. */
@@ -201,6 +211,14 @@ interface PlannerState {
   rotateSelected: (delta: number) => void;
   duplicateSelected: () => void;
   deleteSelected: () => void;
+
+  // wall racks
+  openRackBuilder: (editId?: string | null) => void;
+  closeRackBuilder: () => void;
+  /** Arm placement of a new rack; the next click puts it on the nearest wall. */
+  pickRack: (rack: PendingRack) => void;
+  /** Change a placed rack's units and name; its back stays on the wall. */
+  updateRack: (id: string, rack: PendingRack) => void;
 
   // project lifecycle
   newProject: () => void;
@@ -369,6 +387,8 @@ export const usePlannerStore = create<PlannerState>()(
         tool: 'select',
         selection: null,
         pendingAssetRef: null,
+        pendingRack: null,
+        rackBuilder: null,
         pendingOpening: null,
         notice: null,
         cloud: null,
@@ -389,7 +409,10 @@ export const usePlannerStore = create<PlannerState>()(
             // Tool change clears any in-progress selection that no longer applies.
             if (t !== 'select') s.selection = null;
             // Switching away from add-inventory abandons a pending asset pick.
-            if (t !== 'add-inventory') s.pendingAssetRef = null;
+            if (t !== 'add-inventory') {
+              s.pendingAssetRef = null;
+              s.pendingRack = null;
+            }
             if (t !== 'add-opening') s.pendingOpening = null;
             if (t !== 'calibrate') s.calibration = null;
             if (t !== 'draw-room') s.drawLength = '';
@@ -398,6 +421,7 @@ export const usePlannerStore = create<PlannerState>()(
         pickAsset: (assetId) =>
           set((s) => {
             s.pendingAssetRef = assetId;
+            s.pendingRack = null;
             s.tool = 'add-inventory';
             s.selection = null;
           }),
@@ -868,7 +892,19 @@ export const usePlannerStore = create<PlannerState>()(
             const snapped = maybeSnap(s.view, p);
             const id = newId('inv');
             const asset = findAsset(s.pendingAssetRef ?? undefined);
-            const item: InventoryItem = asset
+            const rack = s.pendingRack;
+            const item: InventoryItem = rack
+              ? {
+                  id,
+                  type: 'inventory',
+                  name: rack.name,
+                  category: RACK_CATEGORY,
+                  modules: [...rack.modules],
+                  position: { x: snapped.x as Mm, y: snapped.y as Mm },
+                  size: rackSize(rack.modules),
+                  rotation: rad(0),
+                }
+              : asset
               ? {
                   id,
                   type: 'inventory',
@@ -887,7 +923,7 @@ export const usePlannerStore = create<PlannerState>()(
                   size: { width: mm(1200), depth: mm(600), height: mm(900) },
                   rotation: rad(0),
                 };
-            if (asset?.mount === 'wall' && opts?.wallSnap !== false && s.project.room) {
+            if (itemMount(item) === 'wall' && opts?.wallSnap !== false && s.project.room) {
               // Snap from the raw click so grid rounding can't push it out of reach.
               const hit = snapToWall(s.project.room, p, item.size.depth);
               if (hit) {
@@ -902,6 +938,7 @@ export const usePlannerStore = create<PlannerState>()(
             s.selection = { kind: 'inventory', id };
             s.tool = 'select';
             s.pendingAssetRef = null;
+            s.pendingRack = null;
             touch(s.project);
           }),
 
@@ -934,9 +971,8 @@ export const usePlannerStore = create<PlannerState>()(
             const it = s.project.inventory.find((x) => x.id === id);
             if (!it) return;
             record(s);
-            const asset = findAsset(it.assetRef);
             const hit =
-              asset?.mount === 'wall' && opts?.wallSnap !== false && s.project.room
+              itemMount(it) === 'wall' && opts?.wallSnap !== false && s.project.room
                 ? snapToWall(s.project.room, p, it.size.depth)
                 : null;
             if (hit) {
@@ -1000,6 +1036,7 @@ export const usePlannerStore = create<PlannerState>()(
                 id,
                 position: { x: (orig.position.x + offset) as Mm, y: (orig.position.y + offset) as Mm },
                 size: { ...orig.size },
+                ...(orig.modules ? { modules: [...orig.modules] } : {}),
               });
               s.selection = { kind: 'inventory', id };
             } else {
@@ -1036,6 +1073,47 @@ export const usePlannerStore = create<PlannerState>()(
             touch(s.project);
           });
         },
+
+        openRackBuilder: (editId = null) =>
+          setState((s) => {
+            s.rackBuilder = { editId };
+          }),
+
+        closeRackBuilder: () =>
+          setState((s) => {
+            s.rackBuilder = null;
+          }),
+
+        pickRack: (rack) =>
+          set((s) => {
+            if (rack.modules.length === 0) return;
+            s.pendingRack = { name: rack.name, modules: [...rack.modules] };
+            s.pendingAssetRef = null;
+            s.pendingOpening = null;
+            s.tool = 'add-inventory';
+            s.selection = null;
+            s.rackBuilder = null;
+          }),
+
+        updateRack: (id, rack) =>
+          set((s) => {
+            const it = s.project.inventory.find((x) => x.id === id);
+            if (!it || rack.modules.length === 0) return;
+            record(s);
+            const size = rackSize(rack.modules);
+            // Keep the back edge where it was (e.g. against its wall): move
+            // the centre forward by half the change in depth.
+            const grow = (size.depth - it.size.depth) / 2;
+            it.position = {
+              x: (it.position.x - Math.sin(it.rotation) * grow) as Mm,
+              y: (it.position.y + Math.cos(it.rotation) * grow) as Mm,
+            };
+            it.name = rack.name;
+            it.modules = [...rack.modules];
+            it.size = size;
+            s.rackBuilder = null;
+            touch(s.project);
+          }),
 
         // New and Load start a separate plan: they work even while read-only
         // and detach from any cloud project or shared view.

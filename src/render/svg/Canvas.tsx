@@ -310,6 +310,9 @@ export function Canvas() {
 
   // ---- shape handlers ----
   const onPointerDownCorner = (cornerId: string, e: React.PointerEvent<SVGElement>) => {
+    // With something to place armed, a click on a corner places it there
+    // (the canvas handles it) rather than grabbing the corner.
+    if (tool === 'add-opening' || tool === 'add-inventory' || tool === 'add-pillar') return;
     e.stopPropagation();
     // Click first corner while drawing → close polygon.
     if (tool === 'draw-room' && room && !room.closed && room.corners[0]?.id === cornerId && room.corners.length >= 3) {
