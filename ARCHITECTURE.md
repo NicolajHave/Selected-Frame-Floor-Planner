@@ -194,6 +194,7 @@ interface Project {
   pillars: Pillar[];
   inventory: InventoryItem[];
   underlay?: PlanUnderlay | null;
+  minAisle?: Mm;                   // layout check; 900 when absent
   // view is a UI concern — see ViewState — and is excluded from export.
 }
 ```
@@ -295,6 +296,13 @@ selected, `R` / `Shift+R` rotates ±90°, `Cmd/Ctrl+Z` undoes,
 `Shift+Cmd/Ctrl+Z` or `Ctrl+Y` redoes, `Cmd/Ctrl+D` duplicates,
 `Cmd/Ctrl+S` saves JSON.
 
+**Layout check.** `lib/layout.ts` derives everything from the project:
+floor obstacles (pillars and inventory taller than 300 mm, not wall-hung),
+the room's inner outline (walls' inside faces), door clearance zones, and
+from those the issues (overlap, wall, door, aisle) and the distance guides
+for the selected object. Nothing is stored; `useLayoutIssues()` memoises
+on the project. The PDF export reuses the same functions.
+
 ---
 
 ## 5. 2D → 3D strategy
@@ -361,4 +369,6 @@ Each is unblocked by the architecture above; none are built.
 Shipped since the original MVP scope: the full SIS catalog with generated
 3D models, an interactive 3D view, undo/redo, autosave, wall snapping, a
 parts-list export (`lib/partsList.ts`), plan underlays with scale
-calibration, exact wall lengths, and doors / passages / windows.
+calibration, exact wall lengths, doors / passages / windows, a layout
+check with distance guides (`lib/layout.ts`), and PDF export
+(`lib/pdfExport.ts`).
