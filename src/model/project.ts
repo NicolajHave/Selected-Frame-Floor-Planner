@@ -57,6 +57,8 @@ export interface Project {
   underlay?: PlanUnderlay | null;
   /** Narrowest acceptable aisle, mm. Defaults to 900 when absent. */
   minAisle?: Mm;
+  /** Free text for the PDF's "Notes for this draft". */
+  notes?: string;
 }
 
 /** Shape produced by the export action. Includes derived metrics so

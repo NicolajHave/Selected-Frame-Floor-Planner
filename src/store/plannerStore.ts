@@ -144,6 +144,7 @@ interface PlannerState {
   setViewMode: (m: ViewMode) => void;
   toggleLayoutCheck: () => void;
   setMinAisle: (mmValue: number) => void;
+  setNotes: (notes: string) => void;
 
   // history
   undo: () => void;
@@ -528,6 +529,14 @@ export const usePlannerStore = create<PlannerState>()(
             if (!(mmValue > 0) || s.project.minAisle === mmValue) return;
             record(s);
             s.project.minAisle = mm(mmValue);
+            touch(s.project);
+          }),
+
+        setNotes: (notes) =>
+          set((s) => {
+            if ((s.project.notes ?? '') === notes) return;
+            record(s);
+            s.project.notes = notes;
             touch(s.project);
           }),
 

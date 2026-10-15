@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { drawRoom, openFresh, place, saved, trackErrors } from './helpers';
 import { FakeCloud, signIn } from './fakeCloud';
+import { exportPdf, pdfText } from './pdf';
 
 const ME = 'planner@bestseller.com';
 const COLLEAGUE = 'colleague@bestseller.com';
@@ -165,4 +166,37 @@ test('a conflicting save offers to load the other version', async ({ page }) => 
   const p = await saved(page);
   expect(p.name).toBe('Their version');
   expect(p.inventory).toHaveLength(0);
+});
+
+test('the PDF carries the shop’s own live 3D link, the same on every export', async ({ page, context }) => {
+  await drawRoom(page);
+  await signIn(page, ME);
+  const cloudDialog = await openCloudDialog(page);
+  await cloudDialog.getByRole('button', { name: 'Save to cloud' }).click();
+  await expect(cloudDialog).toContainText('syncs automatically');
+  await page.keyboard.press('Escape');
+
+  // First export creates the link …
+  const first = await pdfText((await exportPdf(page, { views: false })).file);
+  expect(fake.links.size).toBe(1);
+  const [token] = [...fake.links.keys()];
+  const url = `/?share=${token}&view=3d`;
+  expect(first[0]).toContain('LIVE 3D VIEW');
+  expect(first[0]!.replace(/\s/g, '')).toContain(url);
+
+  // … later exports reuse it, so a shop keeps one address.
+  const second = await pdfText((await exportPdf(page, { views: false })).file);
+  expect(fake.links.size).toBe(1);
+  expect(second[0]!.replace(/\s/g, '')).toContain(url);
+
+  // The partner opens it: read-only, straight into 3D, and can export the same PDF.
+  const visitor = await context.newPage();
+  await visitor.route(/supabase\.co/, (r) => r.abort());
+  await fake.install(visitor);
+  await visitor.goto(url);
+  await expect(visitor.getByTestId('cloud-banner')).toContainText('view only');
+  await expect(visitor.getByText('Drag to look around')).toBeVisible();
+  const theirs = await pdfText((await exportPdf(visitor, { views: false })).file);
+  expect(theirs[0]!.replace(/\s/g, '')).toContain(url);
+  expect(fake.links.size).toBe(1);
 });

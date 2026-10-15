@@ -53,8 +53,13 @@ export function PlannerShell() {
     cloud
       .getShared(token)
       .then((p) => {
-        if (p) usePlannerStore.getState().openShared(p);
-        else setShareError('This link has been revoked or does not exist.');
+        if (p) {
+          usePlannerStore.getState().openShared(p);
+          // Links from the PDF open straight in 3D.
+          if (new URLSearchParams(window.location.search).get('view') === '3d') {
+            usePlannerStore.getState().setViewMode('3d');
+          }
+        } else setShareError('This link has been revoked or does not exist.');
       })
       .catch((e: unknown) => setShareError(e instanceof Error ? e.message : 'Could not open the shared plan.'));
   }, []);

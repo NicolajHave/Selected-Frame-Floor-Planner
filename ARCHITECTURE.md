@@ -322,8 +322,21 @@ A view toggle in the top bar (`2D Plan` / `3D View`) renders
 `<SvgCanvas/>` or `<ThreeCanvas/>` from the same `project` slice. Both
 adapters are thin — all geometry comes from `geometry/` helpers.
 
-The 3D folder ships in MVP as a stub README so the boundary is visible
-in code review.
+The scene itself lives in `render/three/scene/SceneContents.tsx` and is
+shared by two hosts: the interactive `<ThreeCanvas/>` and
+`render/three/offscreen.tsx`, which renders stills for the PDF on a
+detached canvas (`createRoot`, `frameloop: 'never'`, one `advance()` per
+shot). A `SceneModeContext` turns off selection outlines and drag
+handlers for stills, and makes the scene's `Suspense` wait for every
+model so a picture is never taken with placeholders. Cameras for the
+pictures come from `lib/views.ts` (pure, unit-tested): four perspective
+views fitted to the shop's bounding box, an isometric, and one
+orthographic elevation per wall, seen from inside and clipped to the
+1.6 m slice in front of the wall, together with the heights its ladder
+shows.
+
+Walls are grouped per wall; a `useFrame` hides a wall whose outside
+faces the camera (a doll's-house cutaway), in the editor and in stills.
 
 ---
 
@@ -371,6 +384,13 @@ with the version it last saw; if the database has a newer version,
 rolls back any change to the project or its history, and the UI hides
 editing tools and disables the panels. A shared link never writes to the
 visitor's own autosave.
+
+**Live link in the PDF** (`lib/cloud/liveLink.ts`): owners and editors
+get the plan's oldest active share link (created on first export), so
+every PDF of a shop carries the same address; unsaved edits are saved
+first. A shared view uses its own token. The URL adds `&view=3d`, which
+the shared view honours. Revoking the link in Share turns off the QR
+codes in PDFs already sent.
 
 **Tests** use `tests/e2e/fakeCloud.ts`, an in-memory stand-in for the auth
 endpoints and the `fp_*` functions with the same rules, wired in with

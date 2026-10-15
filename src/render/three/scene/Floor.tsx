@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import type { RoomPolygon } from '@/model/objects';
-import { MM } from '../ThreeCanvas';
+import { MM } from '../units';
 
 /** Room slab: the polygon extruded 20 mm down so it reads as a floor. */
 export function Floor({ room }: { room: RoomPolygon }) {

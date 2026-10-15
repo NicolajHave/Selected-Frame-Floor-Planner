@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import { Button } from '../ui/Button';
 import { Menu, MenuItem, MenuSeparator } from '../ui/Menu';
 import { CloudActions, CloudStatus } from '../cloud/CloudBar';
+import { PdfDialog } from './PdfDialog';
 import type { CloudUser } from '@/lib/cloud/useCloudUser';
 
 interface Props {
@@ -38,18 +39,7 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
 
   const fit = useFitToPlan();
 
-  const [pdfBusy, setPdfBusy] = useState(false);
-  const exportPdf = async () => {
-    setPdfBusy(true);
-    try {
-      const { downloadPlanPdf } = await import('@/lib/pdfExport');
-      const project = usePlannerStore.getState().project;
-      // A plan that wasn't scaled wouldn't line up with the drawing.
-      await downloadPlanPdf(project, { includeUnderlay: !!project.underlay?.calibrated });
-    } finally {
-      setPdfBusy(false);
-    }
-  };
+  const [pdfOpen, setPdfOpen] = useState(false);
   const { save, exportData, triggerLoad, inputRef, onFileChange } = useFileIO();
 
   const [editingName, setEditingName] = useState(false);
@@ -135,12 +125,12 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
         </Menu>
         <Button
           variant="ghost"
-          onClick={exportPdf}
-          disabled={pdfBusy}
-          title="A3 drawing to scale with parts list and layout check"
+          onClick={() => setPdfOpen(true)}
+          title="A3 presentation: 3D views, plan to scale, elevations, parts list and live 3D link"
         >
-          {pdfBusy ? 'PDF…' : 'PDF'}
+          PDF
         </Button>
+        {pdfOpen && <PdfDialog onClose={() => setPdfOpen(false)} signedIn={!!user} />}
         <input
           ref={inputRef}
           type="file"

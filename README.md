@@ -63,12 +63,20 @@ URL. No environment variables are needed.
    aisles narrower than the minimum (900 mm by default, editable); they
    are marked on the plan and counted in the footer.
 7. **3D View** shows the room with openings and the catalog models;
-   objects can be selected, dragged and placed there too.
+   objects can be selected, dragged and placed there too. Walls facing
+   the camera are cut away so you can always see into the shop.
 8. **Parts list** (right panel, nothing selected) totals units, weight
    and hanger capacity, and exports a CSV for Excel.
-9. **PDF** (top bar) exports an A3 drawing to scale with numbered
-   fixtures, wall dimensions and a title block, followed by the parts
-   list and the layout check.
+9. **PDF** (top bar) exports an A3 presentation: cover, what the concept
+   asks of the site plus your notes for this draft, the shop in 3D from
+   four sides and as an isometric, the plan to scale (numbered fixtures,
+   wall dimensions, title block), an elevation of every wall with a
+   height ladder (wall top, fixture tops, logo bottom/top, door heads),
+   then the parts list and layout check. For a cloud plan the cover
+   carries the shop's **live 3D link** with a QR code: a view-only link
+   (the same one on every export) that opens the latest version straight
+   in 3D, so a partner or sales rep can walk around the shop while
+   reading the PDF.
 10. **Cloud plans** (sign in with the same @bestseller.com account as the
     other Selected tools): **Cloud → Save to cloud** keeps the plan in the
     shared database and saves every change automatically. **Share**
@@ -105,9 +113,10 @@ metrics for other tools.
   derived metrics (wall lengths, corner angles, area) and a timestamp.
 - **Parts list** (`*-parts-list.csv`) — semicolon-separated with decimal
   commas, for Excel with Danish regional settings.
-- **PDF** (`*-plan.pdf`) — A3 landscape: the plan at the largest
-  standard scale that fits (a calibrated underlay is drawn faintly),
-  then the parts list, layout check and notes.
+- **PDF** (`*-plan.pdf`) — A3 landscape: cover (live 3D link + QR for
+  cloud plans), concept and notes, 3D views, isometric, the plan at the
+  largest standard scale that fits (a calibrated underlay is drawn
+  faintly), wall elevations with heights, parts list, layout check.
 
 Projects carry `schemaVersion`; `src/lib/schema.ts` validates and
 upgrades older files.
