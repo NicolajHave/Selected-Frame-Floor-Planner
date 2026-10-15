@@ -112,6 +112,8 @@ interface PlannerState {
   toggleGrid: () => void;
   toggleSnap: () => void;
   setViewMode: (m: ViewMode) => void;
+  toggleLayoutCheck: () => void;
+  setMinAisle: (mmValue: number) => void;
 
   // history
   undo: () => void;
@@ -167,6 +169,7 @@ const DEFAULT_VIEW: ViewState = {
   snapToGrid: true,
   gridSize: mm(100),
   viewMode: '2d',
+  showLayoutCheck: true,
 };
 
 const HISTORY_LIMIT = 100;
@@ -444,6 +447,19 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             s.view.snapToGrid = !s.view.snapToGrid;
           }),
+        toggleLayoutCheck: () =>
+          set((s) => {
+            s.view.showLayoutCheck = !s.view.showLayoutCheck;
+          }),
+
+        setMinAisle: (mmValue) =>
+          set((s) => {
+            if (!(mmValue > 0) || s.project.minAisle === mmValue) return;
+            record(s);
+            s.project.minAisle = mm(mmValue);
+            touch(s.project);
+          }),
+
         setViewMode: (m) =>
           set((s) => {
             s.view.viewMode = m;

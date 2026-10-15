@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
-import { useDerivedMetrics } from '@/store/selectors';
+import { useDerivedMetrics, useLayoutIssues } from '@/store/selectors';
 import { eventToWorld, fitToBounds, pxStroke, screenToWorld } from './viewport';
 import { Grid } from './Grid';
 import { Room } from './Room';
@@ -11,6 +11,9 @@ import { Inventory } from './Inventory';
 import { Measurements } from './Measurements';
 import { CalibrationMarks, Underlay } from './Underlay';
 import { Openings } from './Openings';
+import { GuideMarks, IssueMarks } from './LayoutMarks';
+import { clearanceGuides } from '@/lib/layout';
+import { rectCorners } from '@/geometry/transform';
 import { closestPointOnPolygon } from '@/geometry/insert';
 import { boundingBox } from '@/geometry/polygon';
 import { pointAtDistance } from '@/geometry/snap';
@@ -49,6 +52,20 @@ export function Canvas() {
   const moveOpening = usePlannerStore((s) => s.moveOpening);
 
   const metrics = useDerivedMetrics();
+  const issues = useLayoutIssues();
+
+  // Distances around the selected object (live while it is dragged).
+  const guides = useMemo(() => {
+    if (tool !== 'select' || !selection) return [];
+    const obj =
+      selection.kind === 'pillar'
+        ? project.pillars.find((p) => p.id === selection.id)
+        : selection.kind === 'inventory'
+          ? project.inventory.find((i) => i.id === selection.id)
+          : undefined;
+    if (!obj) return [];
+    return clearanceGuides(project, rectCorners(obj.position, obj.size, obj.rotation), obj.id);
+  }, [project, selection, tool]);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -473,6 +490,9 @@ export function Canvas() {
         )}
 
         {room && metrics && <Measurements room={room} view={view} metrics={metrics} />}
+
+        {view.showLayoutCheck && <IssueMarks project={project} issues={issues} view={view} />}
+        <GuideMarks guides={guides} view={view} />
 
         {calibration && <CalibrationMarks calibration={calibration} hover={hoverWorld} view={view} />}
       </g>

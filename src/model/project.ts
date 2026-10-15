@@ -15,6 +15,7 @@ export interface ViewState {
   snapToGrid: boolean;
   gridSize: Mm;                       // 100 mm default
   viewMode: ViewMode;                 // 2D plan or 3D view; both edit the same project
+  showLayoutCheck: boolean;           // draw layout issues on the plan
 }
 
 /**
@@ -54,6 +55,8 @@ export interface Project {
   pillars: Pillar[];
   inventory: InventoryItem[];
   underlay?: PlanUnderlay | null;
+  /** Narrowest acceptable aisle, mm. Defaults to 900 when absent. */
+  minAisle?: Mm;
 }
 
 /** Shape produced by the export action. Includes derived metrics so

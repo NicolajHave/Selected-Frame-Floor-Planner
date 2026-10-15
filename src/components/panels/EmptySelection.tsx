@@ -6,6 +6,7 @@ import { formatArea, formatLength } from '@/model/units';
 import { Section } from '../ui/Section';
 import { PartsListSection } from './PartsListSection';
 import { PlanUnderlaySection } from './PlanUnderlaySection';
+import { LayoutCheckSection } from './LayoutCheckSection';
 
 export function EmptySelection() {
   const project = usePlannerStore((s) => s.project);
@@ -41,6 +42,10 @@ export function EmptySelection() {
           </>
         )}
       </Section>
+
+      <div className="h-px bg-wall-200" />
+
+      <LayoutCheckSection />
 
       <div className="h-px bg-wall-200" />
 

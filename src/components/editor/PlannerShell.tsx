@@ -11,6 +11,7 @@ import { NoticeToast } from './NoticeToast';
 import { useKeyboard } from '@/hooks/useKeyboard';
 import { usePlannerStore } from '@/store/plannerStore';
 import { AUTOSAVE_EVENT, type AutosaveStatus } from '@/lib/autosaveStorage';
+import { useLayoutIssues } from '@/store/selectors';
 
 // WebGL only exists in the browser; keep three out of the server bundle.
 const ThreeCanvas = dynamic(
@@ -23,6 +24,8 @@ export function PlannerShell() {
 
   const viewMode = usePlannerStore((s) => s.view.viewMode);
   const is3d = viewMode === '3d';
+  const issueCount = useLayoutIssues().length;
+  const clearSelection = usePlannerStore((s) => s.setSelection);
 
   // Restore the autosaved plan once we're on the client.
   const [restored, setRestored] = useState(false);
@@ -80,6 +83,15 @@ export function PlannerShell() {
           {restored && autosave === 'saved' && ' · Autosaved in this browser'}
           {autosave === 'failed' && (
             <span className="text-red-700"> · Autosave failed (plan too large for this browser) — use Save</span>
+          )}
+          {issueCount > 0 && (
+            <button
+              onClick={() => clearSelection(null)}
+              className="ml-1 uppercase tracking-widest2 text-amber-700 hover:underline"
+              title="Show the layout check"
+            >
+              · {issueCount} layout {issueCount === 1 ? 'issue' : 'issues'}
+            </button>
           )}
         </span>
         <span>{is3d ? '3D View · m · drag to move, orbit to look around' : '2D Plan · mm · 1:1 world coordinates'}</span>

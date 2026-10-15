@@ -5,6 +5,7 @@ import { degToRad, mm, radToDeg } from '@/model/units';
 import { Section } from '../ui/Section';
 import { NumberField } from '../ui/NumberField';
 import { Button } from '../ui/Button';
+import { ObjectIssues } from './LayoutCheckSection';
 
 export function PillarProperties({ id }: { id: string }) {
   const pillar = usePlannerStore((s) => s.project.pillars.find((p) => p.id === id));
@@ -21,6 +22,7 @@ export function PillarProperties({ id }: { id: string }) {
           <p className="font-display text-[18px] italic leading-tight text-ink-900">Structural pillar</p>
           <p className="text-[11px] text-ink-500 font-mono">{pillar.id}</p>
         </div>
+        <ObjectIssues id={id} />
       </Section>
 
       <div className="h-px bg-wall-200" />
