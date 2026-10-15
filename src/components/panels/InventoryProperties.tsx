@@ -7,6 +7,7 @@ import { NumberField } from '../ui/NumberField';
 import { TextField } from '../ui/TextField';
 import { Button } from '../ui/Button';
 import { findAsset } from '@/lib/assetCatalog';
+import { ObjectIssues } from './LayoutCheckSection';
 
 export function InventoryProperties({ id }: { id: string }) {
   const item = usePlannerStore((s) => s.project.inventory.find((i) => i.id === id));
@@ -37,6 +38,7 @@ export function InventoryProperties({ id }: { id: string }) {
           </p>
         )}
         <p className="text-[11px] text-ink-500 font-mono">{item.id}</p>
+        <ObjectIssues id={id} />
         {asset?.minWallHeight !== undefined && (
           <MountingNote
             mountHeight={asset.mountHeight}

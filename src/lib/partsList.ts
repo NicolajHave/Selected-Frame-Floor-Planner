@@ -18,6 +18,8 @@ export interface PartsListRow {
   totalHangers?: number;
   /** False for placeholders that aren't in the SIS catalog. */
   catalog: boolean;
+  /** The placed inventory items this row counts. */
+  itemIds: string[];
 }
 
 export interface PartsList {
@@ -45,6 +47,7 @@ export function buildPartsList(inventory: InventoryItem[]): PartsList {
     const existing = byKey.get(key);
     if (existing) {
       existing.quantity += 1;
+      existing.itemIds.push(item.id);
       continue;
     }
     byKey.set(
@@ -63,6 +66,7 @@ export function buildPartsList(inventory: InventoryItem[]): PartsList {
             hsCodes: asset.hsCodes,
             hangersPerUnit: asset.hangerCount,
             catalog: true,
+            itemIds: [item.id],
           }
         : {
             itemNumber: '',
@@ -75,6 +79,7 @@ export function buildPartsList(inventory: InventoryItem[]): PartsList {
             material: '',
             hsCodes: [],
             catalog: false,
+            itemIds: [item.id],
           },
     );
   }

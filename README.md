@@ -4,7 +4,8 @@ Internal tool for planning Selected Frame shop layouts in 2D and 3D.
 
 Import the store's floor plan, trace the room with exact wall lengths,
 add doors and windows, place fixtures from the SIS catalog, check the
-result in 3D and export a parts list.
+layout and the result in 3D, and export a scaled PDF drawing with parts
+list.
 
 > Read [`ARCHITECTURE.md`](./ARCHITECTURE.md) before changing the data
 > model or adding a new render adapter.
@@ -56,10 +57,18 @@ URL. No environment variables are needed.
 5. **Fixtures**: pick a catalog item and click the floor. Wall units and
    logos snap to the nearest wall (`Alt` places freely); logos hang at
    2.4 m and need walls of at least 2.6 m.
-6. **3D View** shows the room with openings and the catalog models;
+6. **Distances and layout check**: the selected object shows its
+   distance to the nearest wall or object in each direction. The panel
+   (nothing selected) lists overlaps, objects in walls, blocked doors and
+   aisles narrower than the minimum (900 mm by default, editable); they
+   are marked on the plan and counted in the footer.
+7. **3D View** shows the room with openings and the catalog models;
    objects can be selected, dragged and placed there too.
-7. **Parts list** (right panel, nothing selected) totals units, weight
+8. **Parts list** (right panel, nothing selected) totals units, weight
    and hanger capacity, and exports a CSV for Excel.
+9. **PDF** (top bar) exports an A3 drawing to scale with numbered
+   fixtures, wall dimensions and a title block, followed by the parts
+   list and the layout check.
 
 The plan autosaves in the browser. **Save** / **Load** round-trip a file;
 **Export** writes the plan plus derived metrics for other tools.
@@ -87,6 +96,9 @@ The plan autosaves in the browser. **Save** / **Load** round-trip a file;
   derived metrics (wall lengths, corner angles, area) and a timestamp.
 - **Parts list** (`*-parts-list.csv`) — semicolon-separated with decimal
   commas, for Excel with Danish regional settings.
+- **PDF** (`*-plan.pdf`) — A3 landscape: the plan at the largest
+  standard scale that fits (a calibrated underlay is drawn faintly),
+  then the parts list, layout check and notes.
 
 Projects carry `schemaVersion`; `src/lib/schema.ts` validates and
 upgrades older files.
