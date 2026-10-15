@@ -1,6 +1,7 @@
 'use client';
 
-import { usePlannerStore } from '@/store/plannerStore';
+import { selectedMembers, usePlannerStore } from '@/store/plannerStore';
+import { GroupProperties } from './GroupProperties';
 import { EmptySelection } from './EmptySelection';
 import { CornerProperties } from './CornerProperties';
 import { PillarProperties } from './PillarProperties';
@@ -13,8 +14,10 @@ import { NoteProperties } from './NoteProperties';
 
 export function RightPanel() {
   const selection = usePlannerStore((s) => s.selection);
+  const grouped = usePlannerStore((s) => selectedMembers(s).length > 1);
 
   if (!selection) return <EmptySelection />;
+  if (grouped) return <GroupProperties />;
 
   switch (selection.kind) {
     case 'corner':    return <CornerProperties cornerId={selection.id} />;

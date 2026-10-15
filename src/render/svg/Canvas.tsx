@@ -1,7 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { usePlannerStore } from '@/store/plannerStore';
+import { useShallow } from 'zustand/react/shallow';
+import { selectedMembers, usePlannerStore } from '@/store/plannerStore';
+import { membersInBox } from '@/lib/group';
 import { useDerivedMetrics, useLayoutIssues } from '@/store/selectors';
 import { eventToWorld, fitToBounds, pxStroke, screenToWorld } from './viewport';
 import { Grid } from './Grid';
@@ -31,6 +33,13 @@ export function Canvas() {
   const view = usePlannerStore((s) => s.view);
   const tool = usePlannerStore((s) => s.tool);
   const selection = usePlannerStore((s) => s.selection);
+  const members = usePlannerStore(useShallow((s) => selectedMembers(s)));
+  const grouped = members.length > 1;
+  const isSelected = (kind: string, id: string) => members.some((m) => m.kind === kind && m.id === id);
+  const toggleSelected = usePlannerStore((s) => s.toggleSelected);
+  const selectMany = usePlannerStore((s) => s.selectMany);
+  const translateSelected = usePlannerStore((s) => s.translateSelected);
+  const [marquee, setMarquee] = useState<{ a: Point; b: Point } | null>(null);
   const calibration = usePlannerStore((s) => s.calibration);
   const highlightedWall = usePlannerStore((s) => s.highlightedWall);
   const drawLength = usePlannerStore((s) => s.drawLength);
@@ -65,7 +74,7 @@ export function Canvas() {
 
   // Distances around the selected object (live while it is dragged).
   const guides = useMemo(() => {
-    if (tool !== 'select' || !selection) return [];
+    if (tool !== 'select' || !selection || grouped) return [];
     const obj =
       selection.kind === 'pillar'
         ? project.pillars.find((p) => p.id === selection.id)
@@ -74,7 +83,7 @@ export function Canvas() {
           : undefined;
     if (!obj) return [];
     return clearanceGuides(project, rectCorners(obj.position, obj.size, obj.rotation), obj.id);
-  }, [project, selection, tool]);
+  }, [project, selection, tool, grouped]);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -122,7 +131,10 @@ export function Canvas() {
     | { type: 'opening-end'; id: string; end: 'start' | 'end' }
     | { type: 'electrical'; id: string }
     | { type: 'note'; id: string; offset: Point }
-    | { type: 'note-target'; id: string };
+    | { type: 'note-target'; id: string }
+    /** Several selected objects dragged together; `last` is the previous pointer position. */
+    | { type: 'group'; last: Point }
+    | { type: 'marquee'; start: Point };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
@@ -171,6 +183,12 @@ export function Canvas() {
       // have their own handlers).
       if (e.target !== e.currentTarget) return;
 
+      // Shift-drag on empty space: select everything in a box.
+      if (e.button === 0 && e.shiftKey) {
+        startMarquee(world, e.pointerId);
+        return;
+      }
+
       // Default: pan drag or clear selection
       if (e.button === 0) {
         setSelection(null);
@@ -214,6 +232,11 @@ export function Canvas() {
         moveOpening(d.id, world, d.grab);
       } else if (d.type === 'opening-end') {
         resizeOpening(d.id, d.end, world);
+      } else if (d.type === 'group') {
+        translateSelected(world.x - d.last.x, world.y - d.last.y);
+        d.last = world;
+      } else if (d.type === 'marquee') {
+        setMarquee({ a: d.start, b: world });
       } else if (d.type === 'electrical') {
         moveElectrical(d.id, world);
       } else if (d.type === 'note') {
@@ -233,19 +256,34 @@ export function Canvas() {
         else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, moveElectrical, updateNote, updateUnderlay, getRect],
+    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, moveElectrical, updateNote, updateUnderlay, translateSelected, getRect],
   );
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
-      const wasEditing = drag.current && drag.current.type !== 'pan';
+      const d = drag.current;
+      const wasEditing = d && d.type !== 'pan' && d.type !== 'marquee';
       drag.current = null;
       if (wasEditing) endGesture();
+      if (d?.type === 'marquee') {
+        setMarquee(null);
+        const rect = getRect();
+        if (rect) {
+          const end = eventToWorld(view, rect, e.clientX, e.clientY);
+          const box = {
+            minX: Math.min(d.start.x, end.x),
+            minY: Math.min(d.start.y, end.y),
+            maxX: Math.max(d.start.x, end.x),
+            maxY: Math.max(d.start.y, end.y),
+          };
+          selectMany(membersInBox(usePlannerStore.getState().project, box), true);
+        }
+      }
       if ((e.currentTarget as Element).hasPointerCapture(e.pointerId)) {
         (e.currentTarget as Element).releasePointerCapture(e.pointerId);
       }
     },
-    [endGesture],
+    [endGesture, getRect, view, selectMany],
   );
 
   // Wheel zoom anchored at the cursor
@@ -356,6 +394,12 @@ export function Canvas() {
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
+  const startMarquee = (world: Point, pointerId: number) => {
+    drag.current = { type: 'marquee', start: world };
+    setMarquee({ a: world, b: world });
+    (svgRef.current as Element).setPointerCapture(pointerId);
+  };
+
   // A click selects the wall; a double-click adds a corner on it.
   const onPointerDownEdge = (afterCornerId: string, e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select' || !room) return;
@@ -377,12 +421,36 @@ export function Canvas() {
   const onPointerDownRoom = (e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select' || !room) return;
     e.stopPropagation();
+    const rect = getRect();
+    if (e.shiftKey && rect) {
+      startMarquee(eventToWorld(view, rect, e.clientX, e.clientY), e.pointerId);
+      return;
+    }
     setSelection({ kind: 'room', id: room.id });
+  };
+
+  /**
+   * Shift-click adds or removes an object; pressing on one that is part of
+   * the selected group drags the whole group. Returns true when handled.
+   */
+  const groupPointerDown = (kind: 'pillar' | 'inventory' | 'note', id: string, e: React.PointerEvent<SVGElement>) => {
+    if (e.shiftKey) {
+      toggleSelected({ kind, id });
+      return true;
+    }
+    if (!grouped || !isSelected(kind, id)) return false;
+    const rect = getRect();
+    if (!rect) return true;
+    beginGesture();
+    drag.current = { type: 'group', last: eventToWorld(view, rect, e.clientX, e.clientY) };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+    return true;
   };
 
   const onPointerDownPillar = (id: string, e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select') return;
     e.stopPropagation();
+    if (groupPointerDown('pillar', id, e)) return;
     setSelection({ kind: 'pillar', id });
     const rect = getRect();
     if (!rect) return;
@@ -401,6 +469,7 @@ export function Canvas() {
   const onPointerDownInventory = (id: string, e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select') return;
     e.stopPropagation();
+    if (groupPointerDown('inventory', id, e)) return;
     setSelection({ kind: 'inventory', id });
     const rect = getRect();
     if (!rect) return;
@@ -468,6 +537,7 @@ export function Canvas() {
   const onPointerDownNote = (id: string, e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select') return;
     e.stopPropagation();
+    if (groupPointerDown('note', id, e)) return;
     setSelection({ kind: 'note', id });
     const rect = getRect();
     const n = project.annotations?.find((x) => x.id === id);
@@ -564,7 +634,8 @@ export function Canvas() {
             key={p.id}
             pillar={p}
             view={view}
-            selected={selection?.kind === 'pillar' && selection.id === p.id}
+            selected={isSelected('pillar', p.id)}
+            grouped={grouped}
             onPointerDown={(e) => onPointerDownPillar(p.id, e)}
             onRotateHandleDown={(e) => onRotateHandleDown('pillar', p.id, e)}
           />
@@ -575,7 +646,8 @@ export function Canvas() {
             key={it.id}
             item={it}
             view={view}
-            selected={selection?.kind === 'inventory' && selection.id === it.id}
+            selected={isSelected('inventory', it.id)}
+            grouped={grouped}
             onPointerDown={(e) => onPointerDownInventory(it.id, e)}
             onRotateHandleDown={(e) => onRotateHandleDown('inventory', it.id, e)}
           />
@@ -611,7 +683,7 @@ export function Canvas() {
           <PlanNotes
             notes={project.annotations}
             view={view}
-            selectedId={selection?.kind === 'note' ? selection.id : null}
+            selectedIds={members.filter((m) => m.kind === 'note').map((m) => m.id)}
             onPointerDown={onPointerDownNote}
             onPointerDownTarget={onPointerDownNoteTarget}
           />
@@ -621,6 +693,22 @@ export function Canvas() {
 
         {view.showLayoutCheck && <IssueMarks project={project} issues={issues} view={view} />}
         <GuideMarks guides={guides} view={view} />
+
+        {marquee && (
+          <rect
+            data-marquee
+            x={Math.min(marquee.a.x, marquee.b.x)}
+            y={Math.min(marquee.a.y, marquee.b.y)}
+            width={Math.abs(marquee.b.x - marquee.a.x)}
+            height={Math.abs(marquee.b.y - marquee.a.y)}
+            fill="var(--selection)"
+            fillOpacity={0.06}
+            stroke="var(--selection)"
+            strokeWidth={pxStroke(view, 1)}
+            strokeDasharray={`${pxStroke(view, 4)} ${pxStroke(view, 3)}`}
+            pointerEvents="none"
+          />
+        )}
 
         {calibration && <CalibrationMarks calibration={calibration} hover={hoverWorld} view={view} />}
       </g>

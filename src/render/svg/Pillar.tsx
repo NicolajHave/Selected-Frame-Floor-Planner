@@ -9,11 +9,13 @@ interface Props {
   pillar: PillarT;
   view: ViewState;
   selected: boolean;
+  /** Part of a group: outlined, but no rotate handle of its own. */
+  grouped?: boolean;
   onPointerDown: (e: React.PointerEvent<SVGElement>) => void;
   onRotateHandleDown: (e: React.PointerEvent<SVGElement>) => void;
 }
 
-export function Pillar({ pillar, view, selected, onPointerDown, onRotateHandleDown }: Props) {
+export function Pillar({ pillar, view, selected, grouped, onPointerDown, onRotateHandleDown }: Props) {
   const { width, depth } = pillar.size;
   const x = pillar.position.x - width / 2;
   const y = pillar.position.y - depth / 2;
@@ -35,7 +37,7 @@ export function Pillar({ pillar, view, selected, onPointerDown, onRotateHandleDo
         strokeWidth={stroke}
       />
       {selected && <SelectionFrame cx={pillar.position.x} cy={pillar.position.y} w={width} h={depth} view={view} />}
-      {selected && (
+      {selected && !grouped && (
         <RotateHandle
           cx={pillar.position.x}
           cy={pillar.position.y}

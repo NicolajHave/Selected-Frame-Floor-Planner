@@ -46,6 +46,7 @@ import { electricalType } from '@/lib/electricalTypes';
 import { clampToWall, electricalAnchor, reanchorElectrical, wallAnchorAt } from '@/geometry/electrical';
 import { findAsset } from '@/lib/assetCatalog';
 import { RACK_CATEGORY, itemMount, rackSize } from '@/lib/racks';
+import { alignPositions, distributePositions, isGroupable, rotatePositions, type AlignMode } from '@/lib/group';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
 import type { CloudProject, CloudRole, SaveResult, SharedProject } from '@/lib/cloud/api';
 
@@ -108,6 +109,11 @@ interface PlannerState {
   tool: Tool;
   selection: Selection | null;
   /**
+   * Several objects selected together (shift-click, shift-drag a box). Only
+   * counts while it contains `selection`; see `selectedMembers`.
+   */
+  multi: Selection[];
+  /**
    * When set, the next click in `add-inventory` mode places this asset (with
    * its catalog name + size + assetRef) instead of the generic placeholder.
    * Cleared after one placement or when the user switches tools.
@@ -147,7 +153,16 @@ interface PlannerState {
 
   // tool actions
   setTool: (t: Tool) => void;
-  setSelection: (s: Selection | null) => void;
+  setSelection: (sel: Selection | null) => void;
+  /** Shift-click: add to or take out of the selection. */
+  toggleSelected: (sel: Selection) => void;
+  /** Box select; `add` keeps what was already selected. */
+  selectMany: (sels: Selection[], add?: boolean) => void;
+  /** Move everything selected by (dx, dy) mm. */
+  translateSelected: (dx: number, dy: number) => void;
+  alignSelected: (mode: AlignMode) => void;
+  /** Equal gaps along x or y (three or more selected). */
+  distributeSelected: (axis: 'x' | 'y') => void;
   pickAsset: (assetId: string) => void;
   pickOpening: (kind: OpeningKind) => void;
   pickElectrical: (kind: ElectricalKind) => void;
@@ -289,6 +304,30 @@ const metres = (n: number) => `${(n / 1000).toFixed(1)} m`;
 let noticeSeq = 0;
 
 /** Mounting requirement shown when an item with a minimum wall height is placed. */
+const sameSel = (a: Selection, b: Selection) => a.kind === b.kind && a.id === b.id;
+
+/** Everything selected: the group, if it holds the current selection, else just the selection. */
+export function selectedMembers(s: Pick<PlannerState, 'selection' | 'multi'>): Selection[] {
+  const sel = s.selection;
+  if (!sel) return [];
+  if (s.multi.length > 1 && s.multi.some((m) => sameSel(m, sel))) return s.multi;
+  return [sel];
+}
+
+function applyPositions(s: Draft<PlannerState>, positions: Map<string, Point>) {
+  for (const [id, p] of positions) {
+    const o =
+      s.project.pillars.find((x) => x.id === id) ??
+      s.project.inventory.find((x) => x.id === id) ??
+      s.project.annotations?.find((x) => x.id === id);
+    if (!o) continue;
+    const dx = p.x - o.position.x;
+    const dy = p.y - o.position.y;
+    o.position = { x: p.x, y: p.y };
+    if ('target' in o && o.target) o.target = { x: (o.target.x + dx) as Mm, y: (o.target.y + dy) as Mm };
+  }
+}
+
 /** How far from a wall (mm) a click still counts as on it: ~25 px or 600 mm. */
 const openingReach = (zoom: number) => Math.max(600, 25 / zoom);
 
@@ -346,6 +385,17 @@ function touch(p: Project): void {
 
 /** Drop a selection that points at something that no longer exists. */
 function pruneSelection(s: Draft<PlannerState>): void {
+  if (s.multi.length) {
+    const p = s.project;
+    s.multi = s.multi.filter((m) =>
+      m.kind === 'pillar'
+        ? p.pillars.some((x) => x.id === m.id)
+        : m.kind === 'inventory'
+          ? p.inventory.some((x) => x.id === m.id)
+          : !!p.annotations?.some((x) => x.id === m.id),
+    );
+    if (s.multi.length < 2) s.multi = [];
+  }
   const sel = s.selection;
   if (!sel) return;
   const { project } = s;
@@ -409,6 +459,7 @@ export const usePlannerStore = create<PlannerState>()(
         view: { ...DEFAULT_VIEW },
         tool: 'select',
         selection: null,
+        multi: [],
         pendingAssetRef: null,
         pendingRack: null,
         rackBuilder: null,
@@ -780,7 +831,66 @@ export const usePlannerStore = create<PlannerState>()(
         setSelection: (sel) =>
           set((s) => {
             s.selection = sel;
+            s.multi = [];
             s.highlightedWall = null;
+          }),
+
+        toggleSelected: (sel) =>
+          set((s) => {
+            const current = selectedMembers(s).filter(isGroupable);
+            const has = current.some((m) => sameSel(m, sel));
+            const next = has ? current.filter((m) => !sameSel(m, sel)) : [...current, sel];
+            s.multi = next.length > 1 ? next : [];
+            s.selection = has ? (next.at(-1) ?? null) : sel;
+            s.highlightedWall = null;
+          }),
+
+        selectMany: (sels, add = false) =>
+          set((s) => {
+            const base = add ? selectedMembers(s).filter(isGroupable) : [];
+            const next = [...base, ...sels.filter((x) => !base.some((m) => sameSel(m, x)))];
+            s.multi = next.length > 1 ? next : [];
+            s.selection = next.at(-1) ?? null;
+            s.highlightedWall = null;
+          }),
+
+        translateSelected: (dx, dy) =>
+          set((s) => {
+            const members = selectedMembers(s);
+            if (members.length === 0 || (dx === 0 && dy === 0)) return;
+            record(s);
+            for (const m of members) {
+              const o =
+                m.kind === 'pillar'
+                  ? s.project.pillars.find((x) => x.id === m.id)
+                  : m.kind === 'inventory'
+                    ? s.project.inventory.find((x) => x.id === m.id)
+                    : m.kind === 'note'
+                      ? s.project.annotations?.find((x) => x.id === m.id)
+                      : undefined;
+              if (!o) continue;
+              o.position = { x: (o.position.x + dx) as Mm, y: (o.position.y + dy) as Mm };
+              if ('target' in o && o.target) o.target = { x: (o.target.x + dx) as Mm, y: (o.target.y + dy) as Mm };
+            }
+            touch(s.project);
+          }),
+
+        alignSelected: (mode) =>
+          set((s) => {
+            const members = selectedMembers(s);
+            if (members.length < 2) return;
+            record(s);
+            applyPositions(s, alignPositions(get().project, members, mode));
+            touch(s.project);
+          }),
+
+        distributeSelected: (axis) =>
+          set((s) => {
+            const members = selectedMembers(s);
+            if (members.length < 3) return;
+            record(s);
+            applyPositions(s, distributePositions(get().project, members, axis));
+            touch(s.project);
           }),
 
         setZoom: (z) =>
@@ -1160,6 +1270,28 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const sel = s.selection;
             if (!sel) return;
+            const members = selectedMembers(s);
+            if (members.length > 1) {
+              record(s);
+              const next = rotatePositions(get().project, members, delta);
+              for (const m of members) {
+                const r = next.get(m.id);
+                if (!r) continue;
+                if (m.kind === 'note') {
+                  applyPositions(s, new Map([[m.id, r.position]]));
+                  continue;
+                }
+                const o =
+                  m.kind === 'pillar'
+                    ? s.project.pillars.find((x) => x.id === m.id)
+                    : s.project.inventory.find((x) => x.id === m.id);
+                if (!o) continue;
+                o.position = r.position;
+                o.rotation = r.rotation;
+              }
+              touch(s.project);
+              return;
+            }
             if (sel.kind === 'opening') {
               const o = s.project.room?.openings.find((x) => x.id === sel.id);
               if (!o || (o.kind !== 'door' && o.kind !== 'double-door')) return;
@@ -1186,6 +1318,48 @@ export const usePlannerStore = create<PlannerState>()(
             const sel = s.selection;
             if (!sel) return;
             const offset = mm(300) as number;
+            const members = selectedMembers(s);
+            if (members.length > 1) {
+              record(s);
+              const copies: Selection[] = [];
+              const shift = (p: Point): Point => ({ x: (p.x + offset) as Mm, y: (p.y + offset) as Mm });
+              for (const m of members) {
+                if (m.kind === 'pillar') {
+                  const o = s.project.pillars.find((x) => x.id === m.id);
+                  if (!o) continue;
+                  const id = newId('pil');
+                  s.project.pillars.push({ ...o, id, position: shift(o.position), size: { ...o.size } });
+                  copies.push({ kind: 'pillar', id });
+                } else if (m.kind === 'inventory') {
+                  const o = s.project.inventory.find((x) => x.id === m.id);
+                  if (!o) continue;
+                  const id = newId('inv');
+                  s.project.inventory.push({
+                    ...o,
+                    id,
+                    position: shift(o.position),
+                    size: { ...o.size },
+                    ...(o.modules ? { modules: [...o.modules] } : {}),
+                  });
+                  copies.push({ kind: 'inventory', id });
+                } else if (m.kind === 'note') {
+                  const o = s.project.annotations?.find((x) => x.id === m.id);
+                  if (!o) continue;
+                  const id = newId('note');
+                  s.project.annotations!.push({
+                    ...o,
+                    id,
+                    position: shift(o.position),
+                    ...(o.target ? { target: shift(o.target) } : {}),
+                  });
+                  copies.push({ kind: 'note', id });
+                }
+              }
+              s.multi = copies.length > 1 ? copies : [];
+              s.selection = copies.at(-1) ?? null;
+              touch(s.project);
+              return;
+            }
             if (sel.kind === 'pillar') {
               const orig = s.project.pillars.find((x) => x.id === sel.id);
               if (!orig) return;
@@ -1220,6 +1394,23 @@ export const usePlannerStore = create<PlannerState>()(
         deleteSelected: () => {
           const sel = get().selection;
           if (!sel) return;
+          const members = selectedMembers(get());
+          if (members.length > 1) {
+            set((s) => {
+              record(s);
+              const gone = (kind: string) => new Set(members.filter((m) => m.kind === kind).map((m) => m.id));
+              const pillars = gone('pillar');
+              const items = gone('inventory');
+              const notes = gone('note');
+              s.project.pillars = s.project.pillars.filter((x) => !pillars.has(x.id));
+              s.project.inventory = s.project.inventory.filter((x) => !items.has(x.id));
+              if (s.project.annotations) s.project.annotations = s.project.annotations.filter((x) => !notes.has(x.id));
+              s.selection = null;
+              s.multi = [];
+              touch(s.project);
+            });
+            return;
+          }
           if (sel.kind === 'corner') {
             get().deleteCorner(sel.id);
             return;

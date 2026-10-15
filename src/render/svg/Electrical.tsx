@@ -76,13 +76,13 @@ export function ElectricalMarks({
 export function PlanNotes({
   notes,
   view,
-  selectedId,
+  selectedIds,
   onPointerDown,
   onPointerDownTarget,
 }: {
   notes: PlanNote[];
   view: ViewState;
-  selectedId: string | null;
+  selectedIds: string[];
   onPointerDown: (id: string, e: React.PointerEvent<SVGElement>) => void;
   onPointerDownTarget: (id: string, e: React.PointerEvent<SVGElement>) => void;
 }) {
@@ -91,7 +91,7 @@ export function PlanNotes({
   return (
     <g data-layer="notes">
       {notes.map((n) => {
-        const selected = n.id === selectedId;
+        const selected = selectedIds.includes(n.id);
         const lines = (n.text || 'Note').split('\n');
         const w = Math.max(...lines.map((l) => l.length)) * font * 0.56 + pad * 2;
         const h = lines.length * font * 1.25 + pad * 2;
@@ -132,7 +132,7 @@ export function PlanNotes({
                 </text>
               ))}
             </g>
-            {n.target && selected && (
+            {n.target && selected && selectedIds.length === 1 && (
               <circle
                 data-note-target={n.id}
                 cx={n.target.x}
