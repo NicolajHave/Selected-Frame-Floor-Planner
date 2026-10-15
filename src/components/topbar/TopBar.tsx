@@ -29,6 +29,19 @@ export function TopBar({ getViewportSize }: Props) {
   const is3d = view.viewMode === '3d';
 
   const fit = useFitToPlan();
+
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const exportPdf = async () => {
+    setPdfBusy(true);
+    try {
+      const { downloadPlanPdf } = await import('@/lib/pdfExport');
+      const project = usePlannerStore.getState().project;
+      // A plan that wasn't scaled wouldn't line up with the drawing.
+      await downloadPlanPdf(project, { includeUnderlay: !!project.underlay?.calibrated });
+    } finally {
+      setPdfBusy(false);
+    }
+  };
   const { save, exportData, triggerLoad, inputRef, onFileChange } = useFileIO();
 
   const [editingName, setEditingName] = useState(false);
@@ -98,7 +111,15 @@ export function TopBar({ getViewportSize }: Props) {
         <Button variant="ghost" onClick={newProject}>New</Button>
         <Button variant="ghost" onClick={save} title="Save (⌘S)">Save</Button>
         <Button variant="ghost" onClick={triggerLoad}>Load</Button>
-        <Button variant="ghost" onClick={exportData}>Export</Button>
+        <Button variant="ghost" onClick={exportData} title="Plan data as JSON for other tools">Export</Button>
+        <Button
+          variant="ghost"
+          onClick={exportPdf}
+          disabled={pdfBusy}
+          title="A3 drawing to scale with parts list and layout check"
+        >
+          {pdfBusy ? 'PDF…' : 'PDF'}
+        </Button>
         <input
           ref={inputRef}
           type="file"
