@@ -5,6 +5,7 @@ import { ASSET_CATALOG, ASSET_CATEGORIES, type AssetEntry } from '@/lib/assetCat
 import { usePlannerStore } from '@/store/plannerStore';
 import { formatLength } from '@/model/units';
 import { OPENING_TYPES, type OpeningType } from '@/lib/openingTypes';
+import { ELECTRICAL_TYPES } from '@/lib/electricalTypes';
 import type { OpeningKind } from '@/model/objects';
 
 export function AssetLibrary() {
@@ -16,10 +17,14 @@ export function AssetLibrary() {
   const pickOpening = usePlannerStore((s) => s.pickOpening);
   const openRackBuilder = usePlannerStore((s) => s.openRackBuilder);
   const pendingRack = usePlannerStore((s) => s.pendingRack);
+  const pendingElectrical = usePlannerStore((s) => s.pendingElectrical);
+  const pickElectrical = usePlannerStore((s) => s.pickElectrical);
 
   const armed =
     (tool === 'add-inventory' && (pendingAssetRef !== null || pendingRack !== null)) ||
-    (tool === 'add-opening' && pendingOpening !== null);
+    (tool === 'add-opening' && pendingOpening !== null) ||
+    tool === 'add-electrical' ||
+    tool === 'add-note';
 
   return (
     <div className="flex h-full flex-col">
@@ -70,6 +75,58 @@ export function AssetLibrary() {
                 onPick={() => pickOpening(t.kind)}
               />
             ))}
+          </div>
+        </section>
+
+        <section className="pt-4">
+          <h4 className="px-1 pb-2 text-[10px] font-medium uppercase tracking-widest2 text-ink-500">
+            Electrical &amp; notes
+          </h4>
+          <div className="grid grid-cols-2 gap-2">
+            {ELECTRICAL_TYPES.map((t) => (
+              <button
+                key={t.kind}
+                onClick={() => pickElectrical(t.kind)}
+                title={`Place ${t.name}`}
+                className={clsx(
+                  'flex items-center gap-2 rounded-[2px] border bg-wall-50 px-2 py-1.5 text-left transition-colors',
+                  tool === 'add-electrical' && pendingElectrical === t.kind
+                    ? 'border-ink-900 bg-wall-100'
+                    : 'border-wall-200 hover:border-ink-500 hover:bg-wall-100',
+                )}
+              >
+                <span
+                  className={clsx(
+                    'flex h-6 w-6 shrink-0 items-center justify-center border border-amber-700 bg-amber-50 text-[8px] font-semibold text-amber-800',
+                    t.mount === 'floor' ? 'rounded-[1px]' : 'rounded-full',
+                  )}
+                >
+                  {t.code}
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[11px] font-medium text-ink-900">{t.name}</span>
+                  <span className="font-mono text-[9px] text-ink-500">
+                    {t.mount === 'floor' ? 'floor' : `${t.height} mm`}
+                  </span>
+                </span>
+              </button>
+            ))}
+            <button
+              onClick={() => setTool('add-note')}
+              title="Place Note"
+              className={clsx(
+                'flex items-center gap-2 rounded-[2px] border bg-wall-50 px-2 py-1.5 text-left transition-colors',
+                tool === 'add-note' ? 'border-ink-900 bg-wall-100' : 'border-wall-200 hover:border-ink-500 hover:bg-wall-100',
+              )}
+            >
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[2px] border border-ink-500 bg-white text-[11px] text-ink-700">
+                ¶
+              </span>
+              <span className="flex flex-col">
+                <span className="text-[11px] font-medium text-ink-900">Note</span>
+                <span className="font-mono text-[9px] text-ink-500">text + arrow</span>
+              </span>
+            </button>
           </div>
         </section>
 

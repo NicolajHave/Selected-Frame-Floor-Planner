@@ -262,6 +262,14 @@ function missingPicture(doc: JsPdf, x: number, y: number, w: number, h: number) 
 // ---------------------------------------------------------------------------
 
 const CELL_GAP = 9;
+const EL_INK: [number, number, number] = [180, 83, 9];
+
+/** Something drawn onto an elevation: x in mm from the picture centre, height from the floor. */
+export interface ElevationMark {
+  x: number;
+  height: number;
+  label: string;
+}
 const CAPTION = 7;
 const LADDER = 26;
 
@@ -297,6 +305,7 @@ export function drawElevationPages(
   specs: ElevationSpec[],
   images: Record<string, string>,
   layout: ElevationLayout,
+  marksFor: (spec: ElevationSpec) => ElevationMark[] = () => [],
 ) {
   const perPage = layout.cols * layout.rows;
   specs.forEach((spec, k) => {
@@ -307,7 +316,7 @@ export function drawElevationPages(
     const slot = k % perPage;
     const x = VIEW_BOX.x + (slot % layout.cols) * (layout.cellW + CELL_GAP);
     const y = VIEW_BOX.y + Math.floor(slot / layout.cols) * (layout.cellH + CELL_GAP);
-    drawElevation(doc, spec, images[spec.shot.id], x, y, layout);
+    drawElevation(doc, spec, images[spec.shot.id], x, y, layout, marksFor(spec));
   });
 }
 
@@ -318,6 +327,7 @@ function drawElevation(
   x: number,
   y: number,
   layout: ElevationLayout,
+  marks: ElevationMark[],
 ) {
   font(doc, 9, 'bold');
   doc.text(`Wall ${spec.wallIndex + 1}`, x, y + 4);
@@ -343,6 +353,18 @@ function drawElevation(
   doc.setLineWidth(0.25);
   doc.line(lx, Y(0), lx, Y(spec.height));
   doc.line(lx - 1.5, Y(0), lx + 1.5, Y(0));
+
+  // Electrical points on this wall, at their place and height.
+  for (const m of marks) {
+    const mx = ix + ((m.x - f.left) / (f.right - f.left)) * imgW;
+    const my = Y(m.height);
+    doc.setDrawColor(...EL_INK);
+    doc.setFillColor(255, 248, 238);
+    doc.setLineWidth(0.25);
+    doc.circle(mx, my, 1.9, 'FD');
+    font(doc, 5, 'bold', EL_INK);
+    doc.text(m.label, mx, my, { align: 'center', baseline: 'middle' });
+  }
 
   const ticks = [...spec.heights].sort((a, b) => b - a);
   let lastLabelY = -Infinity;

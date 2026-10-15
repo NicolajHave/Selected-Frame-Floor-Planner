@@ -3,7 +3,8 @@ import { fitOpening, freeStretches, placeOpening, stretchAround } from '@/geomet
 import { tallestWall, wallHeightNear, wallHeightOf } from '@/geometry/wallStyle';
 import { buildPartsList } from '@/lib/partsList';
 import { itemMount, rackContents, rackSize, rackSlots, rackSummary } from '@/lib/racks';
-import type { InventoryItem, Opening, RoomPolygon } from '@/model/objects';
+import type { ElectricalPoint, InventoryItem, Opening, RoomPolygon } from '@/model/objects';
+import { electricalAnchor, reanchorElectrical, wallAnchorAt } from '@/geometry/electrical';
 import type { Mm, Radians } from '@/model/units';
 
 const P = (x: number, y: number) => ({ x: x as Mm, y: y as Mm });
@@ -117,5 +118,29 @@ test.describe('wall racks', () => {
     const shelves = list.rows.find((r) => r.itemNumber === '105-99-004')!;
     expect(shelves.quantity).toBe(2);
     expect(shelves.itemIds).toEqual(['rack']);
+  });
+});
+
+test.describe('electrical points', () => {
+  test('wall points sit on the inside face; corner changes keep them in place', async () => {
+    const r = room();
+    const anchor = wallAnchorAt(r, P(3000, 200), 600)!;
+    expect(anchor).toEqual({ wallStartCornerId: 'c0', offset: 3000 });
+    const e: ElectricalPoint = { id: 'e', kind: 'socket', ...anchor, height: 300 as Mm };
+    expect(electricalAnchor(r, e)!.point).toEqual({ x: 3000, y: 60 });
+    // Clicked into the corner: stops at the side wall's inside face.
+    expect(wallAnchorAt(r, P(30, -50), 600)).toEqual({ wallStartCornerId: 'c0', offset: 60 });
+    expect(wallAnchorAt(r, P(5000, 3500), 600)).toBeNull();
+
+    // A corner in the middle of the top wall is removed: the point moves
+    // onto the merged wall at the same spot.
+    const split: RoomPolygon = {
+      ...r,
+      corners: [P(0, 0), P(5000, 0), P(10000, 0), P(10000, 7000), P(0, 7000)].map((point, i) => ({ id: `k${i}`, point })),
+    };
+    const onRight: ElectricalPoint = { id: 'e', kind: 'socket', wallStartCornerId: 'k1', offset: 1000 as Mm, height: 300 as Mm };
+    const merged = { ...split, corners: split.corners.filter((c) => c.id !== 'k1') };
+    const [moved] = reanchorElectrical([onRight], split, merged);
+    expect(moved).toMatchObject({ wallStartCornerId: 'k0', offset: 6000 });
   });
 });

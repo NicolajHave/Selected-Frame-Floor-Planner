@@ -124,6 +124,12 @@ interface RoomPolygon {
   walls?: Record<string, WallStyle>; // per wall, keyed by its start corner id
 }
 
+// On Project:
+//   electrical?: ElectricalPoint[]  — wall points anchored like openings
+//                                     (start corner + offset, height), or a
+//                                     floor box with a position
+//   annotations?: PlanNote[]        — text on the plan, optional arrow target
+
 interface WallStyle {
   height?: Mm;                     // this wall's own height
   transparent?: boolean;           // glass / open side: see-through in 3D, dashed in 2D

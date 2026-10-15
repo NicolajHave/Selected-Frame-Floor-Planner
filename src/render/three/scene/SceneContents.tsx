@@ -7,8 +7,9 @@ import { Floor } from './Floor';
 import { Walls } from './Walls';
 import { Pillars } from './Pillars';
 import { InventoryMeshes } from './InventoryMeshes';
+import { ElectricalMeshes } from './ElectricalMeshes';
 
-/** The shop itself: room, pillars and fixtures. Shared by the editor and the PDF renders. */
+/** The shop itself: room, pillars, fixtures and electrical points. Shared by the editor and the PDF renders. */
 export function SceneContents({ project, onReady }: { project: Project; onReady?: () => void }) {
   const room = project.room;
   return (
@@ -21,6 +22,9 @@ export function SceneContents({ project, onReady }: { project: Project; onReady?
         </>
       )}
       <Pillars pillars={project.pillars} />
+      {project.electrical && project.electrical.length > 0 && (
+        <ElectricalMeshes room={room} points={project.electrical} />
+      )}
       <Suspense fallback={null}>
         <InventoryMeshes items={project.inventory} />
         {onReady && <Ready onReady={onReady} />}

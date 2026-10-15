@@ -8,6 +8,8 @@ import { InventoryProperties } from './InventoryProperties';
 import { RoomProperties } from './RoomProperties';
 import { OpeningProperties } from './OpeningProperties';
 import { WallProperties } from './WallProperties';
+import { ElectricalProperties } from './ElectricalProperties';
+import { NoteProperties } from './NoteProperties';
 
 export function RightPanel() {
   const selection = usePlannerStore((s) => s.selection);
@@ -21,6 +23,8 @@ export function RightPanel() {
     case 'room':      return <RoomProperties />;
     case 'opening':   return <OpeningProperties id={selection.id} />;
     case 'wall':      return <WallProperties cornerId={selection.id} />;
+    case 'electrical': return <ElectricalProperties id={selection.id} />;
+    case 'note':      return <NoteProperties id={selection.id} />;
     default:          return <EmptySelection />;
   }
 }

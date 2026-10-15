@@ -40,6 +40,14 @@ export interface ElevationSpec extends ViewSpec {
   /** Heights (mm) worth dimensioning on this wall, ascending. */
   heights: number[];
   transparent: boolean;
+  /** The wall's start corner, for anchoring things drawn on top. */
+  wallStartCornerId: string;
+  /**
+   * Picture x (mm from the centre, + to the right) of a point `d` mm along
+   * the wall is `sign * (d - length / 2)`: the camera faces the wall from
+   * inside, so the wall may run either way across the picture.
+   */
+  sign: number;
 }
 
 const M = 0.001;
@@ -183,6 +191,8 @@ export function elevationShots(project: Project, aspect: number): ElevationSpec[
       frustumMm,
       heights: wallHeights(project, i),
       transparent: !!wallStyle(room, i).transparent,
+      wallStartCornerId: room.corners[i]!.id,
+      sign: Math.sign(w.ny * w.ux - w.nx * w.uy) || 1,
       shot: {
         id: `elev-${i}`,
         kind: 'ortho',
@@ -224,6 +234,9 @@ export function wallHeights(project: Project, i: number): number[] {
     consider(rectCorners(it.position, it.size, it.rotation), bottom, bottom + it.size.height, bottom > 0);
   }
   for (const p of project.pillars) consider(rectCorners(p.position, p.size, p.rotation), 0, p.size.height, false);
+  for (const e of project.electrical ?? []) {
+    if (e.wallStartCornerId === room.corners[i]!.id && !e.position) heights.push(e.height);
+  }
   for (const o of room.openings) {
     if (o.wallStartCornerId !== room.corners[i]!.id) continue;
     heights.push(o.height);

@@ -92,14 +92,14 @@ export function nearestWall(room: RoomPolygon, p: Point): WallHit | null {
  * After a corner is inserted `splitDistance` mm along the wall that starts
  * at `splitCornerId`, openings beyond it move onto the new second half.
  */
-export function reanchorAfterInsert(
-  openings: Opening[],
+export function reanchorAfterInsert<T extends { wallStartCornerId?: string; offset?: Mm }>(
+  openings: T[],
   splitCornerId: string,
   newCornerId: string,
   splitDistance: number,
-): Opening[] {
+): T[] {
   return openings.map((o) =>
-    o.wallStartCornerId === splitCornerId && o.offset > splitDistance
+    o.wallStartCornerId === splitCornerId && o.offset !== undefined && o.offset > splitDistance
       ? { ...o, wallStartCornerId: newCornerId, offset: (o.offset - splitDistance) as Mm }
       : o,
   );

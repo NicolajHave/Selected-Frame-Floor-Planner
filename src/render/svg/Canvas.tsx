@@ -11,6 +11,7 @@ import { Inventory } from './Inventory';
 import { Measurements } from './Measurements';
 import { CalibrationMarks, Underlay } from './Underlay';
 import { OpeningPreview, Openings } from './Openings';
+import { ElectricalMarks, PlanNotes } from './Electrical';
 import { GuideMarks, IssueMarks } from './LayoutMarks';
 import { clearanceGuides } from '@/lib/layout';
 import { rectCorners } from '@/geometry/transform';
@@ -53,6 +54,10 @@ export function Canvas() {
   const addOpeningAt = usePlannerStore((s) => s.addOpeningAt);
   const moveOpening = usePlannerStore((s) => s.moveOpening);
   const resizeOpening = usePlannerStore((s) => s.resizeOpening);
+  const addElectricalAt = usePlannerStore((s) => s.addElectricalAt);
+  const moveElectrical = usePlannerStore((s) => s.moveElectrical);
+  const addNoteAt = usePlannerStore((s) => s.addNoteAt);
+  const updateNote = usePlannerStore((s) => s.updateNote);
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
 
   const metrics = useDerivedMetrics();
@@ -114,7 +119,10 @@ export function Canvas() {
     | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number }
     | { type: 'underlay'; offset: Point }
     | { type: 'opening'; id: string; grab: number }
-    | { type: 'opening-end'; id: string; end: 'start' | 'end' };
+    | { type: 'opening-end'; id: string; end: 'start' | 'end' }
+    | { type: 'electrical'; id: string }
+    | { type: 'note'; id: string; offset: Point }
+    | { type: 'note-target'; id: string };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
@@ -146,6 +154,14 @@ export function Canvas() {
         addOpeningAt(world);
         return;
       }
+      if (tool === 'add-electrical') {
+        addElectricalAt(world);
+        return;
+      }
+      if (tool === 'add-note') {
+        addNoteAt(world);
+        return;
+      }
       if (tool === 'add-inventory') {
         addInventoryAt(world, { wallSnap: !e.altKey });
         return;
@@ -168,7 +184,7 @@ export function Canvas() {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
       }
     },
-    [tool, view, addCorner, addPillarAt, addInventoryAt, addOpeningAt, addCalibrationPoint, setSelection, getRect],
+    [tool, view, addCorner, addPillarAt, addInventoryAt, addOpeningAt, addElectricalAt, addNoteAt, addCalibrationPoint, setSelection, getRect],
   );
 
   const onPointerMove = useCallback(
@@ -198,6 +214,12 @@ export function Canvas() {
         moveOpening(d.id, world, d.grab);
       } else if (d.type === 'opening-end') {
         resizeOpening(d.id, d.end, world);
+      } else if (d.type === 'electrical') {
+        moveElectrical(d.id, world);
+      } else if (d.type === 'note') {
+        updateNote(d.id, { position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm } });
+      } else if (d.type === 'note-target') {
+        updateNote(d.id, { target: { x: world.x, y: world.y } });
       } else if (d.type === 'underlay') {
         updateUnderlay({
           position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
@@ -211,7 +233,7 @@ export function Canvas() {
         else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, updateUnderlay, getRect],
+    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, moveElectrical, updateNote, updateUnderlay, getRect],
   );
 
   const onPointerUp = useCallback(
@@ -304,6 +326,8 @@ export function Canvas() {
       case 'add-pillar':    return 'cursor-copy';
       case 'add-inventory': return 'cursor-copy';
       case 'add-opening':   return 'cursor-copy';
+      case 'add-electrical': return 'cursor-copy';
+      case 'add-note':      return 'cursor-text';
       default:              return 'cursor-grab active:cursor-grabbing';
     }
   }, [tool]);
@@ -312,7 +336,14 @@ export function Canvas() {
   const onPointerDownCorner = (cornerId: string, e: React.PointerEvent<SVGElement>) => {
     // With something to place armed, a click on a corner places it there
     // (the canvas handles it) rather than grabbing the corner.
-    if (tool === 'add-opening' || tool === 'add-inventory' || tool === 'add-pillar') return;
+    if (
+      tool === 'add-opening' ||
+      tool === 'add-inventory' ||
+      tool === 'add-pillar' ||
+      tool === 'add-electrical' ||
+      tool === 'add-note'
+    )
+      return;
     e.stopPropagation();
     // Click first corner while drawing → close polygon.
     if (tool === 'draw-room' && room && !room.closed && room.corners[0]?.id === cornerId && room.corners.length >= 3) {
@@ -425,6 +456,36 @@ export function Canvas() {
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
+  const onPointerDownElectrical = (id: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return;
+    e.stopPropagation();
+    setSelection({ kind: 'electrical', id });
+    beginGesture();
+    drag.current = { type: 'electrical', id };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerDownNote = (id: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return;
+    e.stopPropagation();
+    setSelection({ kind: 'note', id });
+    const rect = getRect();
+    const n = project.annotations?.find((x) => x.id === id);
+    if (!rect || !n) return;
+    const world = eventToWorld(view, rect, e.clientX, e.clientY);
+    beginGesture();
+    drag.current = { type: 'note', id, offset: { x: (world.x - n.position.x) as Mm, y: (world.y - n.position.y) as Mm } };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerDownNoteTarget = (id: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return;
+    e.stopPropagation();
+    beginGesture();
+    drag.current = { type: 'note-target', id };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
   // Where the opening being placed would go, shown under the pointer.
   const preview = useMemo(() => {
     if (tool !== 'add-opening' || !pendingOpening || !room?.closed || !hoverWorld) return null;
@@ -532,6 +593,27 @@ export function Canvas() {
             strokeWidth={previewStroke}
             strokeDasharray={`${pxStroke(view, 4)} ${pxStroke(view, 3)}`}
             pointerEvents="none"
+          />
+        )}
+
+        {/* On top of fixtures: a socket behind a wall unit still shows. */}
+        {project.electrical && project.electrical.length > 0 && (
+          <ElectricalMarks
+            room={room}
+            points={project.electrical}
+            view={view}
+            selectedId={selection?.kind === 'electrical' ? selection.id : null}
+            onPointerDown={onPointerDownElectrical}
+          />
+        )}
+
+        {project.annotations && project.annotations.length > 0 && (
+          <PlanNotes
+            notes={project.annotations}
+            view={view}
+            selectedId={selection?.kind === 'note' ? selection.id : null}
+            onPointerDown={onPointerDownNote}
+            onPointerDownTarget={onPointerDownNoteTarget}
           />
         )}
 

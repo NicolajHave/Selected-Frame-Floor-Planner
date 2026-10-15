@@ -14,6 +14,9 @@ import type {
   InventoryItem,
   Opening,
   OpeningKind,
+  ElectricalKind,
+  ElectricalPoint,
+  PlanNote,
   Selection,
   Point,
   Mm,
@@ -39,6 +42,8 @@ import {
   wallFrame,
 } from '@/geometry/openings';
 import { openingType } from '@/lib/openingTypes';
+import { electricalType } from '@/lib/electricalTypes';
+import { clampToWall, electricalAnchor, reanchorElectrical, wallAnchorAt } from '@/geometry/electrical';
 import { findAsset } from '@/lib/assetCatalog';
 import { RACK_CATEGORY, itemMount, rackSize } from '@/lib/racks';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
@@ -50,6 +55,8 @@ export type Tool =
   | 'add-pillar'
   | 'add-inventory'
   | 'add-opening'
+  | 'add-electrical'
+  | 'add-note'
   | 'calibrate';
 
 /** Two clicks on the underlay that span a known real-world distance. */
@@ -112,6 +119,8 @@ interface PlannerState {
   rackBuilder: { editId: string | null } | null;
   /** Kind of door/opening/window the next click on a wall places. */
   pendingOpening: OpeningKind | null;
+  /** Kind of electrical point the next click places. */
+  pendingElectrical: ElectricalKind | null;
   /** In-progress underlay scale calibration; null outside the calibrate tool. */
   calibration: Calibration | null;
   /** Digits typed while drawing: the next wall's length in mm. */
@@ -141,6 +150,7 @@ interface PlannerState {
   setSelection: (s: Selection | null) => void;
   pickAsset: (assetId: string) => void;
   pickOpening: (kind: OpeningKind) => void;
+  pickElectrical: (kind: ElectricalKind) => void;
 
   // plan underlay
   setUnderlay: (u: PlanUnderlay | null) => void;
@@ -207,6 +217,17 @@ interface PlannerState {
   moveOpening: (id: string, p: Point, grab?: number) => void;
   /** Drag one end of an opening to change its width; the other end stays. */
   resizeOpening: (id: string, end: 'start' | 'end', p: Point) => void;
+
+  // electrical points and plan notes
+  /** Place the pending electrical point on the wall nearest `p` (floor boxes: at `p`). */
+  addElectricalAt: (p: Point) => void;
+  updateElectrical: (id: string, patch: Partial<Omit<ElectricalPoint, 'id'>>) => void;
+  /** Drag along (or onto another) wall; floor boxes move freely. */
+  moveElectrical: (id: string, p: Point) => void;
+  addNoteAt: (p: Point) => void;
+  updateNote: (id: string, patch: Partial<Omit<PlanNote, 'id'>>) => void;
+  /** Show or hide the note's arrow. */
+  toggleNoteArrow: (id: string) => void;
   /** Objects: rotate by `delta`. Doors: positive flips the hinge side, negative the swing. */
   rotateSelected: (delta: number) => void;
   duplicateSelected: () => void;
@@ -334,7 +355,9 @@ function pruneSelection(s: Draft<PlannerState>): void {
     (sel.kind === 'corner' && !!project.room?.corners.some((c) => c.id === sel.id)) ||
     (sel.kind === 'room' && !!project.room) ||
     (sel.kind === 'opening' && !!project.room?.openings.some((o) => o.id === sel.id)) ||
-    (sel.kind === 'wall' && !!project.room?.corners.some((c) => c.id === sel.id));
+    (sel.kind === 'wall' && !!project.room?.corners.some((c) => c.id === sel.id)) ||
+    (sel.kind === 'electrical' && !!project.electrical?.some((e) => e.id === sel.id)) ||
+    (sel.kind === 'note' && !!project.annotations?.some((n) => n.id === sel.id));
   if (!exists) s.selection = null;
 }
 
@@ -390,6 +413,7 @@ export const usePlannerStore = create<PlannerState>()(
         pendingRack: null,
         rackBuilder: null,
         pendingOpening: null,
+        pendingElectrical: null,
         notice: null,
         cloud: null,
         cloudStatus: 'idle',
@@ -414,6 +438,7 @@ export const usePlannerStore = create<PlannerState>()(
               s.pendingRack = null;
             }
             if (t !== 'add-opening') s.pendingOpening = null;
+            if (t !== 'add-electrical') s.pendingElectrical = null;
             if (t !== 'calibrate') s.calibration = null;
             if (t !== 'draw-room') s.drawLength = '';
           }),
@@ -423,6 +448,16 @@ export const usePlannerStore = create<PlannerState>()(
             s.pendingAssetRef = assetId;
             s.pendingRack = null;
             s.tool = 'add-inventory';
+            s.selection = null;
+          }),
+
+        pickElectrical: (kind) =>
+          set((s) => {
+            s.pendingElectrical = kind;
+            s.pendingAssetRef = null;
+            s.pendingRack = null;
+            s.pendingOpening = null;
+            s.tool = 'add-electrical';
             s.selection = null;
           }),
 
@@ -549,6 +584,134 @@ export const usePlannerStore = create<PlannerState>()(
             record(s);
             o.width = mm(width);
             o.offset = (fixed + (dir * width) / 2) as Mm;
+            touch(s.project);
+          }),
+
+        addElectricalAt: (p) =>
+          set((s) => {
+            const kind = s.pendingElectrical;
+            if (!kind) return;
+            const t = electricalType(kind);
+            const room = s.project.room;
+            let point: ElectricalPoint | null = null;
+            const id = newId('el');
+            if (t.mount === 'floor') {
+              const at = maybeSnap(s.view, p);
+              point = { id, kind, position: { x: at.x as Mm, y: at.y as Mm }, height: mm(0) };
+            } else {
+              const anchor = room ? wallAnchorAt(room, p, openingReach(s.view.zoom)) : null;
+              if (!anchor) {
+                s.notice = info(
+                  room?.closed
+                    ? `Click on a wall to place the ${t.name.toLowerCase()}.`
+                    : 'Draw and close the room first — wall points go on its walls.',
+                );
+                return;
+              }
+              point = { id, kind, ...anchor, height: mm(t.height) };
+            }
+            record(s);
+            (s.project.electrical ??= []).push(point);
+            s.selection = { kind: 'electrical', id };
+            s.tool = 'select';
+            s.pendingElectrical = null;
+            s.notice = null;
+            touch(s.project);
+          }),
+
+        updateElectrical: (id, patch) =>
+          set((s) => {
+            const e = s.project.electrical?.find((x) => x.id === id);
+            if (!e) return;
+            record(s);
+            const wasFloor = electricalType(e.kind).mount === 'floor';
+            Object.assign(e, patch);
+            const isFloor = electricalType(e.kind).mount === 'floor';
+            // Changing between a wall point and a floor box moves it accordingly.
+            if (isFloor !== wasFloor) {
+              const a = electricalAnchor(s.project.room, { ...e, position: wasFloor ? e.position : undefined });
+              if (isFloor && a) {
+                e.position = {
+                  x: (a.point.x + a.nx * 300) as Mm,
+                  y: (a.point.y + a.ny * 300) as Mm,
+                };
+                delete e.wallStartCornerId;
+                delete e.offset;
+                e.height = mm(0);
+              } else if (!isFloor && e.position && s.project.room) {
+                const anchor = wallAnchorAt(s.project.room, e.position, Infinity);
+                if (anchor) {
+                  Object.assign(e, anchor);
+                  delete e.position;
+                  e.height = mm(electricalType(e.kind).height);
+                }
+              }
+            }
+            if (e.offset !== undefined && s.project.room && e.wallStartCornerId) {
+              const index = s.project.room.corners.findIndex((c) => c.id === e.wallStartCornerId);
+              const w = wallFrame(s.project.room, index);
+              if (w) e.offset = clampToWall(w.length, s.project.room.wallThickness, e.offset) as Mm;
+            }
+            touch(s.project);
+          }),
+
+        moveElectrical: (id, p) =>
+          set((s) => {
+            const e = s.project.electrical?.find((x) => x.id === id);
+            const room = s.project.room;
+            if (!e) return;
+            if (e.position) {
+              record(s);
+              e.position = { x: p.x, y: p.y };
+              touch(s.project);
+              return;
+            }
+            if (!room) return;
+            // Stay on the current wall while the pointer is near it.
+            const current = room.corners.findIndex((c) => c.id === e.wallStartCornerId);
+            const onCurrent = projectOnWall(room, current, p);
+            const w = wallFrame(room, current);
+            let anchor: { wallStartCornerId: string; offset: Mm } | null;
+            if (onCurrent && w && onCurrent.distance <= openingReach(s.view.zoom)) {
+              anchor = {
+                wallStartCornerId: e.wallStartCornerId!,
+                offset: Math.round(clampToWall(w.length, room.wallThickness, onCurrent.along)) as Mm,
+              };
+            } else {
+              anchor = wallAnchorAt(room, p, Infinity);
+            }
+            if (!anchor) return;
+            record(s);
+            Object.assign(e, anchor);
+            touch(s.project);
+          }),
+
+        addNoteAt: (p) =>
+          set((s) => {
+            record(s);
+            const id = newId('note');
+            (s.project.annotations ??= []).push({ id, position: { x: p.x, y: p.y }, text: '' });
+            s.selection = { kind: 'note', id };
+            s.tool = 'select';
+            touch(s.project);
+          }),
+
+        updateNote: (id, patch) =>
+          set((s) => {
+            const n = s.project.annotations?.find((x) => x.id === id);
+            if (!n) return;
+            record(s);
+            Object.assign(n, patch);
+            touch(s.project);
+          }),
+
+        toggleNoteArrow: (id) =>
+          set((s) => {
+            const n = s.project.annotations?.find((x) => x.id === id);
+            if (!n) return;
+            record(s);
+            if (n.target) delete n.target;
+            else n.target = { x: (n.position.x + 1000) as Mm, y: (n.position.y - 800) as Mm };
             touch(s.project);
           }),
 
@@ -810,6 +973,14 @@ export const usePlannerStore = create<PlannerState>()(
               id,
               Math.hypot(snapped.x - start.x, snapped.y - start.y),
             );
+            if (s.project.electrical) {
+              s.project.electrical = reanchorAfterInsert(
+                s.project.electrical,
+                afterCornerId,
+                id,
+                Math.hypot(snapped.x - start.x, snapped.y - start.y),
+              );
+            }
             // Both halves of a split wall keep its height and look.
             const style = room.walls?.[afterCornerId];
             if (style) room.walls![id] = { ...style };
@@ -827,10 +998,11 @@ export const usePlannerStore = create<PlannerState>()(
             const before = get().project.room!;
             room.corners = room.corners.filter((c) => c.id !== cornerId);
             if (room.walls?.[cornerId]) delete room.walls[cornerId];
-            room.openings = reanchorByPosition(before, {
-              ...before,
-              corners: before.corners.filter((c) => c.id !== cornerId),
-            });
+            const after = { ...before, corners: before.corners.filter((c) => c.id !== cornerId) };
+            room.openings = reanchorByPosition(before, after);
+            if (s.project.electrical) {
+              s.project.electrical = reanchorElectrical(get().project.electrical ?? [], before, after);
+            }
             if (s.selection?.kind === 'corner' && s.selection.id === cornerId) {
               s.selection = null;
             }
@@ -1066,6 +1238,14 @@ export const usePlannerStore = create<PlannerState>()(
               if (!room?.openings.some((x) => x.id === sel.id)) return;
               record(s);
               room.openings = room.openings.filter((x) => x.id !== sel.id);
+            } else if (sel.kind === 'electrical') {
+              if (!s.project.electrical?.some((x) => x.id === sel.id)) return;
+              record(s);
+              s.project.electrical = s.project.electrical.filter((x) => x.id !== sel.id);
+            } else if (sel.kind === 'note') {
+              if (!s.project.annotations?.some((x) => x.id === sel.id)) return;
+              record(s);
+              s.project.annotations = s.project.annotations.filter((x) => x.id !== sel.id);
             } else {
               return;
             }

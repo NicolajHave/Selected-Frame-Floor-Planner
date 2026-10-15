@@ -1,5 +1,5 @@
 import type { Mm } from './units';
-import type { RoomPolygon, Pillar, InventoryItem } from './objects';
+import type { RoomPolygon, Pillar, InventoryItem, ElectricalPoint, PlanNote } from './objects';
 import type { Point } from './geometry';
 
 /**
@@ -59,6 +59,10 @@ export interface Project {
   minAisle?: Mm;
   /** Free text for the PDF's "Notes for this draft". */
   notes?: string;
+  /** Sockets, data, logo power… for the electrical plan. */
+  electrical?: ElectricalPoint[];
+  /** Notes written on the plan. */
+  annotations?: PlanNote[];
 }
 
 /** Shape produced by the export action. Includes derived metrics so
