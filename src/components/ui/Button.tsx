@@ -12,7 +12,7 @@ interface Props extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 
 const base =
   'inline-flex items-center gap-1.5 rounded-[2px] px-3 py-1.5 text-[12px] tracking-tightish ' +
-  'transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed select-none ' +
+  'whitespace-nowrap transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed select-none ' +
   'border';
 
 const styles: Record<Variant, string> = {
@@ -31,9 +31,10 @@ export const Button = forwardRef<HTMLButtonElement, Props>(function Button(
       ref={ref}
       className={clsx(
         base,
-        styles[variant],
-        active && variant === 'ghost' && 'bg-ink-900 text-wall-50',
-        active && variant === 'subtle' && 'bg-ink-900 text-wall-50 border-ink-900',
+        // Active replaces the variant's colours rather than competing with them.
+        active && (variant === 'ghost' || variant === 'subtle')
+          ? 'bg-ink-900 text-wall-50 border-ink-900 hover:bg-ink-800'
+          : styles[variant],
         className,
       )}
       {...rest}

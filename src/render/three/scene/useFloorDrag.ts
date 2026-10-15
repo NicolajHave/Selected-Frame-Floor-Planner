@@ -8,7 +8,7 @@ import type { Point } from '@/model/geometry';
 import type { Mm } from '@/model/units';
 import type { SelectionKind } from '@/model/objects';
 import { usePlannerStore } from '@/store/plannerStore';
-import { MM } from '../ThreeCanvas';
+import { MM } from '../units';
 
 const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
@@ -47,6 +47,7 @@ export function useFloorDrag(
       e.stopPropagation();
       const store = usePlannerStore.getState();
       store.setSelection({ kind, id });
+      if (store.readOnly) return; // viewers can inspect, not move
       const hit = floorPoint(e.ray);
       if (!hit) return;
       drag.current = { dx: hit.x - position.x, dy: hit.y - position.y };
@@ -79,7 +80,7 @@ export function useFloorDrag(
     onPointerOver: (e: ThreeEvent<PointerEvent>) => {
       if (!isSelectTool()) return;
       e.stopPropagation();
-      if (!drag.current) gl.domElement.style.cursor = 'grab';
+      if (!drag.current) gl.domElement.style.cursor = usePlannerStore.getState().readOnly ? 'pointer' : 'grab';
     },
     onPointerOut: () => {
       if (!drag.current) gl.domElement.style.cursor = '';

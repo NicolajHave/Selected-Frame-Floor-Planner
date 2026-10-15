@@ -5,6 +5,7 @@ import type { ViewState } from '@/model/project';
 import { formatLength } from '@/model/units';
 import { pxStroke } from './viewport';
 import { RotateHandle } from './Handles';
+import { rackSlots } from '@/lib/racks';
 
 interface Props {
   item: InventoryItem;
@@ -42,6 +43,23 @@ export function Inventory({ item, view, selected, onPointerDown, onRotateHandleD
           strokeWidth={stroke}
           strokeDasharray={selected ? undefined : `${pxStroke(view, 3)} ${pxStroke(view, 3)}`}
         />
+        {item.modules?.length ? (
+          // Wall rack: a line between units, and each unit's own front.
+          <g pointerEvents="none" stroke="var(--inv-stroke)" strokeWidth={pxStroke(view, 1)}>
+            {rackSlots(item.modules).map((slot, i) => {
+              const left = item.position.x + slot.x - slot.asset.size.width / 2;
+              const front = y + slot.asset.size.depth;
+              return (
+                <g key={i}>
+                  {i > 0 && <line x1={left} y1={y} x2={left} y2={y + depth} />}
+                  {slot.asset.size.depth < depth - 1 && (
+                    <line x1={left} y1={front} x2={left + slot.asset.size.width} y2={front} strokeDasharray={`${pxStroke(view, 2)} ${pxStroke(view, 2)}`} />
+                  )}
+                </g>
+              );
+            })}
+          </g>
+        ) : null}
         {showLabel && (
           <g pointerEvents="none">
             <text
@@ -62,6 +80,7 @@ export function Inventory({ item, view, selected, onPointerDown, onRotateHandleD
               fontFamily="var(--font-sans)"
               fill="var(--inv-stroke)"
             >
+              {item.modules?.length ? `${item.modules.length} units · ` : ''}
               {formatLength(width)} × {formatLength(depth)}
             </text>
           </g>

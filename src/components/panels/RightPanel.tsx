@@ -7,6 +7,7 @@ import { PillarProperties } from './PillarProperties';
 import { InventoryProperties } from './InventoryProperties';
 import { RoomProperties } from './RoomProperties';
 import { OpeningProperties } from './OpeningProperties';
+import { WallProperties } from './WallProperties';
 
 export function RightPanel() {
   const selection = usePlannerStore((s) => s.selection);
@@ -19,6 +20,7 @@ export function RightPanel() {
     case 'inventory': return <InventoryProperties id={selection.id} />;
     case 'room':      return <RoomProperties />;
     case 'opening':   return <OpeningProperties id={selection.id} />;
+    case 'wall':      return <WallProperties cornerId={selection.id} />;
     default:          return <EmptySelection />;
   }
 }

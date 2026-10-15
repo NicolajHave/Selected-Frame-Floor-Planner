@@ -9,6 +9,7 @@ export function ToolOverlay() {
   const tool = usePlannerStore((s) => s.tool);
   const room = usePlannerStore((s) => s.project.room);
   const pendingAssetRef = usePlannerStore((s) => s.pendingAssetRef);
+  const rack = usePlannerStore((s) => s.pendingRack);
   const calibration = usePlannerStore((s) => s.calibration);
   const drawLength = usePlannerStore((s) => s.drawLength);
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
@@ -45,7 +46,9 @@ export function ToolOverlay() {
     hint = 'Click anywhere to drop a pillar.';
   } else if (tool === 'add-inventory') {
     const asset = findAsset(pendingAssetRef ?? undefined);
-    hint = asset
+    hint = rack
+      ? `Click next to a wall to place ${rack.name} — it snaps to the wall as one piece. Hold Alt to place freely.`
+      : asset
       ? `Click to place ${asset.name}.`
       : 'Click anywhere to drop an inventory placeholder.';
   }

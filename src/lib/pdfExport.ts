@@ -10,16 +10,27 @@ import { openingSpan, wallFrame } from '@/geometry/openings';
 import { polygonArea } from '@/geometry/polygon';
 import { wallLengths } from '@/geometry/walls';
 import { findAsset } from './assetCatalog';
+import { rackContents } from './racks';
+import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { buildPartsList, type PartsList } from './partsList';
 import { DEFAULT_MIN_AISLE, innerOutline, layoutIssues } from './layout';
+import { elevationShots, overviewShots, type ElevationSpec, type ViewSpec } from './views';
+import { INK, MARGIN, MUTED, PAGE_H, PAGE_W, SAGE, fit, font, num, today } from './pdf/style';
+import {
+  VIEW_BOX,
+  drawConceptPage,
+  drawCover,
+  drawElevationPages,
+  drawViewPage,
+  elevationLayout,
+  numberPages,
+  pageFrame,
+  type DocInfo,
+} from './pdf/pages';
 
 /** Standard architectural scales, finest first. */
 const SCALES = [20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 750, 1000];
 
-// A3 landscape, mm
-const PAGE_W = 420;
-const PAGE_H = 297;
-const MARGIN = 12;
 const COLUMN = 92; // right-hand legend / title block
 const GUTTER = 8;
 const HEADER = 14;
@@ -27,38 +38,95 @@ const FOOTER = 14;
 /** Paper space around the plan for wall dimensions. */
 const DIM_SPACE = 14;
 
-const INK: [number, number, number] = [22, 24, 26];
-const MUTED: [number, number, number] = [107, 112, 119];
 const WALL: [number, number, number] = [43, 46, 49];
-const SAGE: [number, number, number] = [115, 126, 98];
 const ITEM_FILL: [number, number, number] = [233, 235, 227];
 const FLOOR: [number, number, number] = [246, 244, 238];
 
 const pt = (x: number, y: number): Point => ({ x: x as Mm, y: y as Mm });
 
-/** Danish number formatting; `fixed` always shows `digits` decimals. */
-const num = (n: number, digits = 0, fixed = false) =>
-  n.toLocaleString('da-DK', { maximumFractionDigits: digits, minimumFractionDigits: fixed ? digits : 0 });
+/** Pixels per paper mm for the 3D pictures (≈ 120 dpi). */
+const PX_PER_MM = 4.8;
 
 export interface PdfOptions {
   /** Draw the imported plan faintly under the drawing. */
   includeUnderlay: boolean;
+  /** The plan's live 3D view, printed on the cover with a QR code. */
+  liveUrl?: string | null;
+  /** 3D views, an isometric and wall elevations (rendered with WebGL). */
+  views?: boolean;
+  onProgress?: (message: string) => void;
 }
 
-/** Builds the A3 plan PDF: page 1 the scaled drawing, then parts list and checks. */
+/**
+ * Builds the A3 presentation PDF: cover (with the live 3D link), concept
+ * and site readiness with the draft's notes, 3D views from four sides, an
+ * isometric, the plan to scale, an elevation of every wall with heights,
+ * then the parts list and layout check.
+ */
 export async function buildPlanPdf(project: Project, opts: PdfOptions): Promise<JsPdf> {
+  const progress = opts.onProgress ?? (() => {});
   const { jsPDF, GState } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3', compress: true });
   doc.setProperties({ title: `${project.name} — shop plan`, creator: 'Selected Frame Shop Planner' });
+  const info: DocInfo = { name: project.name || 'Untitled plan', date: today(), liveUrl: opts.liveUrl ?? null };
 
   const parts = buildPartsList(project.inventory);
-  const numberOf = new Map<string, number>();
-  parts.rows.forEach((r, i) => r.itemIds.forEach((id) => numberOf.set(id, i + 1)));
+  // Fixtures are numbered by parts-list row; wall racks are R1, R2, …
+  const numberOf = new Map<string, string>();
+  const racks = project.inventory.filter((it) => it.modules?.length);
+  racks.forEach((it, k) => numberOf.set(it.id, `R${k + 1}`));
+  parts.rows.forEach((r, i) => r.itemIds.forEach((id) => numberOf.has(id) || numberOf.set(id, String(i + 1))));
 
-  drawPlanPage(doc, project, parts, numberOf, opts, GState);
-  drawListPages(doc, project, parts);
+  // Pictures first: the slow part, and it can fail without WebGL.
+  const extraNotes: string[] = [];
+  let overview: ViewSpec[] = [];
+  let elevations: ElevationSpec[] = [];
+  let images: Record<string, string> = {};
+  const layout = elevationLayout(project);
+  if (opts.views !== false) {
+    overview = overviewShots(project, VIEW_BOX.w / VIEW_BOX.h);
+    elevations = elevationShots(project, layout.imgW / layout.imgH);
+    if (overview.length + elevations.length > 0) {
+      progress('Rendering 3D views…');
+      try {
+        const { renderShots } = await import('@/render/three/offscreen');
+        images = await renderShots(project, [
+          ...overview.map((v) => ({ spec: v.shot, width: px(VIEW_BOX.w), height: px(VIEW_BOX.h) })),
+          ...elevations.map((v) => ({ spec: v.shot, width: px(layout.imgW), height: px(layout.imgH) })),
+        ]);
+      } catch (e) {
+        console.warn('3D pictures failed', e);
+        extraNotes.push('The 3D pictures could not be rendered in this browser; open the live link to see the shop in 3D.');
+        overview = [];
+        elevations = [];
+      }
+    }
+  }
+
+  progress('Building PDF…');
+  let qr = null;
+  if (info.liveUrl) {
+    const QR = await import('qrcode');
+    qr = QR.create(info.liveUrl, { errorCorrectionLevel: 'M' }).modules;
+  }
+  drawCover(doc, info, qr);
+  doc.addPage('a3', 'landscape');
+  drawConceptPage(doc, info, project, extraNotes);
+
+  for (const v of overview) {
+    doc.addPage('a3', 'landscape');
+    drawViewPage(doc, info, v.shot.kind === 'ortho' ? 'Isometric View' : '3D View', images[v.shot.id]);
+  }
+
+  doc.addPage('a3', 'landscape');
+  drawPlanPage(doc, info, project, parts, numberOf, opts, GState);
+  drawElevationPages(doc, info, elevations, images, layout);
+  drawListPages(doc, info, project, parts);
+  numberPages(doc);
   return doc;
 }
+
+const px = (paperMm: number) => Math.round(paperMm * PX_PER_MM);
 
 export async function downloadPlanPdf(project: Project, opts: PdfOptions): Promise<void> {
   const doc = await buildPlanPdf(project, opts);
@@ -74,9 +142,10 @@ type GStateCtor = typeof import('jspdf').GState;
 
 function drawPlanPage(
   doc: JsPdf,
+  info: DocInfo,
   project: Project,
   parts: PartsList,
-  numberOf: Map<string, number>,
+  numberOf: Map<string, string>,
   opts: PdfOptions,
   GState: GStateCtor,
 ) {
@@ -88,15 +157,8 @@ function drawPlanPage(
     h: PAGE_H - 2 * MARGIN - HEADER - FOOTER,
   };
 
-  // Header
-  doc.setTextColor(...INK);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text(project.name || 'Untitled plan', MARGIN, MARGIN + 6);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.setTextColor(...MUTED);
-  doc.text(`Shop plan · ${new Date().toLocaleDateString('da-DK')} · Selected Frame Shop Planner`, MARGIN, MARGIN + 11);
+  // The title block in the column carries the brand.
+  pageFrame(doc, info, 'Plan View', { brand: false });
 
   // World extent of everything that gets drawn
   const pts: Point[] = [];
@@ -155,6 +217,7 @@ function drawPlanPage(
     drawWalls(doc, room, P);
     drawOpenings(doc, room, P, scale);
     drawWallDimensions(doc, room, P, scale);
+    drawWallNumbers(doc, room, P);
   } else if (room) {
     doc.setDrawColor(...WALL);
     doc.setLineWidth(0.5);
@@ -178,7 +241,7 @@ function drawPlanPage(
   // Numbers last so they sit on top of everything.
   for (const it of project.inventory) {
     const n = numberOf.get(it.id);
-    if (n !== undefined) badge(doc, X(it.position.x), Y(it.position.y), String(n));
+    if (n !== undefined) badge(doc, X(it.position.x), Y(it.position.y), n);
   }
 
   drawScaleBar(doc, scale, area.x, PAGE_H - MARGIN - 4);
@@ -225,11 +288,22 @@ function drawWalls(doc: JsPdf, room: RoomPolygon, P: (p: Point) => readonly [num
       .map((o) => openingSpan(room, o))
       .filter((s): s is NonNullable<typeof s> => !!s)
       .sort((a, b) => a.offset - b.offset);
+    const clear = !!wallStyle(room, i).transparent;
     const piece = (from: number, to: number) => {
       if (to - from < 1) return;
       const at = (d: number, side: number) =>
         pt(w.a.x + w.ux * d + w.nx * half * side, w.a.y + w.uy * d + w.ny * half * side);
-      polygon(doc, [at(from, -1), at(to, -1), at(to, 1), at(from, 1)].map(P), WALL, null);
+      if (!clear) {
+        polygon(doc, [at(from, -1), at(to, -1), at(to, 1), at(from, 1)].map(P), WALL, null);
+        return;
+      }
+      // See-through wall: outline only, dashed.
+      doc.setDrawColor(...WALL);
+      doc.setLineWidth(0.2);
+      doc.setLineDashPattern([1.2, 0.8], 0);
+      doc.line(...P(at(from, -1)), ...P(at(to, -1)));
+      doc.line(...P(at(from, 1)), ...P(at(to, 1)));
+      doc.setLineDashPattern([], 0);
     };
     let cursor = -half;
     for (const s of holes) {
@@ -326,6 +400,34 @@ function drawWallDimensions(doc: JsPdf, room: RoomPolygon, P: (p: Point) => read
   });
 }
 
+/** The room's wall height, or the range when walls differ. */
+function wallHeightLabel(room: RoomPolygon): string {
+  const hs = room.corners.map((_, i) => wallHeightOf(room, i));
+  const lo = Math.min(...hs);
+  const hi = Math.max(...hs);
+  return lo === hi ? `${num(lo)} mm` : `${num(lo)}–${num(hi)} mm`;
+}
+
+/** "Wall n" just inside each wall, matching the elevation pages. */
+function drawWallNumbers(doc: JsPdf, room: RoomPolygon, P: (p: Point) => readonly [number, number]) {
+  room.corners.forEach((_, i) => {
+    const w = wallFrame(room, i);
+    if (!w || w.length < 1000) return;
+    const a = P(w.a);
+    const b = P(w.b);
+    const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 1e-6) return;
+    // Paper-space inward normal from the paper-space wall direction.
+    const n = P(pt(w.a.x + w.nx * 1000, w.a.y + w.ny * 1000));
+    const nl = Math.hypot(n[0] - a[0], n[1] - a[1]);
+    const nx = (n[0] - a[0]) / nl;
+    const ny = (n[1] - a[1]) / nl;
+    const t = (room.wallThickness / 2) * (nl / 1000) + 3.2;
+    font(doc, 6.5, 'bold', SAGE);
+    doc.text(`W${i + 1}`, (a[0] + b[0]) / 2 + nx * t, (a[1] + b[1]) / 2 + ny * t, { align: 'center', baseline: 'middle' });
+  });
+}
+
 function drawScaleBar(doc: JsPdf, scale: number, x: number, y: number) {
   // Longest round length that stays under ~70 mm of paper.
   const candidates = [500, 1000, 2000, 5000, 10000, 20000, 50000];
@@ -362,6 +464,15 @@ function drawColumn(doc: JsPdf, project: Project, parts: PartsList, scale: numbe
 
   const titleTop = PAGE_H - MARGIN - 62;
   const rowH = 6.2;
+  const racks = project.inventory.filter((it) => it.modules?.length);
+  racks.forEach((it, k) => {
+    badge(doc, x + 2.4, y - 1, `R${k + 1}`);
+    font(doc, 8);
+    doc.text(fit(doc, it.name, COLUMN - 8), x + 7, y - 1.6);
+    font(doc, 6, 'normal', MUTED);
+    doc.text(fit(doc, rackContents(it.modules!), COLUMN - 8), x + 7, y + 1.2);
+    y += rowH;
+  });
   const fits = Math.max(0, Math.floor((titleTop - y - 8) / rowH));
   const shown = parts.rows.length > fits ? fits - 1 : parts.rows.length;
   parts.rows.slice(0, Math.max(0, shown)).forEach((r, i) => {
@@ -396,7 +507,7 @@ function drawColumn(doc: JsPdf, project: Project, parts: PartsList, scale: numbe
     ['Scale', scale ? `1:${scale} (A3)` : '—'],
     ['Floor area', room?.closed ? `${num(areaM2, 2, true)} m²` : '—'],
     ['Wall length', room ? `${num(walls / 1000, 2, true)} m` : '—'],
-    ['Wall height', room ? `${num(room.wallHeight)} mm` : '—'],
+    ['Wall height', room ? wallHeightLabel(room) : '—'],
     ['Fixtures', `${parts.totalUnits} units · ${num(parts.totalWeightKg, 1)} kg`],
     ['Hanger capacity', parts.totalHangers ? num(parts.totalHangers) : '—'],
   ];
@@ -419,25 +530,23 @@ function drawColumn(doc: JsPdf, project: Project, parts: PartsList, scale: numbe
   doc.text('Selected Frame · Shop Planner', x + 3, PAGE_H - MARGIN - 2.5);
 }
 
-/** Truncate text with an ellipsis to fit `width` mm at the current font. */
-function fit(doc: JsPdf, text: string, width: number): string {
-  if (doc.getTextWidth(text) <= width) return text;
-  let t = text;
-  while (t.length > 1 && doc.getTextWidth(`${t}…`) > width) t = t.slice(0, -1);
-  return `${t}…`;
-}
-
 // ---------------------------------------------------------------------------
 // Page 2+: parts list, layout check, notes
 // ---------------------------------------------------------------------------
 
-function drawListPages(doc: JsPdf, project: Project, parts: PartsList) {
-  doc.addPage('a3', 'landscape');
-  let y = MARGIN + 6;
+function drawListPages(doc: JsPdf, info: DocInfo, project: Project, parts: PartsList) {
+  const TOP = MARGIN + 24;
+  const BOTTOM = PAGE_H - MARGIN - 10;
+  const page = () => {
+    doc.addPage('a3', 'landscape');
+    pageFrame(doc, info, 'Parts list & checks');
+  };
+  page();
+  let y = TOP;
   const newPageIfNeeded = (need: number) => {
-    if (y + need > PAGE_H - MARGIN) {
-      doc.addPage('a3', 'landscape');
-      y = MARGIN + 6;
+    if (y + need > BOTTOM) {
+      page();
+      y = TOP;
     }
   };
   const heading = (text: string) => {

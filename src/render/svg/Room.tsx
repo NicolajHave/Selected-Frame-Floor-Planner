@@ -8,12 +8,13 @@ import { signedArea } from '@/geometry/polygon';
 interface Props {
   room: RoomPolygon;
   view: ViewState;
-  selectedKind?: 'corner' | 'room' | null;
+  selectedKind?: 'corner' | 'room' | 'wall' | null;
   selectedId?: string | null;
   /** Number each wall (matches the wall list in the room panel). */
   showWallNumbers?: boolean;
   highlightedWall?: number | null;
   onPointerDownEdge: (afterCornerId: string, e: React.PointerEvent<SVGElement>) => void;
+  onDoubleClickEdge?: (afterCornerId: string, e: React.MouseEvent<SVGElement>) => void;
   onPointerDownCorner: (cornerId: string, e: React.PointerEvent<SVGElement>) => void;
   onPointerDownRoom: (e: React.PointerEvent<SVGElement>) => void;
 }
@@ -26,6 +27,7 @@ export function Room({
   showWallNumbers,
   highlightedWall,
   onPointerDownEdge,
+  onDoubleClickEdge,
   onPointerDownCorner,
   onPointerDownRoom,
 }: Props) {
@@ -47,7 +49,15 @@ export function Room({
   const polyPoints = corners.map((c) => `${c.point.x},${c.point.y}`).join(' ');
 
   // Edges to render: closed → all, open → between consecutive corners only.
-  const edges: { fromId: string; toId: string; x1: number; y1: number; x2: number; y2: number }[] = [];
+  const edges: {
+    fromId: string;
+    toId: string;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    transparent: boolean;
+  }[] = [];
   const last = closed ? corners.length : corners.length - 1;
   for (let i = 0; i < last; i++) {
     const a = corners[i]!;
@@ -59,6 +69,7 @@ export function Room({
       y1: a.point.y,
       x2: b.point.x,
       y2: b.point.y,
+      transparent: !!room.walls?.[a.id]?.transparent,
     });
   }
 
@@ -86,17 +97,37 @@ export function Room({
             y2={e.y2}
             stroke="transparent"
             strokeWidth={edgeHit}
-            style={{ cursor: 'copy' }}
+            style={{ cursor: 'pointer' }}
+            data-wall={e.fromId}
             onPointerDown={(ev) => onPointerDownEdge(e.fromId, ev)}
-          />
+            onDoubleClick={(ev) => onDoubleClickEdge?.(e.fromId, ev)}
+          >
+            <title>Click to select the wall · double-click to add a corner</title>
+          </line>
+          {selectedKind === 'wall' && selectedId === e.fromId && (
+            <line
+              x1={e.x1}
+              y1={e.y1}
+              x2={e.x2}
+              y2={e.y2}
+              stroke="var(--selection)"
+              strokeOpacity={0.35}
+              strokeWidth={pxStroke(view, 8)}
+              strokeLinecap="round"
+              pointerEvents="none"
+            />
+          )}
           <line
             x1={e.x1}
             y1={e.y1}
             x2={e.x2}
             y2={e.y2}
-            stroke="var(--wall-stroke)"
+            stroke={selectedKind === 'wall' && selectedId === e.fromId ? 'var(--selection)' : 'var(--wall-stroke)'}
             strokeWidth={stroke}
             strokeLinecap="square"
+            // See-through walls (glass or an open side) are dashed.
+            strokeDasharray={e.transparent ? `${pxStroke(view, 7)} ${pxStroke(view, 5)}` : undefined}
+            strokeOpacity={e.transparent ? 0.6 : 1}
             pointerEvents="none"
           />
         </g>

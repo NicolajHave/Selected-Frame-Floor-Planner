@@ -9,8 +9,11 @@ export interface Bounds {
 
 export const deg = (r: number) => Math.round(((r * 180) / Math.PI) * 10) / 10;
 
-/** Load the planner with an empty autosave. */
+/** Load the planner with an empty autosave. Real Supabase traffic is blocked. */
 export async function openFresh(page: Page) {
+  // Tests must never reach the shared database; FakeCloud.install() routes
+  // registered after this take precedence.
+  await page.route(/supabase\.co/, (route) => route.abort());
   await page.goto('/');
   await page.evaluate(() => localStorage.clear());
   await page.reload();

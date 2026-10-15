@@ -118,9 +118,15 @@ interface RoomPolygon {
   id: string;
   corners: Corner[];               // ordered, closed implicitly
   wallThickness: Mm;               // for 3D extrusion
-  wallHeight: Mm;                  // for 3D extrusion
+  wallHeight: Mm;                  // default height of every wall
   closed: boolean;
   openings: Opening[];             // doors, passages, windows
+  walls?: Record<string, WallStyle>; // per wall, keyed by its start corner id
+}
+
+interface WallStyle {
+  height?: Mm;                     // this wall's own height
+  transparent?: boolean;           // glass / open side: see-through in 3D, dashed in 2D
 }
 
 interface Opening {
@@ -152,10 +158,18 @@ interface InventoryItem {
   name: string;                    // user label
   category?: string;
   assetRef?: string;               // SIS catalog id → model, mounting, weight
+  modules?: string[];              // wall rack: catalog wall units, left → right
   position: Point;
   size: Size3D;
   rotation: Radians;
 }
+
+Openings are kept between the inside faces of the corners and clear of
+each other (`freeStretches` / `fitOpening` in `geometry/openings.ts`);
+placing, dragging, resizing and typing a width all go through them. A
+wall rack is one inventory item whose size is its units' combined
+footprint (`lib/racks.ts`): it snaps to walls like a wall unit, renders
+each unit's model in 3D, and the parts list counts its units.
 
 interface PlanUnderlay {           // imported PDF page / image to trace
   src: string;                     // JPEG data URL, so files are self-contained
@@ -322,8 +336,21 @@ A view toggle in the top bar (`2D Plan` / `3D View`) renders
 `<SvgCanvas/>` or `<ThreeCanvas/>` from the same `project` slice. Both
 adapters are thin — all geometry comes from `geometry/` helpers.
 
-The 3D folder ships in MVP as a stub README so the boundary is visible
-in code review.
+The scene itself lives in `render/three/scene/SceneContents.tsx` and is
+shared by two hosts: the interactive `<ThreeCanvas/>` and
+`render/three/offscreen.tsx`, which renders stills for the PDF on a
+detached canvas (`createRoot`, `frameloop: 'never'`, one `advance()` per
+shot). A `SceneModeContext` turns off selection outlines and drag
+handlers for stills, and makes the scene's `Suspense` wait for every
+model so a picture is never taken with placeholders. Cameras for the
+pictures come from `lib/views.ts` (pure, unit-tested): four perspective
+views fitted to the shop's bounding box, an isometric, and one
+orthographic elevation per wall, seen from inside and clipped to the
+1.6 m slice in front of the wall, together with the heights its ladder
+shows.
+
+Walls are grouped per wall; a `useFrame` hides a wall whose outside
+faces the camera (a doll's-house cutaway), in the editor and in stills.
 
 ---
 
@@ -344,7 +371,49 @@ Implementation order, each phase end-to-end usable:
 
 ---
 
-## 7. Testing
+## 7. Cloud plans
+
+Plans can be saved to the shared SELECTED Supabase project, next to the
+other internal Selected apps, and use the same accounts.
+
+**Database** (`supabase/migrations/*_fp_cloud_projects.sql`): three tables,
+`fp_projects` (the plan as JSON plus a `version`), `fp_project_members`
+(email + `editor`/`viewer`) and `fp_share_links` (revocable tokens). The
+tables have RLS on and no policies or grants: clients cannot touch them.
+Everything goes through `fp_*` security-definer functions, each of which
+checks the caller's role (`fp_require`) and that they are a confirmed
+@bestseller.com account. `fp_get_shared_project(token)` is the only
+function open to signed-out visitors. The migration touches nothing
+outside its `fp_` objects.
+
+**Client** (`src/lib/cloud/`): `api.ts` wraps the functions; the Supabase
+client is loaded on demand and keeps its session under its own storage
+key. The store keeps a `cloud` link (project id, version, role, dirty)
+next to the autosaved project. `sync.ts` saves 1.5 s after the last edit
+with the version it last saw; if the database has a newer version,
+`fp_save_project` refuses and the UI offers to load theirs, keep mine
+(overwrite) or save mine as a copy.
+
+**Read-only** (viewer role or `?share=` link): the store's `set` wrapper
+rolls back any change to the project or its history, and the UI hides
+editing tools and disables the panels. A shared link never writes to the
+visitor's own autosave.
+
+**Live link in the PDF** (`lib/cloud/liveLink.ts`): owners and editors
+get the plan's oldest active share link (created on first export), so
+every PDF of a shop carries the same address; unsaved edits are saved
+first. A shared view uses its own token. The URL adds `&view=3d`, which
+the shared view honours. Revoking the link in Share turns off the QR
+codes in PDFs already sent.
+
+**Tests** use `tests/e2e/fakeCloud.ts`, an in-memory stand-in for the auth
+endpoints and the `fp_*` functions with the same rules, wired in with
+`page.route`. `openFresh()` blocks all real Supabase traffic, so tests
+never reach the shared database.
+
+---
+
+## 8. Testing
 
 `npm test` runs two Playwright projects (see `playwright.config.ts`):
 
@@ -361,9 +430,9 @@ two folders.
 
 ---
 
-## 8. Non-goals (MVP)
+## 9. Non-goals (MVP)
 
-Quotes, PDFs, auth, backend, multi-user sync, room drawing in 3D.
+Quotes, real-time co-editing, room drawing in 3D.
 Each is unblocked by the architecture above; none are built.
 
 Shipped since the original MVP scope: the full SIS catalog with generated

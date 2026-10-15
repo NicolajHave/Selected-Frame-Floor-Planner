@@ -1,10 +1,12 @@
 'use client';
 
-import type { Opening, RoomPolygon } from '@/model/objects';
+import type { Opening, OpeningKind, RoomPolygon } from '@/model/objects';
+import type { Mm } from '@/model/units';
 import type { ViewState } from '@/model/project';
 import type { Point } from '@/model/geometry';
 import { formatLength } from '@/model/units';
 import { openingSpan, type OpeningSpan } from '@/geometry/openings';
+import { openingType } from '@/lib/openingTypes';
 import { pxStroke } from './viewport';
 
 /** Matches the canvas background, to cut the opening out of the wall line. */
@@ -15,9 +17,11 @@ interface Props {
   view: ViewState;
   selectedId: string | null;
   onPointerDown: (id: string, e: React.PointerEvent<SVGElement>) => void;
+  /** Drag an end of the selected opening to change its width. */
+  onPointerDownEnd?: (id: string, end: 'start' | 'end', e: React.PointerEvent<SVGElement>) => void;
 }
 
-export function Openings({ room, view, selectedId, onPointerDown }: Props) {
+export function Openings({ room, view, selectedId, onPointerDown, onPointerDownEnd }: Props) {
   return (
     <g data-layer="openings">
       {room.openings.map((o) => {
@@ -32,9 +36,47 @@ export function Openings({ room, view, selectedId, onPointerDown }: Props) {
             view={view}
             selected={o.id === selectedId}
             onPointerDown={(e) => onPointerDown(o.id, e)}
+            onPointerDownEnd={onPointerDownEnd && ((end, e) => onPointerDownEnd(o.id, end, e))}
           />
         );
       })}
+    </g>
+  );
+}
+
+/** Ghost of the opening about to be placed, where a click would put it. */
+export function OpeningPreview({
+  room,
+  view,
+  kind,
+  width,
+  cornerId,
+  offset,
+}: {
+  room: RoomPolygon;
+  view: ViewState;
+  kind: OpeningKind;
+  width: number;
+  cornerId: string;
+  offset: number;
+}) {
+  const t = openingType(kind);
+  const o: Opening = {
+    id: 'preview',
+    kind,
+    wallStartCornerId: cornerId,
+    offset: offset as Mm,
+    width: width as Mm,
+    height: t.height as Mm,
+    sillHeight: t.sillHeight as Mm,
+    hinge: 'start',
+    swing: 'in',
+  };
+  const span = openingSpan(room, o);
+  if (!span) return null;
+  return (
+    <g opacity={0.6} pointerEvents="none" data-opening-preview={kind}>
+      <OpeningSymbol opening={o} span={span} wallThickness={room.wallThickness} view={view} selected />
     </g>
   );
 }
@@ -45,10 +87,11 @@ interface SymbolProps {
   wallThickness: number;
   view: ViewState;
   selected: boolean;
-  onPointerDown: (e: React.PointerEvent<SVGElement>) => void;
+  onPointerDown?: (e: React.PointerEvent<SVGElement>) => void;
+  onPointerDownEnd?: (end: 'start' | 'end', e: React.PointerEvent<SVGElement>) => void;
 }
 
-function OpeningSymbol({ opening: o, span, wallThickness, view, selected, onPointerDown }: SymbolProps) {
+function OpeningSymbol({ opening: o, span, wallThickness, view, selected, onPointerDown, onPointerDownEnd }: SymbolProps) {
   const { p1, p2, nx, ny, width } = span;
   const color = selected ? 'var(--selection)' : 'var(--wall-stroke)';
   const line = pxStroke(view, selected ? 1.5 : 1);
@@ -138,6 +181,31 @@ function OpeningSymbol({ opening: o, span, wallThickness, view, selected, onPoin
           {formatLength(width)}
         </text>
       )}
+
+      {/* Width handles on both ends */}
+      {selected &&
+        onPointerDownEnd &&
+        ([
+          ['start', p1],
+          ['end', p2],
+        ] as const).map(([end, p]) => {
+          const r = pxStroke(view, 5);
+          return (
+            <rect
+              key={end}
+              data-opening-end={end}
+              x={p.x - r}
+              y={p.y - r}
+              width={r * 2}
+              height={r * 2}
+              fill="var(--panel, #fff)"
+              stroke="var(--selection)"
+              strokeWidth={pxStroke(view, 1.5)}
+              style={{ cursor: 'ew-resize' }}
+              onPointerDown={(e) => onPointerDownEnd(end, e)}
+            />
+          );
+        })}
     </g>
   );
 }

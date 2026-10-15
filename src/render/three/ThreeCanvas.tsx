@@ -1,20 +1,17 @@
 'use client';
 
-import { Suspense, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Canvas, type ThreeEvent } from '@react-three/fiber';
 import { usePlannerStore } from '@/store/plannerStore';
 import { boundingBox } from '@/geometry/polygon';
 import { findAsset } from '@/lib/assetCatalog';
 import { openingType } from '@/lib/openingTypes';
 import { OrbitView } from './controls/OrbitView';
-import { Lights } from './scene/Lights';
-import { Floor } from './scene/Floor';
-import { Walls } from './scene/Walls';
-import { Pillars } from './scene/Pillars';
-import { InventoryMeshes } from './scene/InventoryMeshes';
+import { SceneContents } from './scene/SceneContents';
 import { floorPoint } from './scene/useFloorDrag';
 
-export const MM = 0.001; // world mm -> scene metres
+export { MM } from './units';
+import { MM } from './units';
 
 /** Pointer travel (px) above which a press counts as an orbit drag, not a click. */
 const CLICK_SLOP = 5;
@@ -27,9 +24,9 @@ type Vec3 = [number, number, number];
  * Coordinate mapping: world (x, y) mm -> scene (x, z) metres, height up Y.
  */
 export function ThreeCanvas() {
-  const room = usePlannerStore((s) => s.project.room);
-  const pillars = usePlannerStore((s) => s.project.pillars);
-  const inventory = usePlannerStore((s) => s.project.inventory);
+  const project = usePlannerStore((s) => s.project);
+  const readOnly = usePlannerStore((s) => s.readOnly);
+  const room = project.room;
   const tool = usePlannerStore((s) => s.tool);
   const pendingAssetRef = usePlannerStore((s) => s.pendingAssetRef);
 
@@ -62,7 +59,8 @@ export function ThreeCanvas() {
 
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
   const armed = tool === 'add-pillar' || tool === 'add-inventory' || tool === 'add-opening';
-  const pendingName = findAsset(pendingAssetRef ?? undefined)?.name;
+  const pendingRack = usePlannerStore((s) => s.pendingRack);
+  const pendingName = pendingRack?.name ?? findAsset(pendingAssetRef ?? undefined)?.name;
   const hint =
     tool === 'add-pillar'
       ? 'Click the floor to place a pillar.'
@@ -70,7 +68,9 @@ export function ThreeCanvas() {
         ? `Click next to a wall to place the ${openingType(pendingOpening).name.toLowerCase()}.`
       : tool === 'add-inventory'
         ? `Click the floor to place ${pendingName ?? 'an inventory placeholder'}.`
-        : 'Drag items to move them · R rotates 90° · Delete removes · drag empty space to orbit, scroll to zoom.';
+        : readOnly
+          ? 'Drag to look around · scroll to zoom · click a fixture to see what it is.'
+          : 'Drag items to move them · R rotates 90° · Delete removes · drag empty space to orbit, scroll to zoom.';
 
   return (
     <div className={`absolute inset-0 ${armed ? 'cursor-copy' : ''}`}>
@@ -80,7 +80,6 @@ export function ThreeCanvas() {
         dpr={[1, 2]}
         style={{ background: 'var(--wall-100, #ECEAE4)' }}
       >
-        <Lights />
         <OrbitView target={target} />
 
         {/* Context ground grid, 1 m cells */}
@@ -92,16 +91,7 @@ export function ThreeCanvas() {
           <meshBasicMaterial colorWrite={false} depthWrite={false} />
         </mesh>
 
-        {room && room.closed && (
-          <>
-            <Floor room={room} />
-            <Walls room={room} />
-          </>
-        )}
-        <Pillars pillars={pillars} />
-        <Suspense fallback={null}>
-          <InventoryMeshes items={inventory} />
-        </Suspense>
+        <SceneContents project={project} />
       </Canvas>
 
       <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2">

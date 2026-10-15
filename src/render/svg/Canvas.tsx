@@ -10,13 +10,15 @@ import { Pillar } from './Pillar';
 import { Inventory } from './Inventory';
 import { Measurements } from './Measurements';
 import { CalibrationMarks, Underlay } from './Underlay';
-import { Openings } from './Openings';
+import { OpeningPreview, Openings } from './Openings';
 import { GuideMarks, IssueMarks } from './LayoutMarks';
 import { clearanceGuides } from '@/lib/layout';
 import { rectCorners } from '@/geometry/transform';
 import { closestPointOnPolygon } from '@/geometry/insert';
 import { boundingBox } from '@/geometry/polygon';
 import { pointAtDistance } from '@/geometry/snap';
+import { openingSpan, placeOpening, projectOnWall } from '@/geometry/openings';
+import { openingType } from '@/lib/openingTypes';
 import type { Point } from '@/model/geometry';
 import type { Mm, Radians } from '@/model/units';
 import { mm } from '@/model/units';
@@ -50,6 +52,8 @@ export function Canvas() {
   const updateUnderlay = usePlannerStore((s) => s.updateUnderlay);
   const addOpeningAt = usePlannerStore((s) => s.addOpeningAt);
   const moveOpening = usePlannerStore((s) => s.moveOpening);
+  const resizeOpening = usePlannerStore((s) => s.resizeOpening);
+  const pendingOpening = usePlannerStore((s) => s.pendingOpening);
 
   const metrics = useDerivedMetrics();
   const issues = useLayoutIssues();
@@ -109,7 +113,8 @@ export function Canvas() {
     | { type: 'inventory'; id: string; offset: Point }
     | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number }
     | { type: 'underlay'; offset: Point }
-    | { type: 'opening'; id: string };
+    | { type: 'opening'; id: string; grab: number }
+    | { type: 'opening-end'; id: string; end: 'start' | 'end' };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
@@ -190,7 +195,9 @@ export function Canvas() {
           { wallSnap: !e.altKey },
         );
       } else if (d.type === 'opening') {
-        moveOpening(d.id, world);
+        moveOpening(d.id, world, d.grab);
+      } else if (d.type === 'opening-end') {
+        resizeOpening(d.id, d.end, world);
       } else if (d.type === 'underlay') {
         updateUnderlay({
           position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
@@ -204,7 +211,7 @@ export function Canvas() {
         else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, updateUnderlay, getRect],
+    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, updateUnderlay, getRect],
   );
 
   const onPointerUp = useCallback(
@@ -303,6 +310,9 @@ export function Canvas() {
 
   // ---- shape handlers ----
   const onPointerDownCorner = (cornerId: string, e: React.PointerEvent<SVGElement>) => {
+    // With something to place armed, a click on a corner places it there
+    // (the canvas handles it) rather than grabbing the corner.
+    if (tool === 'add-opening' || tool === 'add-inventory' || tool === 'add-pillar') return;
     e.stopPropagation();
     // Click first corner while drawing → close polygon.
     if (tool === 'draw-room' && room && !room.closed && room.corners[0]?.id === cornerId && room.corners.length >= 3) {
@@ -315,7 +325,14 @@ export function Canvas() {
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
+  // A click selects the wall; a double-click adds a corner on it.
   const onPointerDownEdge = (afterCornerId: string, e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select' || !room) return;
+    e.stopPropagation();
+    setSelection({ kind: 'wall', id: afterCornerId });
+  };
+
+  const onDoubleClickEdge = (afterCornerId: string, e: React.MouseEvent<SVGElement>) => {
     if (tool !== 'select' || !room) return;
     e.stopPropagation();
     const rect = getRect();
@@ -323,8 +340,7 @@ export function Canvas() {
     const world = eventToWorld(view, rect, e.clientX, e.clientY);
     // Project click onto edge for clean placement
     const nearest = closestPointOnPolygon(room.corners.map((c) => c.point), world, room.closed);
-    const insertAt = nearest?.point ?? world;
-    insertCorner(afterCornerId, insertAt);
+    insertCorner(afterCornerId, nearest?.point ?? world);
   };
 
   const onPointerDownRoom = (e: React.PointerEvent<SVGElement>) => {
@@ -387,13 +403,35 @@ export function Canvas() {
   };
 
   const onPointerDownOpening = (id: string, e: React.PointerEvent<SVGElement>) => {
-    if (tool !== 'select') return; // let placement clicks through
+    if (tool !== 'select' || !room) return; // let placement clicks through
     e.stopPropagation();
     setSelection({ kind: 'opening', id });
+    const rect = getRect();
+    const o = room.openings.find((x) => x.id === id);
+    const span = o ? openingSpan(room, o) : null;
+    if (!rect || !span) return;
+    // Keep the spot that was grabbed under the pointer.
+    const hit = projectOnWall(room, span.index, eventToWorld(view, rect, e.clientX, e.clientY));
     beginGesture();
-    drag.current = { type: 'opening', id };
+    drag.current = { type: 'opening', id, grab: hit ? span.offset - hit.along : 0 };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
+
+  const onPointerDownOpeningEnd = (id: string, end: 'start' | 'end', e: React.PointerEvent<SVGElement>) => {
+    if (tool !== 'select') return;
+    e.stopPropagation();
+    beginGesture();
+    drag.current = { type: 'opening-end', id, end };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  // Where the opening being placed would go, shown under the pointer.
+  const preview = useMemo(() => {
+    if (tool !== 'add-opening' || !pendingOpening || !room?.closed || !hoverWorld) return null;
+    const t = openingType(pendingOpening);
+    const where = placeOpening(room, hoverWorld, t.width, Math.max(600, 25 / view.zoom));
+    return where.ok ? { kind: pendingOpening, width: t.width, cornerId: where.cornerId, offset: where.offset } : null;
+  }, [tool, pendingOpening, room, hoverWorld, view.zoom]);
 
   const onPointerDownUnderlay = (e: React.PointerEvent<SVGElement>) => {
     const u = project.underlay;
@@ -433,12 +471,17 @@ export function Canvas() {
           <Room
             room={room}
             view={view}
-            selectedKind={selection?.kind === 'corner' || selection?.kind === 'room' ? selection.kind : null}
+            selectedKind={
+              selection?.kind === 'corner' || selection?.kind === 'room' || selection?.kind === 'wall'
+                ? selection.kind
+                : null
+            }
             selectedId={selection?.id ?? null}
-            showWallNumbers={selection?.kind === 'room' || highlightedWall !== null}
+            showWallNumbers={selection?.kind === 'room' || selection?.kind === 'wall' || highlightedWall !== null}
             highlightedWall={highlightedWall}
             onPointerDownCorner={onPointerDownCorner}
             onPointerDownEdge={onPointerDownEdge}
+            onDoubleClickEdge={onDoubleClickEdge}
             onPointerDownRoom={onPointerDownRoom}
           />
         )}
@@ -449,8 +492,11 @@ export function Canvas() {
             view={view}
             selectedId={selection?.kind === 'opening' ? selection.id : null}
             onPointerDown={onPointerDownOpening}
+            onPointerDownEnd={onPointerDownOpeningEnd}
           />
         )}
+
+        {room && preview && <OpeningPreview room={room} view={view} {...preview} />}
 
         {project.pillars.map((p) => (
           <Pillar

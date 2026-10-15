@@ -7,6 +7,8 @@ import { NumberField } from '../ui/NumberField';
 import { TextField } from '../ui/TextField';
 import { Button } from '../ui/Button';
 import { findAsset } from '@/lib/assetCatalog';
+import { wallHeightNear } from '@/geometry/wallStyle';
+import { rackAssets, rackSummary } from '@/lib/racks';
 import { ObjectIssues } from './LayoutCheckSection';
 
 export function InventoryProperties({ id }: { id: string }) {
@@ -14,10 +16,12 @@ export function InventoryProperties({ id }: { id: string }) {
   const updateInventory = usePlannerStore((s) => s.updateInventory);
   const duplicate = usePlannerStore((s) => s.duplicateSelected);
   const remove = usePlannerStore((s) => s.deleteSelected);
-  const wallHeight = usePlannerStore((s) => s.project.room?.wallHeight);
+  const room = usePlannerStore((s) => s.project.room);
 
+  const openRackBuilder = usePlannerStore((s) => s.openRackBuilder);
   if (!item) return null;
   const asset = findAsset(item.assetRef);
+  const rack = item.modules?.length ? item.modules : null;
 
   return (
     <div className="flex h-full flex-col">
@@ -43,41 +47,68 @@ export function InventoryProperties({ id }: { id: string }) {
           <MountingNote
             mountHeight={asset.mountHeight}
             minWallHeight={asset.minWallHeight}
-            wallHeight={wallHeight}
+            wallHeight={room ? wallHeightNear(room, item.position) : undefined}
           />
         )}
       </Section>
 
       <div className="h-px bg-wall-200" />
 
-      <Section title="Dimensions">
-        <div className="grid grid-cols-2 gap-3">
+      {rack && (
+        <>
+          <Section title="Wall rack">
+            <ol className="flex flex-col gap-0.5 text-[12px] text-ink-900" data-testid="rack-units">
+              {rackAssets(rack).map((a, i) => (
+                <li key={i} className="flex justify-between gap-2">
+                  <span className="truncate">
+                    <span className="mr-1 font-mono text-ink-500">{i + 1}</span>
+                    {a.name}
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] text-ink-500">{a.itemNumber}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="text-[11px] text-ink-500">
+              {rackSummary(rack).hangers} hangers · {rackSummary(rack).weightKg.toLocaleString('da-DK', { maximumFractionDigits: 1 })} kg
+            </p>
+            <Button variant="subtle" className="justify-center" onClick={() => openRackBuilder(item.id)}>
+              Edit rack…
+            </Button>
+          </Section>
+          <div className="h-px bg-wall-200" />
+        </>
+      )}
+
+      {!rack && (
+        <Section title="Dimensions">
+          <div className="grid grid-cols-2 gap-3">
+            <NumberField
+              label="Width"
+              unit="mm"
+              value={item.size.width}
+              step={10}
+              min={20}
+              onCommit={(v) => updateInventory(id, { size: { ...item.size, width: mm(v) } })}
+            />
+            <NumberField
+              label="Depth"
+              unit="mm"
+              value={item.size.depth}
+              step={10}
+              min={20}
+              onCommit={(v) => updateInventory(id, { size: { ...item.size, depth: mm(v) } })}
+            />
+          </div>
           <NumberField
-            label="Width"
+            label="Height"
             unit="mm"
-            value={item.size.width}
+            value={item.size.height}
             step={10}
             min={20}
-            onCommit={(v) => updateInventory(id, { size: { ...item.size, width: mm(v) } })}
+            onCommit={(v) => updateInventory(id, { size: { ...item.size, height: mm(v) } })}
           />
-          <NumberField
-            label="Depth"
-            unit="mm"
-            value={item.size.depth}
-            step={10}
-            min={20}
-            onCommit={(v) => updateInventory(id, { size: { ...item.size, depth: mm(v) } })}
-          />
-        </div>
-        <NumberField
-          label="Height"
-          unit="mm"
-          value={item.size.height}
-          step={10}
-          min={20}
-          onCommit={(v) => updateInventory(id, { size: { ...item.size, height: mm(v) } })}
-        />
-      </Section>
+        </Section>
+      )}
 
       <div className="h-px bg-wall-200" />
 
@@ -144,7 +175,7 @@ function MountingNote({
     >
       {mountHeight !== undefined && <>Hangs with its bottom edge at {m(mountHeight)}. </>}
       Walls must be at least {m(minWallHeight)} high.
-      {tooLow && <> This room&apos;s walls are only {m(wallHeight)}.</>}
+      {tooLow && <> This wall is only {m(wallHeight)}.</>}
     </p>
   );
 }
