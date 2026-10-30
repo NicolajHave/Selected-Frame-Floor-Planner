@@ -23,12 +23,24 @@ from common import export, reset  # noqa: E402
 
 MODELS = [
     'wall_unit_1400_shelves',
+    'wall_unit_1400_sidehang',
+    'wall_unit_1400_shelf_sidehang',
+    'wall_unit_1400_2level_sidehang',
+    'wall_unit_1400_mirror_sidehang',
+    'wall_unit_jeans',
+    'wall_unit_1400_screen',
+    'wall_unit_700_shelf',
+    'wall_unit_700_2level_sidehang',
+    'wall_unit_700_sidehang',
     'floor_rack_1400',
     'floor_rack_700',
     'floor_rack_1400_h1700',
     'floor_rack_700_h1700',
     'podium_tall_oak',
     'podium_short_oak',
+    'jeans_rack_single',
+    'jeans_rack_double',
+    'jeans_rack_triple',
 ]
 
 

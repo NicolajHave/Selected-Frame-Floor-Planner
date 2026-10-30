@@ -179,8 +179,10 @@ the short oak podium is the tall one at 400 mm.
 
 Done so far:
 - From STEP: Floor Rack 1400 / 700 / 1400 H1700 / 700 H1700, Tall and
-  Short Oak Podium
-- Modelled: Wall Unit 1400 – Shelves
+  Short Oak Podium; the three jeans racks are the STEP rack frame with
+  shelf sections added
+- Modelled (`wall_units.py`, one shared frame with shelves, hanging
+  rails, beams, mirror box, jeans unit or screen): all ten wall units
 
 ## Design language
 

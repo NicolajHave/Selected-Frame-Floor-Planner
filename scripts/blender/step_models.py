@@ -122,3 +122,34 @@ def podium(height=550.0):
     if height != 550.0:
         stretch(parts, scale_z=height / 550.0)
     return parts
+
+
+# ---------------------------------------------------------------------------
+# Jeans racks: the floor rack frame with shelf sections (catalog renders)
+# ---------------------------------------------------------------------------
+
+JEANS_LEVELS = (160, 560, 860, 1160)   # shelf tops, mm
+
+
+def jeans_rack(sections, posts=(), width=1310):
+    """
+    The STEP floor rack, plus extra posts at `posts` (x, mm from the
+    middle) and, for each (x0, x1) in `sections`, oak shelves at
+    JEANS_LEVELS on bars running front to back across the full depth.
+    """
+    from common import box
+
+    parts = floor_rack(narrower=1310 - width)
+    depth = 500
+    for i, x in enumerate(posts):
+        box(f'post{i}', (40, 20, 1440), (x, 0, 8 + 720), bevel=1)
+        box(f'post{i}.foot', (60, 300, 8), (x, 0, 4), bevel=1)
+    for j, (x0, x1) in enumerate(sections):
+        w = x1 - x0
+        xc = (x0 + x1) / 2
+        for k, top in enumerate(JEANS_LEVELS):
+            for side, x in (('l', x0 + 15), ('r', x1 - 15)):
+                box(f's{j}.{k}.bar{side}', (30, depth, 20), (x, 0, top - 19 - 10), bevel=1)
+            box(f's{j}.{k}.core', (w - 10, depth - 20, 18), (xc, 0, top - 9.5), mat='oak', bevel=0.8)
+            box(f's{j}.{k}.top', (w - 14, depth - 24, 1), (xc, 0, top - 0.5), mat='laminate', bevel=0)
+    return parts
