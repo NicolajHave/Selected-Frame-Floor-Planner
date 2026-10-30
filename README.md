@@ -156,6 +156,19 @@ models in `public/assets/3d/*.glb` are generated from those dimensions
 by `node scripts/generate-assets.mjs`; replace any file with a real CAD
 export to upgrade it.
 
+Models are being rebuilt in **Blender** from the catalog renders and the
+&elements parts list (profiles, plate thicknesses, materials). Each one is
+a script in `scripts/blender/`; build them with Blender as a Python module
+(Python 3.11):
+
+    pip install bpy==4.5.14
+    python scripts/blender/build.py            # all Blender models → public/assets/3d
+    python scripts/blender/build.py --blend    # also .blend files to edit by hand
+    python scripts/blender/build.py --preview DIR   # plus a Cycles still per model
+
+`scripts/generate-assets.mjs` skips every item that has a Blender script.
+Done so far: 105-99-004 Wall Unit 1400 – Shelves.
+
 ## Design language
 
 Calm, architectural, precise: warm off-white walls (NCS S 1005-G30Y

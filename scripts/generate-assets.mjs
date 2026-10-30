@@ -458,9 +458,23 @@ const RECIPES = {
 
 // ---------------------------------------------------------------------------
 
+// Models now built in Blender (scripts/blender/) are left alone.
+const BUILT_IN_BLENDER = new Set(
+  fs
+    .readdirSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'blender'))
+    .filter((f) => f.endsWith('.py'))
+    .map((f) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'blender', f), 'utf8'))
+    .map((src) => /^ID = '([^']+)'/m.exec(src)?.[1])
+    .filter(Boolean),
+);
+
 fs.mkdirSync(OUT_DIR, { recursive: true });
 let total = 0;
 for (const [id, recipe] of Object.entries(RECIPES)) {
+  if (BUILT_IN_BLENDER.has(id)) {
+    console.log(`${id}.glb  (built in Blender, skipped)`);
+    continue;
+  }
   const file = path.join(OUT_DIR, `${id}.glb`);
   writeGLB(file, recipe());
   const kb = fs.statSync(file).size / 1024;

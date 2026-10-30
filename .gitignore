@@ -9,3 +9,6 @@ build/
 .env.*.local
 /test-results/
 /playwright-report/
+
+# Blender autosaves
+*.blend1
