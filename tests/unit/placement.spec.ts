@@ -114,7 +114,9 @@ test.describe('wall racks', () => {
     };
     expect(itemMount(rack)).toBe('wall');
     const list = buildPartsList([rack]);
-    expect(list.totalUnits).toBe(4);
+    // Four units in one run: left and right columns and three between.
+    expect(list.totalUnits).toBe(4 + 1 + 3 + 1);
+    expect(list.rows.find((r) => r.itemNumber === '105-99-001-02')!.quantity).toBe(3);
     const shelves = list.rows.find((r) => r.itemNumber === '105-99-004')!;
     expect(shelves.quantity).toBe(2);
     expect(shelves.itemIds).toEqual(['rack']);

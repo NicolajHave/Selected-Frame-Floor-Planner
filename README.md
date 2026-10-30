@@ -86,8 +86,14 @@ URL. No environment variables are needed.
 10. **3D View** shows the room with openings and the catalog models;
    objects can be selected, dragged and placed there too. Walls facing
    the camera are cut away so you can always see into the shop.
-11. **Parts list** (right panel, nothing selected) totals units, weight
-   and hanger capacity, and exports a CSV for Excel.
+11. **Parts list** (right panel, nothing selected) totals units, weight,
+   hanger capacity and **price** (EUR, with €/m² of floor), and exports a
+   CSV for Excel with SKU, unit and total price, price source and
+   supplier. Wall rack columns are added automatically: one at each end
+   of a run of wall units and one between units. Prices come from
+   `src/lib/prices.ts` (the system price list, gaps filled from the
+   &elements calculation); a shared view-only link never shows them, and
+   the PDF includes them only when you tick **Prices in the parts list**.
 12. **PDF** (top bar) exports an A3 presentation: cover, what the concept
    asks of the site plus your notes for this draft, the shop in 3D from
    four sides and as an isometric, the plan to scale (numbered fixtures,

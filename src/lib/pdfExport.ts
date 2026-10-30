@@ -13,6 +13,7 @@ import { findAsset } from './assetCatalog';
 import { electricalType } from './electricalTypes';
 import { electricalAnchor } from '@/geometry/electrical';
 import { rackContents } from './racks';
+import { PRICE_LIST } from './prices';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { buildPartsList, type PartsList } from './partsList';
 import { DEFAULT_MIN_AISLE, innerOutline, layoutIssues } from './layout';
@@ -57,6 +58,8 @@ export interface PdfOptions {
   liveUrl?: string | null;
   /** 3D views, an isometric and wall elevations (rendered with WebGL). */
   views?: boolean;
+  /** Unit and total prices in the parts list (internal: off by default). */
+  prices?: boolean;
   onProgress?: (message: string) => void;
 }
 
@@ -137,7 +140,7 @@ export async function buildPlanPdf(project: Project, opts: PdfOptions): Promise<
         label: elLabels.get(e.id) ?? '',
       })),
   );
-  drawListPages(doc, info, project, parts);
+  drawListPages(doc, info, project, parts, !!opts.prices);
   numberPages(doc);
   return doc;
 }
@@ -658,7 +661,7 @@ function drawColumn(
 // Page 2+: parts list, layout check, notes
 // ---------------------------------------------------------------------------
 
-function drawListPages(doc: JsPdf, info: DocInfo, project: Project, parts: PartsList) {
+function drawListPages(doc: JsPdf, info: DocInfo, project: Project, parts: PartsList, prices = false) {
   const TOP = MARGIN + 24;
   const BOTTOM = PAGE_H - MARGIN - 10;
   const page = () => {
@@ -683,19 +686,28 @@ function drawListPages(doc: JsPdf, info: DocInfo, project: Project, parts: Parts
   };
 
   heading('Parts list');
+  // With prices, Name, Material and HS codes give up room for two price columns.
+  const p = prices ? 1 : 0;
   const cols = [
     { title: 'No.', w: 12, align: 'left' as const },
     { title: 'Item number', w: 34, align: 'left' as const },
-    { title: 'Name', w: 92, align: 'left' as const },
+    { title: 'Name', w: 92 - 30 * p, align: 'left' as const },
     { title: 'Category', w: 34, align: 'left' as const },
     { title: 'Qty', w: 14, align: 'right' as const },
     { title: 'W × D × H (mm)', w: 50, align: 'left' as const },
-    { title: 'Material', w: 50, align: 'left' as const },
+    { title: 'Material', w: 50 - 10 * p, align: 'left' as const },
     { title: 'Unit kg', w: 22, align: 'right' as const },
     { title: 'Total kg', w: 24, align: 'right' as const },
     { title: 'Hangers', w: 20, align: 'right' as const },
-    { title: 'HS codes', w: 44, align: 'left' as const },
+    { title: 'HS codes', w: 44 - 10 * p, align: 'left' as const },
+    ...(prices
+      ? [
+          { title: 'Unit €', w: 22, align: 'right' as const },
+          { title: 'Total €', w: 28, align: 'right' as const },
+        ]
+      : []),
   ];
+  const money = (n: number | undefined) => (n === undefined ? '' : num(n, 2, true));
   const row = (cells: string[], bold = false) => {
     newPageIfNeeded(7);
     doc.setFont('helvetica', bold ? 'bold' : 'normal');
@@ -728,13 +740,24 @@ function drawListPages(doc: JsPdf, info: DocInfo, project: Project, parts: Parts
       r.totalWeightKg !== undefined ? num(r.totalWeightKg, 1) : '',
       r.totalHangers !== undefined ? num(r.totalHangers) : '',
       r.hsCodes.join(' / '),
+      ...(prices ? [money(r.unitPriceEur) + (r.priceSource === 'supplier' ? '*' : ''), money(r.totalPriceEur)] : []),
     ]),
   );
   row(
     ['', '', 'Total', '', String(parts.totalUnits), '', '', '', num(parts.totalWeightKg, 1),
-      parts.totalHangers ? num(parts.totalHangers) : '', ''],
+      parts.totalHangers ? num(parts.totalHangers) : '', '', ...(prices ? ['', money(parts.totalPriceEur)] : [])],
     true,
   );
+  if (prices) {
+    font(doc, 7, 'normal', MUTED);
+    doc.text(
+      `Sales prices in ${PRICE_LIST.currency} from the ${PRICE_LIST.name.toLowerCase()} (${PRICE_LIST.date}); * from the &elements calculation.` +
+        (parts.unitsWithoutPrice ? ` ${parts.unitsWithoutPrice} unit(s) have no price and are not in the total.` : ''),
+      MARGIN,
+      y,
+    );
+    y += 5;
+  }
   if (parts.unitsWithoutWeight) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);

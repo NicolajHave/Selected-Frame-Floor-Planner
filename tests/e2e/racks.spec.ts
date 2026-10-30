@@ -39,7 +39,12 @@ test('build a wall rack, place it on a wall as one piece, then edit it', async (
   const panel = page.locator('aside').last();
   await expect(panel.getByTestId('rack-units').locator('li')).toHaveCount(3);
   await page.keyboard.press('Escape');
-  await expect(page.locator('aside').last()).toContainText('Units3');
+  // Three units plus their columns: left, two between, right.
+  await expect(page.locator('aside').last()).toContainText('Units7');
+  await expect(page.locator('aside').last()).toContainText('Wall rack column – middle');
+  // 252 + 1126 + 1586 + 4 × 419
+  await expect(page.locator('aside').last()).toContainText('Total price4.640 €');
+  await expect(page.locator('aside').last()).toContainText('Per m² floor');
   await expect(page.locator('aside').last()).toContainText('Hanger capacity35');
 
   // Edit: drop the 1400 shelves. It gets narrower; the back stays on the wall.
@@ -63,7 +68,12 @@ test('build a wall rack, place it on a wall as one piece, then edit it', async (
   expect(plan).toContain('R1');
   expect(plan).toContain('Denim wall');
   expect(plan).toContain('1× Wall Unit Sidehang, 1× Wall Unit 700 - Shelf, 1× Wall Unit 1400 - Shelves');
-  expect(pageWith(pages, 'Parts list & checks')).toContain('Wall Unit 700 - Shelf');
+  const list = pageWith(pages, 'Parts list & checks');
+  expect(list).toContain('Wall Unit 700 - Shelf');
+  expect(list).not.toContain('Total €'); // prices only when asked for
+  const priced = pageWith(await pdfText((await exportPdf(page, { views: false, prices: true })).file), 'Parts list & checks');
+  expect(priced).toContain('Total €');
+  expect(priced).toContain('4.640,00');
 
   await page.getByRole('button', { name: '3D View' }).click();
   await expect(page.locator('canvas')).toBeVisible();

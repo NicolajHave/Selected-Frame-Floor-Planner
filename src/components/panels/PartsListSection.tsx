@@ -4,6 +4,8 @@ import { useMemo } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { buildPartsList, partsListToCsv } from '@/lib/partsList';
 import { downloadText } from '@/lib/io';
+import { PRICE_LIST, eur } from '@/lib/prices';
+import { polygonArea } from '@/geometry/polygon';
 import { Section } from '../ui/Section';
 import { Button } from '../ui/Button';
 
@@ -15,6 +17,10 @@ export function PartsListSection() {
   const inventory = usePlannerStore((s) => s.project.inventory);
   const projectName = usePlannerStore((s) => s.project.name);
   const list = useMemo(() => buildPartsList(inventory), [inventory]);
+  const room = usePlannerStore((s) => s.project.room);
+  // Prices are internal: a shared view-only link doesn't show them.
+  const showPrices = usePlannerStore((s) => !s.shared);
+  const areaM2 = room?.closed ? polygonArea(room.corners.map((c) => c.point)) / 1e6 : 0;
 
   const exportCsv = () => {
     const base = (projectName || 'plan').trim().replace(/\s+/g, '-').toLowerCase();
@@ -41,8 +47,14 @@ export function PartsListSection() {
                     {r.catalog ? r.itemNumber || 'no item number' : 'not in catalog'}
                   </span>
                 </span>
-                <span className="shrink-0 font-mono text-[11px] text-ink-500">
-                  {r.totalWeightKg !== undefined ? kg(r.totalWeightKg) : '–'}
+                <span className="flex shrink-0 flex-col items-end font-mono text-[11px] text-ink-500">
+                  {showPrices && (
+                    <span className="text-ink-900" title={r.priceSource === 'supplier' ? 'From the supplier calculation' : undefined}>
+                      {r.totalPriceEur !== undefined ? eur(r.totalPriceEur) : 'no price'}
+                      {r.priceSource === 'supplier' && '*'}
+                    </span>
+                  )}
+                  <span>{r.totalWeightKg !== undefined ? kg(r.totalWeightKg) : '–'}</span>
                 </span>
               </li>
             ))}
@@ -59,6 +71,21 @@ export function PartsListSection() {
             />
             {list.totalHangers > 0 && (
               <Total label="Hanger capacity" value={String(list.totalHangers)} />
+            )}
+            {showPrices && (
+              <>
+                <Total label="Total price" value={eur(Math.round(list.totalPriceEur * 100) / 100)} />
+                {areaM2 > 0 && (
+                  <Total label="Per m² floor" value={eur(Math.round((list.totalPriceEur / areaM2) * 100) / 100)} />
+                )}
+                <p className="text-[10px] leading-relaxed text-ink-500" data-testid="price-note">
+                  {PRICE_LIST.currency}, sales prices from the {PRICE_LIST.name.toLowerCase()} ({PRICE_LIST.date}).
+                  {list.rows.some((r) => r.priceSource === 'supplier') && ' * from the &elements calculation.'}
+                  {list.unitsWithoutPrice > 0 &&
+                    ` ${list.unitsWithoutPrice} unit${list.unitsWithoutPrice === 1 ? ' has' : 's have'} no price and ${list.unitsWithoutPrice === 1 ? 'is' : 'are'} not in the total.`}
+                  {' '}Wall rack columns are added automatically: one at each end of a run of wall units, one between units.
+                </p>
+              </>
             )}
           </div>
 

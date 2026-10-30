@@ -15,11 +15,12 @@ export async function pdfText(file: string): Promise<string[]> {
 }
 
 /** Opens the PDF dialog, optionally types notes, and exports. */
-export async function exportPdf(page: Page, opts: { notes?: string; views?: boolean } = {}) {
+export async function exportPdf(page: Page, opts: { notes?: string; views?: boolean; prices?: boolean } = {}) {
   await page.getByRole('button', { name: 'PDF', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Export PDF' });
   if (opts.notes !== undefined) await dialog.getByRole('textbox').fill(opts.notes);
   if (opts.views === false) await dialog.getByRole('checkbox', { name: /3D views/ }).uncheck();
+  if (opts.prices) await dialog.getByRole('checkbox', { name: /Prices in the parts list/ }).check();
   const [download] = await Promise.all([
     page.waitForEvent('download', { timeout: 60_000 }),
     dialog.getByRole('button', { name: 'Export PDF' }).click(),
