@@ -740,7 +740,7 @@ function drawListPages(doc: JsPdf, info: DocInfo, project: Project, parts: Parts
       r.totalWeightKg !== undefined ? num(r.totalWeightKg, 1) : '',
       r.totalHangers !== undefined ? num(r.totalHangers) : '',
       r.hsCodes.join(' / '),
-      ...(prices ? [money(r.unitPriceEur) + (r.priceSource === 'supplier' ? '*' : ''), money(r.totalPriceEur)] : []),
+      ...(prices ? [money(r.unitPriceEur) + (r.priceSource === 'system' ? '†' : ''), money(r.totalPriceEur)] : []),
     ]),
   );
   row(
@@ -751,7 +751,7 @@ function drawListPages(doc: JsPdf, info: DocInfo, project: Project, parts: Parts
   if (prices) {
     font(doc, 7, 'normal', MUTED);
     doc.text(
-      `Sales prices in ${PRICE_LIST.currency} from the ${PRICE_LIST.name.toLowerCase()} (${PRICE_LIST.date}); * from the &elements calculation.` +
+      `Prices in ${PRICE_LIST.currency} from the ${PRICE_LIST.name} (${PRICE_LIST.date}); † from the system price list.` +
         (parts.unitsWithoutPrice ? ` ${parts.unitsWithoutPrice} unit(s) have no price and are not in the total.` : ''),
       MARGIN,
       y,

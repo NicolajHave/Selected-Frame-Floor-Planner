@@ -107,8 +107,8 @@ test('parts list totals and CSV export', async ({ page }) => {
   expect(csv).toContain('105-99-001-01;Wall rack column – left;Wall Units;3');
   expect(csv).toContain('105-99-001-03;Wall rack column – right;Wall Units;3');
   // 4 items + 6 columns; 71,3 + 2 × 31,9 + 16,3 = 151,4 kg; hangers 2 × 13 + 50 = 76;
-  // 1586 + 2 × 202 + 466 + 6 × 419 = 4970 €
-  expect(csv).toMatch(/Total;Untitled plan;;10;;;;;;151,4;;76;;;;4970,00;;/);
+  // 1586 + 2 × 202 + 506 + 6 × 419 = 5010 €
+  expect(csv).toMatch(/Total;Untitled plan;;10;;;;;;151,4;;76;;;;5010,00;;/);
 });
 
 test.describe('logo mounting', () => {

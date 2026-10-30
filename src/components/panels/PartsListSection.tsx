@@ -49,9 +49,9 @@ export function PartsListSection() {
                 </span>
                 <span className="flex shrink-0 flex-col items-end font-mono text-[11px] text-ink-500">
                   {showPrices && (
-                    <span className="text-ink-900" title={r.priceSource === 'supplier' ? 'From the supplier calculation' : undefined}>
+                    <span className="text-ink-900" title={r.priceSource === 'system' ? 'From the system price list' : undefined}>
                       {r.totalPriceEur !== undefined ? eur(r.totalPriceEur) : 'no price'}
-                      {r.priceSource === 'supplier' && '*'}
+                      {r.priceSource === 'system' && '†'}
                     </span>
                   )}
                   <span>{r.totalWeightKg !== undefined ? kg(r.totalWeightKg) : '–'}</span>
@@ -79,8 +79,8 @@ export function PartsListSection() {
                   <Total label="Per m² floor" value={eur(Math.round((list.totalPriceEur / areaM2) * 100) / 100)} />
                 )}
                 <p className="text-[10px] leading-relaxed text-ink-500" data-testid="price-note">
-                  {PRICE_LIST.currency}, sales prices from the {PRICE_LIST.name.toLowerCase()} ({PRICE_LIST.date}).
-                  {list.rows.some((r) => r.priceSource === 'supplier') && ' * from the &elements calculation.'}
+                  {PRICE_LIST.currency}, prices from the {PRICE_LIST.name} ({PRICE_LIST.date}).
+                  {list.rows.some((r) => r.priceSource === 'system') && ' † from the system price list (the quote prices wall units part by part).'}
                   {list.unitsWithoutPrice > 0 &&
                     ` ${list.unitsWithoutPrice} unit${list.unitsWithoutPrice === 1 ? ' has' : 's have'} no price and ${list.unitsWithoutPrice === 1 ? 'is' : 'are'} not in the total.`}
                   {' '}Wall rack columns are added automatically: one at each end of a run of wall units, one between units.

@@ -125,16 +125,18 @@ export const ASSET_CATALOG: readonly AssetEntry[] = [
     { mount: 'wall', material: SS, weightKg: 31.9, hsCodes: [HS_STEEL], hangerCount: 13 }),
 
   // ---- Racks ----
-  entry('105-06-001', 'Floor Rack 1400', 'Racks', [1310, 500, 1758],
+  // 1500 and 1700 mm racks (+ 8 mm feet), measured from the &elements STEP;
+  // the catalog's 1758 included the A5 sign, which is its own item.
+  entry('105-06-001', 'Floor Rack 1400', 'Racks', [1310, 500, 1508],
     { material: SS, weightKg: 16.3, hsCodes: [HS_STEEL], hangerCount: 50,
       stepUrl: '/assets/3d/105-06-001-E.step' }),
-  entry('105-06-002', 'Floor Rack 700', 'Racks', [800, 500, 1758],
+  entry('105-06-002', 'Floor Rack 700', 'Racks', [800, 500, 1508],
     { material: SS, weightKg: 15.4, hsCodes: [HS_STEEL], hangerCount: 25 }),
-  entry('105-06-010', 'Jeans Rack Single', 'Racks', [1310, 500, 1758],
+  entry('105-06-010', 'Jeans Rack Single', 'Racks', [1310, 500, 1508],
     { material: SS_OAK, weightKg: 27.4, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 25 }),
-  entry('105-06-011', 'Double Shelf Floor Rack', 'Racks', [1310, 500, 1758],
+  entry('105-06-011', 'Double Shelf Floor Rack', 'Racks', [1310, 500, 1508],
     { material: SS_OAK, weightKg: 37.7, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 10 }),
-  entry('105-06-013', 'Triple Shelf Floor Rack', 'Racks', [1300, 500, 1752],
+  entry('105-06-013', 'Triple Shelf Floor Rack', 'Racks', [1300, 500, 1508],
     { material: SS_OAK, weightKg: 45.8, hsCodes: [HS_STEEL, HS_WOOD] }),
   entry('105-06-014', 'Floor Rack 1400 H1700', 'Racks', [1310, 500, 1708],
     { material: SS, weightKg: 17.5, hsCodes: [HS_STEEL], hangerCount: 50 }),

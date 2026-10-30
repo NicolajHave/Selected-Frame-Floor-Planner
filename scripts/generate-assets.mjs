@@ -373,21 +373,22 @@ const RECIPES = {
   '105-99-012': () => [...wallFrame(810, 389, 2288), ...rail(810, 1950)],
 
   // ---- RACKS ----
-  '105-06-001': () => rackFrame(1310, 500, 1758, { sign: true }),
-  '105-06-002': () => rackFrame(800, 500, 1758, { sign: true }),
+  '105-06-001': () => rackFrame(1310, 500, 1508),
+  '105-06-002': () => rackFrame(800, 500, 1508),
+  // Racks are 1500 mm (+ feet) without the A5 sign, which is its own item.
   '105-06-010': () => [
-    ...rackFrame(1310, 500, 1758, { sign: true }),
-    ...rackShelfColumn(1310 / 2 - 330, 500, 600, shelfHeights(4, 1550, 350)),
+    ...rackFrame(1310, 500, 1508),
+    ...rackShelfColumn(1310 / 2 - 330, 500, 600, shelfHeights(4, 1350, 350)),
   ],
   '105-06-011': () => [
-    ...rackFrame(1310, 500, 1758, { sign: true }),
-    ...rackShelfColumn(-300, 500, 550, shelfHeights(4, 1550, 350)),
-    ...rackShelfColumn(300, 500, 550, shelfHeights(4, 1550, 350)),
+    ...rackFrame(1310, 500, 1508),
+    ...rackShelfColumn(-300, 500, 550, shelfHeights(4, 1350, 350)),
+    ...rackShelfColumn(300, 500, 550, shelfHeights(4, 1350, 350)),
   ],
   '105-06-013': () => {
-    const parts = rackFrame(1300, 500, 1752, { sign: true });
+    const parts = rackFrame(1300, 500, 1508);
     for (const cx of [-425, 0, 425]) {
-      parts.push(...rackShelfColumn(cx, 500, 400, shelfHeights(4, 1550, 350)));
+      parts.push(...rackShelfColumn(cx, 500, 400, shelfHeights(4, 1350, 350)));
     }
     return parts;
   },
