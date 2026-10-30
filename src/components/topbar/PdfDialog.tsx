@@ -18,6 +18,8 @@ export function PdfDialog({ onClose, signedIn }: { onClose: () => void; signedIn
   const availability = liveLinkAvailability(signedIn);
   const [withLink, setWithLink] = useState(availability.ok);
   const [withViews, setWithViews] = useState(true);
+  const [withPrices, setWithPrices] = useState(false);
+  const shared = usePlannerStore((s) => !!s.shared);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,6 +50,7 @@ export function PdfDialog({ onClose, signedIn }: { onClose: () => void; signedIn
         includeUnderlay: !!project.underlay?.calibrated,
         liveUrl,
         views: withViews,
+        prices: withPrices && !shared,
         onProgress: setBusy,
       });
       setBusy(null);
@@ -106,6 +109,17 @@ export function PdfDialog({ onClose, signedIn }: { onClose: () => void; signedIn
               <span className="block text-[11px] text-ink-500">Four sides, isometric, and every wall with its heights.</span>
             </span>
           </label>
+          {!shared && (
+            <label className="flex items-start gap-2 text-[13px] text-ink-900">
+              <input type="checkbox" className="mt-[3px]" checked={withPrices} onChange={(e) => setWithPrices(e.target.checked)} />
+              <span>
+                Prices in the parts list
+                <span className="block text-[11px] text-ink-500">
+                  Unit and total prices (EUR). Leave off for a PDF that goes to partners.
+                </span>
+              </span>
+            </label>
+          )}
         </div>
 
         {error && <ErrorText>{error}</ErrorText>}

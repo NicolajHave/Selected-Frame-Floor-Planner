@@ -23,12 +23,13 @@ test('groups catalog items and totals weight and hangers', () => {
     item('b', '105-06-001'),
     item('c', '105-99-004'),
   ]);
-  expect(list.rows).toHaveLength(2);
+  // Two racks, one wall unit and the wall unit's two end columns.
+  expect(list.rows).toHaveLength(4);
   const rack = list.rows.find((r) => r.itemNumber === '105-06-001')!;
   expect(rack.quantity).toBe(2);
   expect(rack.totalWeightKg).toBeCloseTo(32.6);
   expect(rack.totalHangers).toBe(100);
-  expect(list.totalUnits).toBe(3);
+  expect(list.totalUnits).toBe(5);
   expect(list.totalWeightKg).toBeCloseTo(32.6 + 71.3);
   expect(list.totalHangers).toBe(100);
 });
@@ -55,9 +56,11 @@ test('CSV: BOM, semicolons, decimal commas, quoting', () => {
   const csv = partsListToCsv(list, 'Store "A"');
   const lines = csv.split('\r\n');
   expect(lines[0]).toBe(
-    '﻿Item number;Name;Category;Qty;Width (mm);Depth (mm);Height (mm);Material;Unit weight (kg);Total weight (kg);Hangers per unit;Total hangers;HS codes',
+    '﻿Item number;Name;Category;Qty;Width (mm);Depth (mm);Height (mm);Material;Unit weight (kg);Total weight (kg);Hangers per unit;Total hangers;HS codes;SKU;Unit price (EUR);Total price (EUR);Price source;Supplier',
   );
-  expect(csv).toContain('105-06-001;Floor Rack 1400;Racks;1;1310;500;1758;Stainless Steel;16,3;16,3;50;50;94032080');
+  expect(csv).toContain(
+    '105-06-001;Floor Rack 1400;Racks;1;1310;500;1758;Stainless Steel;16,3;16,3;50;50;94032080;105-06-001-E;466,00;466,00;Price list;&elements',
+  );
   expect(csv).toContain('"Table; large"');
   expect(csv).toContain('Total;"Store ""A""";;2;');
 });
