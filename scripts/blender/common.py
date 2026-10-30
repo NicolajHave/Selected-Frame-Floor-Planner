@@ -19,9 +19,12 @@ MATERIALS = {
     'steel_dark': dict(color=(0.55, 0.56, 0.57, 1), metallic=0.5, roughness=0.35),
     'laminate': dict(color=(0.86, 0.86, 0.86, 1), metallic=0.25, roughness=0.38),
     'oak': dict(color=(0.80, 0.60, 0.33, 1), metallic=0.0, roughness=0.62),
-    'mirror': dict(color=(0.92, 0.94, 0.95, 1), metallic=0.6, roughness=0.04),
+    # No reflections in the planner: a light, cool grey reads as mirror.
+    'mirror': dict(color=(0.86, 0.90, 0.93, 1), metallic=0.15, roughness=0.05),
     'acrylic': dict(color=(0.93, 0.96, 0.97, 0.35), metallic=0.0, roughness=0.05),
     'mdf_paint': dict(color=(0.80, 0.82, 0.74, 1), metallic=0.0, roughness=0.5),
+    'screen': dict(color=(0.05, 0.05, 0.06, 1), metallic=0.2, roughness=0.15),
+    'light_panel': dict(color=(0.97, 0.97, 0.96, 1), metallic=0.0, roughness=0.3),
 }
 
 

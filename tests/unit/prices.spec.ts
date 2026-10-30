@@ -54,9 +54,11 @@ test('a wall rack of n units needs n + 1 columns; prices add up', () => {
   const list = buildPartsList([rack, unit('t', '105-17-007', 0, 3000)]);
   const qty = (n: string) => list.rows.find((r) => r.itemNumber === n)?.quantity ?? 0;
   expect([qty('105-99-001-01'), qty('105-99-001-02'), qty('105-99-001-03')]).toEqual([1, 2, 1]);
-  // 1586 + 252 + 1126 units, 4 × 419 columns, 2124 table
-  expect(list.totalPriceEur).toBe(1586 + 252 + 1126 + 4 * 419 + 2124);
+  // Wall units and columns from the system list; the table from the &elements quote.
+  expect(list.totalPriceEur).toBe(1586 + 252 + 1126 + 4 * 419 + 2497);
+  expect(list.rows.find((r) => r.itemNumber === '105-99-004')!.priceSource).toBe('system');
+  expect(list.rows.find((r) => r.itemNumber === '105-17-007')!.priceSource).toBe('quote');
   expect(list.unitsWithoutPrice).toBe(0);
   const podium = buildPartsList([unit('p', '105-09-002', 0)]).rows[0]!;
-  expect(podium).toMatchObject({ unitPriceEur: 484, priceSource: 'supplier', sku: '105-09-002-A', supplier: '&elements' });
+  expect(podium).toMatchObject({ unitPriceEur: 484, priceSource: 'quote', sku: '105-09-002-A', supplier: '&elements' });
 });

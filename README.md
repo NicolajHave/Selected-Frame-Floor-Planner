@@ -91,8 +91,9 @@ URL. No environment variables are needed.
    CSV for Excel with SKU, unit and total price, price source and
    supplier. Wall rack columns are added automatically: one at each end
    of a run of wall units and one between units. Prices come from
-   `src/lib/prices.ts` (the system price list, gaps filled from the
-   &elements calculation); a shared view-only link never shows them, and
+   `src/lib/prices.ts` (the &elements quote; wall units, columns and
+   accessories, which the quote prices part by part, from the system
+   price list, marked †); a shared view-only link never shows them, and
    the PDF includes them only when you tick **Prices in the parts list**.
 12. **PDF** (top bar) exports an A3 presentation: cover, what the concept
    asks of the site plus your notes for this draft, the shop in 3D from
@@ -167,7 +168,21 @@ a script in `scripts/blender/`; build them with Blender as a Python module
     python scripts/blender/build.py --preview DIR   # plus a Cycles still per model
 
 `scripts/generate-assets.mjs` skips every item that has a Blender script.
-Done so far: 105-99-004 Wall Unit 1400 – Shelves.
+
+Where the supplier's STEP file exists, the model *is* the STEP: it is
+converted with OpenCascade (`scripts/blender/step-to-obj.mjs`, needs
+`occt-import-js`) and imported into Blender (`step_models.py`), which
+drops bolts and felt pads, merges flat faces and smooths rounded edges.
+Variants are derived from it: the 700 racks are the 1400 rack with its
+rails 510 mm shorter, the H1700 racks have their posts 200 mm longer, and
+the short oak podium is the tall one at 400 mm.
+
+Done so far:
+- From STEP: Floor Rack 1400 / 700 / 1400 H1700 / 700 H1700, Tall and
+  Short Oak Podium; the three jeans racks are the STEP rack frame with
+  shelf sections added
+- Modelled (`wall_units.py`, one shared frame with shelves, hanging
+  rails, beams, mirror box, jeans unit or screen): all ten wall units
 
 ## Design language
 

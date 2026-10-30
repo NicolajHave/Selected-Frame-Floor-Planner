@@ -12,3 +12,5 @@ build/
 
 # Blender autosaves
 *.blend1
+scripts/blender/.cache/
+__pycache__/

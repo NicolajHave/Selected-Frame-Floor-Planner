@@ -59,7 +59,7 @@ test('CSV: BOM, semicolons, decimal commas, quoting', () => {
     '﻿Item number;Name;Category;Qty;Width (mm);Depth (mm);Height (mm);Material;Unit weight (kg);Total weight (kg);Hangers per unit;Total hangers;HS codes;SKU;Unit price (EUR);Total price (EUR);Price source;Supplier',
   );
   expect(csv).toContain(
-    '105-06-001;Floor Rack 1400;Racks;1;1310;500;1758;Stainless Steel;16,3;16,3;50;50;94032080;105-06-001-E;466,00;466,00;Price list;&elements',
+    '105-06-001;Floor Rack 1400;Racks;1;1310;500;1508;Stainless Steel;16,3;16,3;50;50;94032080;105-06-001-E;506,00;506,00;&elements quote;&elements',
   );
   expect(csv).toContain('"Table; large"');
   expect(csv).toContain('Total;"Store ""A""";;2;');

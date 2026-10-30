@@ -195,7 +195,7 @@ export function partsListToCsv(list: PartsList, projectName: string): string {
       num(r.unitWeightKg), num(r.totalWeightKg), num(r.hangersPerUnit), num(r.totalHangers),
       r.hsCodes.join(' / '),
       r.sku ?? r.itemNumber, money(r.unitPriceEur), money(r.totalPriceEur),
-      r.priceSource === 'supplier' ? 'Supplier calculation' : r.priceSource === 'system' ? 'Price list' : '',
+      r.priceSource === 'quote' ? '&elements quote' : r.priceSource === 'system' ? 'System price list' : '',
       r.supplier ?? '',
     ]),
     [],

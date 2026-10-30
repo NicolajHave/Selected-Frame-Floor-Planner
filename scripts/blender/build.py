@@ -21,7 +21,39 @@ sys.path.insert(0, HERE)
 import bpy  # noqa: E402
 from common import export, reset  # noqa: E402
 
-MODELS = ['wall_unit_1400_shelves']
+MODELS = [
+    'wall_unit_1400_shelves',
+    'wall_unit_1400_sidehang',
+    'wall_unit_1400_shelf_sidehang',
+    'wall_unit_1400_2level_sidehang',
+    'wall_unit_1400_mirror_sidehang',
+    'wall_unit_jeans',
+    'wall_unit_1400_screen',
+    'wall_unit_700_shelf',
+    'wall_unit_700_2level_sidehang',
+    'wall_unit_700_sidehang',
+    'floor_rack_1400',
+    'floor_rack_700',
+    'floor_rack_1400_h1700',
+    'floor_rack_700_h1700',
+    'podium_tall_oak',
+    'podium_short_oak',
+    'jeans_rack_single',
+    'jeans_rack_double',
+    'jeans_rack_triple',
+]
+
+
+def model_size():
+    """Width × depth × height of everything built, mm (Blender x, y, z)."""
+    dg = bpy.context.evaluated_depsgraph_get()
+    pts = []
+    for o in bpy.context.scene.objects:
+        if o.type == 'MESH':
+            me = o.evaluated_get(dg).to_mesh()
+            pts += [o.matrix_world @ v.co for v in me.vertices]
+            o.evaluated_get(dg).to_mesh_clear()
+    return [round((max(p[k] for p in pts) - min(p[k] for p in pts)) * 1000) for k in range(3)]
 
 
 def preview(path, look_from=(-1.7, -4.4, 1.35), target=(0, 0, 1.12)):
@@ -80,8 +112,9 @@ def main():
         blend = os.path.join(ROOT, 'assets', 'blender', f'{mod.ID}.blend') if a.blend else None
         if blend:
             os.makedirs(os.path.dirname(blend), exist_ok=True)
+        size = model_size()
         export(glb, blend)
-        print(f'{mod.ID}: {os.path.getsize(glb) // 1024} kB → {os.path.relpath(glb, ROOT)}')
+        print(f'{mod.ID}: {size[0]} × {size[1]} × {size[2]} mm, {os.path.getsize(glb) // 1024} kB → {os.path.relpath(glb, ROOT)}')
         if a.preview:
             preview(os.path.join(a.preview, f'{mod.ID}.png'))
 
