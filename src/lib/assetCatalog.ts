@@ -177,9 +177,9 @@ export const ASSET_CATALOG: readonly AssetEntry[] = [
   // ---- Logos (wall-mounted; catalog leaves weight blank) ----
   entry('105-13-001', 'Corona Light Logo', 'Logos', [1200, 20, 225],
     { ...LOGO, material: SS, hsCodes: [HS_STEEL] }),
-  entry('105-13-015', 'Stainless Steel Logo', 'Logos', [1200, 20, 225],
+  entry('105-13-015', 'Stainless Steel Logo', 'Logos', [1200, 6, 225],
     { ...LOGO, material: SS, hsCodes: [HS_STEEL] }),
-  entry('105-13-LED', 'LED Logo', 'Logos', [1200, 20, 225],
+  entry('105-13-LED', 'LED Logo', 'Logos', [1200, 25, 225],
     { ...LOGO, itemNumber: '', material: 'LED', hsCodes: ['9405618020'] }),
 
   // ---- Mannequins (dimensions estimated; not in catalog) ----

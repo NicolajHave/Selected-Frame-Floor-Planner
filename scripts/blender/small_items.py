@@ -69,17 +69,18 @@ def _wordmark(name, depth, mat, y_front, width=1200.0, height=225.0):
 
 
 def logo(kind):
-    """Back of the logo on the wall at y = +10 (catalog depth 20 mm)."""
+    """Centred on y = 0 with its back on the wall, as deep as the catalog says."""
     if kind == 'corona':
         # Steel letters on 20 mm spacers, lit from behind: a warm halo on the wall.
-        _wordmark('letters', 8, 'steel', -10, width=1170, height=215)
+        # 6 mm steel letters on 14 mm spacers (20 mm in all).
+        _wordmark('letters', 6, 'steel', -10, width=1170, height=215)
         _wordmark('halo', 1, 'glow_warm', 9)
     elif kind == 'steel':
-        # Brushed steel I-bond, 3 mm, flat on the wall.
-        _wordmark('letters', 3, 'steel', 7)
+        # Brushed steel, 6 mm, flat on the wall.
+        _wordmark('letters', 6, 'steel', -3)
     else:
-        # LED: white, front-lit letters.
-        _wordmark('letters', 20, 'glow_white', -10)
+        # LED: white, front-lit letters, 25 mm deep.
+        _wordmark('letters', 25, 'glow_white', -12.5)
 
 
 # ---------------------------------------------------------------------------
