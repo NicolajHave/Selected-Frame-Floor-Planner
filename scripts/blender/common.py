@@ -23,6 +23,8 @@ MATERIALS = {
     'mirror': dict(color=(0.86, 0.90, 0.93, 1), metallic=0.15, roughness=0.05),
     'acrylic': dict(color=(0.93, 0.96, 0.97, 0.35), metallic=0.0, roughness=0.05),
     'mdf_paint': dict(color=(0.80, 0.82, 0.74, 1), metallic=0.0, roughness=0.5),
+    # Lacquered MDF, NCS S 2010-G20Y gloss 80 (Iconic table and podium).
+    'mint_gloss': dict(color=(0.78, 0.86, 0.80, 1), metallic=0.0, roughness=0.22),
     'screen': dict(color=(0.05, 0.05, 0.06, 1), metallic=0.2, roughness=0.15),
     'light_panel': dict(color=(0.97, 0.97, 0.96, 1), metallic=0.0, roughness=0.3),
 }

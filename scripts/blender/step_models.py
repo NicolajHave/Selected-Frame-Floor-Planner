@@ -30,14 +30,17 @@ def _obj_for(step_name):
     return obj
 
 
-def import_step(step_name, materials=lambda name: 'steel', drop=()):
+def import_step(step_name, materials=lambda name: 'steel', drop=(), up='Y'):
     """
     Imports a STEP (via OBJ), turns it Y-up → Z-up, centres it on x and y
     with its lowest point on z = 0, and assigns a material per part name.
     Parts whose name contains any of `drop` (e.g. hidden felt pads) are
     left out.
     """
-    bpy.ops.wm.obj_import(filepath=_obj_for(step_name), up_axis='Y', forward_axis='NEGATIVE_Z', global_scale=MM)
+    if up == 'Y':
+        bpy.ops.wm.obj_import(filepath=_obj_for(step_name), up_axis='Y', forward_axis='NEGATIVE_Z', global_scale=MM)
+    else:  # already Z-up
+        bpy.ops.wm.obj_import(filepath=_obj_for(step_name), up_axis='Z', forward_axis='Y', global_scale=MM)
     parts = [o for o in bpy.context.scene.objects if o.type == 'MESH']
     for o in list(parts):
         if any(d in o.name for d in drop):
@@ -152,4 +155,33 @@ def jeans_rack(sections, posts=(), width=1310):
                 box(f's{j}.{k}.bar{side}', (30, depth, 20), (x, 0, top - 19 - 10), bevel=1)
             box(f's{j}.{k}.core', (w - 10, depth - 20, 18), (xc, 0, top - 9.5), mat='oak', bevel=0.8)
             box(f's{j}.{k}.top', (w - 14, depth - 24, 1), (xc, 0, top - 0.5), mat='laminate', bevel=0)
+    return parts
+
+
+# ---------------------------------------------------------------------------
+# Iconic table (105-17-007-01-A.step is its top only: 1265 × 1200 × 340 mm)
+# ---------------------------------------------------------------------------
+
+ICONIC_HEIGHT = 650
+ICONIC_BASE_DIAMETER = 700
+
+
+def iconic_table():
+    """The STEP top, lifted onto a cylindrical foot to the table's 650 mm."""
+    from common import cylinder
+
+    parts = import_step('105-17-007-01-A', lambda name: 'mint_gloss', up='Z')
+    top_thickness = max(v.co.z for o in parts for v in o.data.vertices) / MM
+    lift = ICONIC_HEIGHT - top_thickness
+    for o in parts:
+        for v in o.data.vertices:
+            v.co.z += lift * MM
+        o.data.update()
+    weld(parts)
+    # The foot stands under the middle of the top's mass, not its bounding box.
+    verts = [v.co for o in parts for v in o.data.vertices]
+    cx = sum(v.x for v in verts) / len(verts) / MM
+    cy = sum(v.y for v in verts) / len(verts) / MM
+    foot = cylinder('foot', ICONIC_BASE_DIAMETER / 2, lift, (cx, cy, lift / 2), mat='mint_gloss', verts=64)
+    foot.data.polygons.foreach_set('use_smooth', [True] * len(foot.data.polygons))
     return parts
