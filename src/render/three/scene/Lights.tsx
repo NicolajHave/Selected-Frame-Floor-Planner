@@ -15,6 +15,9 @@ export function Lights() {
         shadow-camera-right={15}
         shadow-camera-top={15}
         shadow-camera-bottom={-15}
+        // Without a bias, smooth curved surfaces (podiums, mannequins) get striped self-shadows.
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.02}
       />
     </>
   );

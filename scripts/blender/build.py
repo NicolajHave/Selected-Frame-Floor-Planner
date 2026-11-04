@@ -43,6 +43,20 @@ MODELS = [
     'jeans_rack_triple',
     'table_volume',
     'table_iconic',
+    'podium_iconic',
+    'logo_corona',
+    'logo_steel',
+    'logo_led',
+    'sign_table',
+    'sign_floor_price',
+    'sign_rack',
+    'tray_leather',
+    'tray_3x3',
+    'tray_3x5',
+    'accessories_rack',
+    'mannequin_female',
+    'mannequin_male',
+    'carpet',
 ]
 
 

@@ -26,6 +26,14 @@ MATERIALS = {
     # Lacquered MDF, NCS S 2010-G20Y gloss 80 (Iconic table and podium).
     'mint_gloss': dict(color=(0.78, 0.86, 0.80, 1), metallic=0.0, roughness=0.22),
     'screen': dict(color=(0.05, 0.05, 0.06, 1), metallic=0.2, roughness=0.15),
+    'leather': dict(color=(0.13, 0.16, 0.12, 1), metallic=0.0, roughness=0.7),
+    'linen': dict(color=(0.86, 0.76, 0.60, 1), metallic=0.0, roughness=0.85),
+    'birch': dict(color=(0.88, 0.74, 0.52, 1), metallic=0.0, roughness=0.55),
+    'paper': dict(color=(0.96, 0.96, 0.95, 1), metallic=0.0, roughness=0.8),
+    'carpet': dict(color=(0.50, 0.46, 0.20, 1), metallic=0.0, roughness=1.0),
+    # Lit parts: the glTF carries the emission, so the planner shows them glowing.
+    'glow_warm': dict(color=(1.0, 0.86, 0.62, 1), metallic=0.0, roughness=0.5, emission=(1.0, 0.82, 0.55, 1), strength=2.0),
+    'glow_white': dict(color=(0.98, 0.98, 0.97, 1), metallic=0.0, roughness=0.4, emission=(1.0, 1.0, 0.98, 1), strength=1.5),
     'light_panel': dict(color=(0.97, 0.97, 0.96, 1), metallic=0.0, roughness=0.3),
 }
 
@@ -45,6 +53,9 @@ def material(name):
     bsdf.inputs['Base Color'].default_value = spec['color']
     bsdf.inputs['Metallic'].default_value = spec['metallic']
     bsdf.inputs['Roughness'].default_value = spec['roughness']
+    if 'emission' in spec:
+        bsdf.inputs['Emission Color'].default_value = spec['emission']
+        bsdf.inputs['Emission Strength'].default_value = spec['strength']
     if spec['color'][3] < 1:
         bsdf.inputs['Alpha'].default_value = spec['color'][3]
         mat.blend_method = 'BLEND'
