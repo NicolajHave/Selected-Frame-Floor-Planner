@@ -41,6 +41,8 @@ MODELS = [
     'jeans_rack_single',
     'jeans_rack_double',
     'jeans_rack_triple',
+    'table_volume',
+    'table_iconic',
 ]
 
 

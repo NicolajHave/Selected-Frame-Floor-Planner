@@ -183,6 +183,9 @@ Done so far:
   shelf sections added
 - Modelled (`wall_units.py`, one shared frame with shelves, hanging
   rails, beams, mirror box, jeans unit or screen): all ten wall units
+- Tables: the Iconic Table is its STEP top (the file holds only the top)
+  on a cylindrical foot; the Volume Table is modelled from the render and
+  the quote (`tables.py`)
 
 ## Design language
 
