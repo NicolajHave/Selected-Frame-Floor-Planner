@@ -186,6 +186,13 @@ Done so far:
 - Tables: the Iconic Table is its STEP top (the file holds only the top)
   on a cylindrical foot; the Volume Table is modelled from the render and
   the quote (`tables.py`)
+- Everything else (`small_items.py`): Iconic Podium, the three logos
+  (lettering scaled to 1200 × 225 mm; Corona with a warm halo, LED lit),
+  the three signs, leather and oak trays, the accessories rack, both
+  mannequins (lofted dress forms) and the carpet
+
+Every catalog item now has a Blender model; `generate-assets.mjs` only
+fills in for new catalog items until they get one.
 
 ## Design language
 
