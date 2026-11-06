@@ -6,7 +6,9 @@ side faces -Y (wall-mounted items have their back on +Y).
 """
 
 import math
+import os
 
+import addon_utils
 import bmesh
 import bpy
 
@@ -34,34 +36,63 @@ def iconic_podium():
 
 
 # ---------------------------------------------------------------------------
-# Logos: "Selected", 1200 × 225 mm
+# Logos: the Selected wordmark, 1200 × 225 mm
 # ---------------------------------------------------------------------------
 
+WORDMARK_SVG = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'selected-wordmark.svg')
+
+
 def _wordmark(name, depth, mat, y_front, width=1200.0, height=225.0):
-    """The word "Selected" standing up, its front at `y_front`, `depth` deep, scaled to width × height."""
-    curve = bpy.data.curves.new(name, 'FONT')
-    curve.body = 'Selected'
-    curve.extrude = 0.5
-    obj = bpy.data.objects.new(name, curve)
-    bpy.context.collection.objects.link(obj)
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
+    """
+    The Selected wordmark (from the brand's vector file) standing up, its
+    front at `y_front`, `depth` deep, as large as fits in width × height
+    without distorting it, centred on x with its baseline-box bottom at z = 0.
+    """
+    addon_utils.enable('io_curve_svg')
+    before = set(bpy.data.objects)
+    bpy.ops.import_curve.svg(filepath=WORDMARK_SVG)
+    curves = [o for o in bpy.data.objects if o not in before and o.type == 'CURVE']
+    for o in curves:
+        o.data.dimensions = '2D'
+        o.data.fill_mode = 'BOTH'
+        o.data.extrude = 0.001
+        o.data.resolution_u = 6
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in curves:
+        o.select_set(True)
+    bpy.context.view_layer.objects.active = curves[0]
     bpy.ops.object.convert(target='MESH')
+    bpy.ops.object.join()
     obj = bpy.context.active_object
+    obj.name = name
+    # Bake the importer's object transform into the vertices.
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    for coll in list(obj.users_collection):
+        if coll is not bpy.context.scene.collection and coll.name != 'Collection':
+            bpy.context.scene.collection.objects.link(obj)
+            coll.objects.unlink(obj)
+            if not coll.objects:
+                bpy.data.collections.remove(coll)
     me = obj.data
     xs = [v.co.x for v in me.vertices]
     ys = [v.co.y for v in me.vertices]
     zs = [v.co.z for v in me.vertices]
-    sx = width / (max(xs) - min(xs))
-    sy = height / (max(ys) - min(ys))
+    s = min(width / (max(xs) - min(xs)), height / (max(ys) - min(ys)))
     cx = (max(xs) + min(xs)) / 2
+    z0, z1 = min(zs), max(zs)
     for v in me.vertices:
-        x = (v.co.x - cx) * sx
-        z = (v.co.y - min(ys)) * sy
-        # Letter thickness: the font's extrusion (−0.5…0.5) becomes `depth` mm.
-        y = y_front + (0.5 - v.co.z) * depth
+        x = (v.co.x - cx) * s
+        z = (v.co.y - min(ys)) * s
+        # Letter thickness: the extrusion (z0…z1) becomes `depth` mm, front at y_front.
+        y = y_front + (z1 - v.co.z) / (z1 - z0) * depth
         v.co = (x * MM, y * MM, z * MM)
     me.update()
+    bm = bmesh.new()
+    bm.from_mesh(me)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=0.00005)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    bm.to_mesh(me)
+    bm.free()
     me.materials.clear()
     me.materials.append(material(mat))
     obj.select_set(False)
@@ -73,8 +104,14 @@ def logo(kind):
     if kind == 'corona':
         # Steel letters on 20 mm spacers, lit from behind: a warm halo on the wall.
         # 6 mm steel letters on 14 mm spacers (20 mm in all).
-        _wordmark('letters', 6, 'steel', -10, width=1170, height=215)
-        _wordmark('halo', 1, 'glow_warm', 9)
+        letters = _wordmark('letters', 6, 'steel', -10, width=1170, height=215)
+        halo = _wordmark('halo', 1, 'glow_warm', 9)
+        # Centre the letters on their slightly larger halo.
+        lz = [v.co.z for v in letters.data.vertices]
+        hz = [v.co.z for v in halo.data.vertices]
+        dz = (max(hz) + min(hz) - max(lz) - min(lz)) / 2
+        for v in letters.data.vertices:
+            v.co.z += dz
     elif kind == 'steel':
         # Brushed steel, 6 mm, flat on the wall.
         _wordmark('letters', 6, 'steel', -3)

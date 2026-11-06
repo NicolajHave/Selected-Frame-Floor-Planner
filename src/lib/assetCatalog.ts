@@ -37,6 +37,8 @@ export interface AssetEntry {
   minWallHeight?: number;
   /** Procedurally generated 3D model, loaded by the Three.js view. */
   glbUrl: string;
+  /** Library card picture rendered from the model (scripts/blender/build.py --thumbs). */
+  thumbUrl: string;
   /** Original CAD file under /public, when we have one. */
   stepUrl?: string;
   /** Bounding-box dimensions in mm (W × D × H) from the SIS catalog. */
@@ -80,6 +82,7 @@ function entry(
     mountHeight: spec.mountHeight,
     minWallHeight: spec.minWallHeight,
     glbUrl: `/assets/3d/${id}.glb`,
+    thumbUrl: `/assets/thumbs/${id}.png`,
     stepUrl: spec.stepUrl,
     size: { width: mm(w), depth: mm(d), height: mm(h) },
     material: spec.material,
