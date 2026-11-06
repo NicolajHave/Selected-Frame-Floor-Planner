@@ -167,6 +167,7 @@ a script in `scripts/blender/`; build them with Blender as a Python module
     python scripts/blender/build.py --blend    # also .blend files to edit by hand
     python scripts/blender/build.py --preview DIR   # plus a Cycles still per model
     python scripts/blender/build.py --thumbs   # plus the library picture → public/assets/thumbs
+    python scripts/blender/build.py --plan     # plus the top view for the 2D plan → src/lib/planShapes.json (pip install shapely)
 
 `scripts/generate-assets.mjs` skips every item that has a Blender script.
 
