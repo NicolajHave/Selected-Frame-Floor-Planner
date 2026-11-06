@@ -5,6 +5,7 @@ accessories rack, mannequins and the carpet. Millimetres; z up; the room
 side faces -Y (wall-mounted items have their back on +Y).
 """
 
+import json
 import math
 import os
 
@@ -312,19 +313,26 @@ def mannequin(height, shoulders, chest, waist, hips):
 # Carpet: an organic shape, 2424 × 2809 × 25
 # ---------------------------------------------------------------------------
 
+CARPET_OUTLINE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'carpet-size-1.json')
+
+
 def carpet(w=2424.0, d=2809.0, h=25.0):
-    n = 160
-    pts = []
-    for i in range(n):
-        a = 2 * math.pi * i / n
-        r = 1 + 0.16 * math.sin(2 * a + 0.6) + 0.09 * math.sin(3 * a + 2.1) + 0.05 * math.sin(5 * a + 0.3)
-        pts.append((math.cos(a) * r, math.sin(a) * r))
+    """
+    105-19-001: the outline from the production drawing (carpet-size-1.dxf,
+    extracted to carpet-size-1.json), fitted to the catalog's 2424 × 2809
+    (the drawing measures 2439 × 2799; under 1 % apart).
+    """
+    with open(CARPET_OUTLINE) as f:
+        pts = json.load(f)['outline']
+    # Drawing and Blender agree: x right, y up the page (to the back).
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
     sx = w / (max(xs) - min(xs))
     sy = d / (max(ys) - min(ys))
     cx = (max(xs) + min(xs)) / 2
     cy = (max(ys) + min(ys)) / 2
+    if sum(xs[i] * ys[i - 1] - xs[i - 1] * ys[i] for i in range(len(pts))) < 0:
+        pts.reverse()
     bm = bmesh.new()
     verts = [bm.verts.new(((x - cx) * sx * MM, (y - cy) * sy * MM, 0)) for x, y in pts]
     face = bm.faces.new(verts)

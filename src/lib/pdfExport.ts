@@ -13,6 +13,7 @@ import { findAsset } from './assetCatalog';
 import { electricalType } from './electricalTypes';
 import { electricalAnchor } from '@/geometry/electrical';
 import { rackContents } from './racks';
+import { placedPlanShape } from './planShapes';
 import { PRICE_LIST } from './prices';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { buildPartsList, type PartsList } from './partsList';
@@ -262,8 +263,24 @@ function drawPlanPage(
 
   for (const it of project.inventory) {
     const corners = rectCorners(it.position, it.size, it.rotation).map(P);
+    // The model seen from above where there is one, else the footprint.
+    const shape = placedPlanShape(it);
     // On the electrical plan fixtures are only there for orientation.
-    polygon(doc, corners, electrical ? [250, 250, 248] : ITEM_FILL, electrical ? [190, 192, 186] : SAGE, 0.2);
+    const fill: [number, number, number] = electrical ? [250, 250, 248] : ITEM_FILL;
+    const edge: [number, number, number] = electrical ? [190, 192, 186] : [70, 74, 66];
+    if (shape) {
+      planShapePath(doc, shape.fill.map((r) => r.map(P)), fill, edge, 0.18);
+      if (!electrical && shape.lines.length) {
+        doc.setDrawColor(...SAGE);
+        doc.setLineWidth(0.08);
+        for (const l of shape.lines) {
+          const pts = l.map(P);
+          doc.lines(pts.slice(1).map(([x, y], i) => [x - pts[i]![0], y - pts[i]![1]]), pts[0]![0], pts[0]![1], [1, 1], 'S', false);
+        }
+      }
+      continue;
+    }
+    polygon(doc, corners, fill, electrical ? [190, 192, 186] : SAGE, 0.2);
     if (electrical) continue;
     // Back edge: the side that goes against a wall.
     doc.setDrawColor(...SAGE);
@@ -358,6 +375,29 @@ function drawPlanNotes(doc: JsPdf, project: Project, P: (p: Point) => readonly [
     font(doc, 7);
     lines.forEach((l, i) => doc.text(l, x, y - h / 2 + 3.4 + i * 3.1, { align: 'center' }));
   }
+}
+
+/** Several closed rings as one path, filled even-odd (holes stay open) and outlined. */
+function planShapePath(
+  doc: JsPdf,
+  rings: (readonly [number, number])[][],
+  fill: [number, number, number],
+  stroke: [number, number, number],
+  lineWidth: number,
+) {
+  const ops: { op: string; c: number[] }[] = [];
+  for (const r of rings) {
+    if (r.length < 3) continue;
+    ops.push({ op: 'm', c: [r[0]![0], r[0]![1]] });
+    for (const p of r.slice(1)) ops.push({ op: 'l', c: [p[0], p[1]] });
+    ops.push({ op: 'h', c: [] });
+  }
+  if (!ops.length) return;
+  doc.setFillColor(...fill);
+  doc.setDrawColor(...stroke);
+  doc.setLineWidth(lineWidth);
+  doc.path(ops);
+  doc.fillStrokeEvenOdd();
 }
 
 function polygon(

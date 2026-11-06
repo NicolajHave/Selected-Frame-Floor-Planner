@@ -1,16 +1,19 @@
 """
 Builds Blender catalog models into the planner's GLB files.
 
-    python scripts/blender/build.py [module ...] [--blend] [--preview DIR] [--thumbs]
+    python scripts/blender/build.py [module ...] [--blend] [--preview DIR] [--thumbs] [--plan]
 
 Needs Blender as a Python module (`pip install bpy==4.5.14`, Python 3.11).
 Each module defines ID and build(). Output: public/assets/3d/<ID>.glb, and
 with --blend also assets/blender/<ID>.blend for hand editing in Blender,
-and with --thumbs the library picture public/assets/thumbs/<ID>.png.
+with --thumbs the library picture public/assets/thumbs/<ID>.png, and with
+--plan the model seen from above for the 2D plan (src/lib/planShapes.json;
+needs shapely).
 """
 
 import argparse
 import importlib
+import json
 import math
 import os
 import sys
@@ -191,12 +194,87 @@ def thumbnail(path, width=360, height=192):
     bpy.ops.render.render(write_still=True)
 
 
+PLAN_SHAPES = os.path.join(ROOT, 'src', 'lib', 'planShapes.json')
+
+
+def plan_shape(tolerance=4.0):
+    """
+    The model seen from above, in plan mm around its origin (plan x = model
+    x, plan y = −model y, since the plan's y runs to the front): the filled
+    silhouette, and the outline of each part inside it for detail.
+    """
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+
+    dg = bpy.context.evaluated_depsgraph_get()
+    parts = []
+    for o in bpy.context.scene.objects:
+        if o.type != 'MESH':
+            continue
+        ev = o.evaluated_get(dg)
+        me = ev.to_mesh()
+        me.calc_loop_triangles()
+        mw = o.matrix_world
+        tris = []
+        for t in me.loop_triangles:
+            pts = [mw @ me.vertices[i].co for i in t.vertices]
+            poly = Polygon([(p.x * 1000, -p.y * 1000) for p in pts])
+            if poly.area > 0.5:
+                tris.append(poly)
+        ev.to_mesh_clear()
+        if tris:
+            # Close hairline gaps between neighbouring faces, then tidy.
+            parts.append(unary_union(tris).buffer(0.6, join_style=2).buffer(-0.6, join_style=2))
+    if not parts:
+        return None
+    silhouette = unary_union(parts).simplify(tolerance / 2)
+
+    def rings(geom):
+        polys = getattr(geom, 'geoms', [geom])
+        out = []
+        for p in polys:
+            if p.is_empty or p.geom_type != 'Polygon' or p.area < 40:
+                continue
+            for r in [p.exterior, *p.interiors]:
+                pts = [(round(x), round(y)) for x, y in list(r.coords)[:-1]]
+                if len(pts) >= 3:
+                    out.append(pts)
+        return out
+
+    fill = rings(silhouette)
+    edge = silhouette.boundary
+    lines = []
+    for part in parts:
+        # Only the outline that lies inside the silhouette adds anything.
+        inner = part.simplify(tolerance).boundary.difference(edge.buffer(tolerance))
+        for seg in getattr(inner, 'geoms', [inner]):
+            if seg.is_empty or seg.length < 3 * tolerance:
+                continue
+            pts = [(round(x), round(y)) for x, y in seg.coords]
+            dedup = [p for i, p in enumerate(pts) if i == 0 or p != pts[i - 1]]
+            if len(dedup) >= 2:
+                lines.append(dedup)
+    return {'fill': fill, 'lines': lines}
+
+
+def save_plan_shape(asset_id, shape):
+    data = {}
+    if os.path.exists(PLAN_SHAPES):
+        with open(PLAN_SHAPES) as f:
+            data = json.load(f)
+    data[asset_id] = shape
+    with open(PLAN_SHAPES, 'w') as f:
+        json.dump(dict(sorted(data.items())), f, separators=(',', ':'))
+        f.write('\n')
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('models', nargs='*', default=MODELS)
     p.add_argument('--blend', action='store_true')
     p.add_argument('--preview', metavar='DIR')
     p.add_argument('--thumbs', action='store_true')
+    p.add_argument('--plan', action='store_true')
     a = p.parse_args()
     for name in a.models:
         mod = importlib.import_module(name)
@@ -209,6 +287,11 @@ def main():
         size = model_size()
         export(glb, blend)
         print(f'{mod.ID}: {size[0]} × {size[1]} × {size[2]} mm, {os.path.getsize(glb) // 1024} kB → {os.path.relpath(glb, ROOT)}')
+        if a.plan:
+            shape = plan_shape()
+            if shape:
+                save_plan_shape(mod.ID, shape)
+                print(f'  plan: {len(shape["fill"])} rings, {len(shape["lines"])} detail lines')
         if a.thumbs:
             thumbs = os.path.join(ROOT, 'public', 'assets', 'thumbs')
             os.makedirs(thumbs, exist_ok=True)

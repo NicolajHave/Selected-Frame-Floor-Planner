@@ -6,6 +6,7 @@ import { formatLength } from '@/model/units';
 import { pxStroke } from './viewport';
 import { RotateHandle } from './Handles';
 import { rackSlots } from '@/lib/racks';
+import { itemPlanShape, pathData } from '@/lib/planShapes';
 
 interface Props {
   item: InventoryItem;
@@ -31,6 +32,8 @@ export function Inventory({ item, view, selected, grouped, onPointerDown, onRota
   const screenW = width * view.zoom;
   const screenH = depth * view.zoom;
   const showLabel = screenW > 60 && screenH > 30;
+  // The model seen from above; the footprint rectangle stays as a faint outline (and the hit area).
+  const shape = itemPlanShape(item);
 
   return (
     <g transform={`rotate(${rotDeg} ${item.position.x} ${item.position.y})`}>
@@ -40,12 +43,34 @@ export function Inventory({ item, view, selected, grouped, onPointerDown, onRota
           y={y}
           width={width}
           height={depth}
-          fill="var(--inv-fill)"
+          fill={shape ? 'transparent' : 'var(--inv-fill)'}
           stroke={selected ? 'var(--selection)' : 'var(--inv-stroke)'}
+          strokeOpacity={shape && !selected ? 0.45 : 1}
           strokeWidth={stroke}
           strokeDasharray={selected ? undefined : `${pxStroke(view, 3)} ${pxStroke(view, 3)}`}
         />
-        {item.modules?.length ? (
+        {shape && (
+          <g transform={`translate(${item.position.x} ${item.position.y})`} pointerEvents="none" data-testid="plan-shape">
+            <path
+              d={pathData(shape.fill, true)}
+              fillRule="evenodd"
+              fill="var(--inv-fill)"
+              stroke="var(--wall-stroke)"
+              strokeWidth={pxStroke(view, 1)}
+              strokeLinejoin="round"
+            />
+            {shape.lines.length > 0 && (
+              <path
+                d={pathData(shape.lines, false)}
+                fill="none"
+                stroke="var(--inv-stroke)"
+                strokeWidth={pxStroke(view, 0.6)}
+                strokeLinejoin="round"
+              />
+            )}
+          </g>
+        )}
+        {item.modules?.length && !shape ? (
           // Wall rack: a line between units, and each unit's own front.
           <g pointerEvents="none" stroke="var(--inv-stroke)" strokeWidth={pxStroke(view, 1)}>
             {rackSlots(item.modules).map((slot, i) => {
@@ -87,16 +112,18 @@ export function Inventory({ item, view, selected, grouped, onPointerDown, onRota
             </text>
           </g>
         )}
-        {/* Back edge marker: the side that faces the wall. */}
-        <line
-          x1={x}
-          y1={y}
-          x2={x + width}
-          y2={y}
-          stroke={selected ? 'var(--selection)' : 'var(--inv-stroke)'}
-          strokeWidth={pxStroke(view, 2.5)}
-          pointerEvents="none"
-        />
+        {/* Back edge marker: the side that faces the wall (the model shows it once drawn). */}
+        {(!shape || selected) && (
+          <line
+            x1={x}
+            y1={y}
+            x2={x + width}
+            y2={y}
+            stroke={selected ? 'var(--selection)' : 'var(--inv-stroke)'}
+            strokeWidth={pxStroke(view, 2.5)}
+            pointerEvents="none"
+          />
+        )}
       </g>
       {selected && !grouped && (
         <RotateHandle
