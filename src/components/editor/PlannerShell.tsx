@@ -91,7 +91,7 @@ export function PlannerShell() {
       <div className="flex min-h-0 flex-1">
         {/* Asset library */}
         <aside className="w-[240px] shrink-0 overflow-hidden border-r border-wall-200 bg-wall-50">
-          <fieldset disabled={readOnly} className={readOnly ? 'h-full opacity-50' : 'h-full'}>
+          <fieldset disabled={readOnly} className={readOnly ? 'h-full min-w-0 opacity-50' : 'h-full min-w-0'}>
             <AssetLibrary />
           </fieldset>
         </aside>

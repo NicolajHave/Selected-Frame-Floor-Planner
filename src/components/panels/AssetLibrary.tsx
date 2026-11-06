@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { clsx } from 'clsx';
 import { ASSET_CATALOG, ASSET_CATEGORIES, type AssetEntry } from '@/lib/assetCatalog';
 import { usePlannerStore } from '@/store/plannerStore';
@@ -174,7 +175,7 @@ function AssetCard({ asset, active, onPick }: CardProps) {
           : 'border-wall-200 hover:border-ink-500 hover:bg-wall-100',
       )}
     >
-      <FootprintThumbnail asset={asset} active={active} />
+      <AssetThumbnail asset={asset} active={active} />
       <div className="flex flex-col">
         <span className="truncate text-[12px] font-medium text-ink-900">{asset.name}</span>
         <span className="text-[10px] uppercase tracking-widest2 text-ink-500">{asset.id}</span>
@@ -187,10 +188,27 @@ function AssetCard({ asset, active, onPick }: CardProps) {
   );
 }
 
-/**
- * Top-down footprint preview. Width × depth, scaled to fit the card.
- * The 3D view renders the generated model; this stays schematic.
- */
+/** The model as rendered in Blender; the schematic footprint if the picture is missing. */
+function AssetThumbnail({ asset, active }: { asset: AssetEntry; active: boolean }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <FootprintThumbnail asset={asset} active={active} />;
+  return (
+    <div className="flex h-24 w-full items-center justify-center rounded-[2px] bg-wall-100">
+      <img
+        src={asset.thumbUrl}
+        alt=""
+        width={180}
+        height={96}
+        loading="lazy"
+        draggable={false}
+        onError={() => setFailed(true)}
+        className="h-full w-full object-contain"
+      />
+    </div>
+  );
+}
+
+/** Top-down footprint preview. Width × depth, scaled to fit the card. */
 function FootprintThumbnail({ asset, active }: { asset: AssetEntry; active: boolean }) {
   const PAD = 8;
   const BOX = 96;
