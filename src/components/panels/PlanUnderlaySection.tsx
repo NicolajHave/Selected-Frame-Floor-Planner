@@ -4,6 +4,8 @@ import { useRef, useState } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { isPdf, openPdf, rasterizePlanFile, type Crop, type PdfSource, type RasterPlan } from '@/lib/planImport';
 import { PdfImportDialog } from './PdfImportDialog';
+import { CadImportDialog, type CadUnderlay } from './CadImportDialog';
+import { isCad } from '@/lib/cad';
 import type { Mm } from '@/model/units';
 import { Section } from '../ui/Section';
 import { Button } from '../ui/Button';
@@ -20,6 +22,9 @@ export function PlanUnderlaySection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pdf, setPdf] = useState<{ source: PdfSource; fileName: string } | null>(null);
+  const [cad, setCad] = useState<File | null>(null);
+  const setZoom = usePlannerStore((s) => s.setZoom);
+  const setPan = usePlannerStore((s) => s.setPan);
 
   const closePdf = () => {
     pdf?.source.close();
@@ -33,6 +38,11 @@ export function PlanUnderlaySection() {
     setBusy(true);
     setError(null);
     try {
+      if (isCad(file)) {
+        // Read and choose the part of the drawing in a dialog.
+        setCad(file);
+        return;
+      }
       if (isPdf(file)) {
         // Choose the page (and the part of it) in a dialog first.
         setPdf({ source: await openPdf(file), fileName: file.name });
@@ -44,6 +54,33 @@ export function PlanUnderlaySection() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /** A CAD underlay is at its real size: put it in the middle of the view and zoom to fit it. */
+  const placeCad = (u: CadUnderlay, fileName: string) => {
+    const { view } = usePlannerStore.getState();
+    const stage = document.querySelector('[data-stage]')?.getBoundingClientRect();
+    const sw = stage?.width ?? 800;
+    const sh = stage?.height ?? 600;
+    const cx = (sw / 2 - view.pan.x) / view.zoom;
+    const cy = (sh / 2 - view.pan.y) / view.zoom;
+    const h = u.widthMm * u.aspect;
+    setUnderlay({
+      src: u.src,
+      fileName,
+      aspect: u.aspect,
+      width: u.widthMm as Mm,
+      position: { x: (cx - u.widthMm / 2) as Mm, y: (cy - h / 2) as Mm },
+      opacity: 0.6,
+      locked: true,
+      calibrated: true,
+      fromCad: true,
+      ...(u.cropped ? { cropped: true } : {}),
+    });
+    const zoom = Math.min((FILL * sw) / u.widthMm, (FILL * sh) / h);
+    setZoom(zoom);
+    const z = usePlannerStore.getState().view.zoom;
+    setPan(sw / 2 - cx * z, sh / 2 - cy * z);
   };
 
   const place = (raster: RasterPlan, fileName: string, pdfPage?: { page: number; crop: Crop | null }) => {
@@ -74,7 +111,7 @@ export function PlanUnderlaySection() {
       <input
         ref={fileInput}
         type="file"
-        accept="application/pdf,.pdf,image/*"
+        accept="application/pdf,.pdf,image/*,.dwg,.dxf"
         className="hidden"
         onChange={onFile}
         data-testid="underlay-file"
@@ -83,8 +120,8 @@ export function PlanUnderlaySection() {
       {!underlay ? (
         <>
           <p className="text-[12px] leading-relaxed text-ink-500">
-            Import the store&apos;s floor plan (PDF or image), set its scale from one known
-            measurement, and draw the room on top of it.
+            Import the store&apos;s floor plan (PDF, image, or DWG/DXF drawing), set its scale from
+            one known measurement — drawings bring their own — and draw the room on top of it.
           </p>
           <Button
             variant="subtle"
@@ -92,7 +129,7 @@ export function PlanUnderlaySection() {
             disabled={busy}
             onClick={() => fileInput.current?.click()}
           >
-            {busy ? 'Reading plan…' : 'Import plan (PDF or image)'}
+            {busy ? 'Reading plan…' : 'Import plan (PDF, image, DWG/DXF)'}
           </Button>
         </>
       ) : (
@@ -102,9 +139,9 @@ export function PlanUnderlaySection() {
               {underlay.fileName}
             </span>
             <span className={underlay.calibrated ? 'text-[11px] text-ink-500' : 'text-[11px] text-amber-700'}>
-              {underlay.calibrated ? 'Scale set' : 'Scale not set — measurements will be wrong'}
+              {underlay.fromCad ? 'Scale from the drawing' : underlay.calibrated ? 'Scale set' : 'Scale not set — measurements will be wrong'}
               {underlay.pageCount && underlay.pageCount > 1 && ` · page ${underlay.page ?? 1} of ${underlay.pageCount}`}
-              {underlay.cropped && ' · part of the page'}
+              {underlay.cropped && (underlay.fromCad ? ' · part of the drawing' : ' · part of the page')}
             </span>
           </div>
 
@@ -149,6 +186,16 @@ export function PlanUnderlaySection() {
       )}
 
       {error && <p className="text-[11px] text-red-700">{error}</p>}
+      {cad && (
+        <CadImportDialog
+          file={cad}
+          onClose={() => setCad(null)}
+          onImport={(u) => {
+            placeCad(u, cad.name);
+            setCad(null);
+          }}
+        />
+      )}
       {pdf && (
         <PdfImportDialog
           pdf={pdf.source}

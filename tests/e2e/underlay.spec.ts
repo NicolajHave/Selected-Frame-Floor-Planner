@@ -4,6 +4,7 @@ import { openFresh, saved, toScreen, trackErrors } from './helpers';
 
 const PLAN_PDF = path.join(__dirname, '../fixtures/sample-plan.pdf');
 const THREE_PAGES = path.join(__dirname, '../fixtures/three-pages.pdf');
+const ROOM_DXF = path.join(__dirname, '../fixtures/room-cm.dxf');
 
 // The fixture is A4 landscape (842 × 595 pt) at 1:100 with a 10 m dimension
 // line from x = 60 pt to 60 + 283.46 pt, 55 pt above the bottom edge.
@@ -150,4 +151,30 @@ test('choose a page of a longer PDF and keep only the plan on it', async ({ page
   expect(u.aspect).toBeCloseTo((0.42 * 595) / (0.4 * 842), 1);
   await expect(page.getByText('page 3 of 3 · part of the page')).toBeVisible();
   expect(errors, 'console errors').toEqual([]);
+});
+
+test('a DXF drawing comes in at its own scale, no calibration needed', async ({ page }) => {
+  const errors = trackErrors(page);
+  await openFresh(page);
+  await page.getByTestId('underlay-file').setInputFiles(ROOM_DXF);
+  const dialog = page.getByRole('dialog', { name: 'CAD drawing · keep the part you need' });
+  // The file says millimetres but scales its dimensions by 10: it is drawn in cm.
+  await expect(dialog.getByLabel('Drawing units')).toHaveValue('10');
+  // 10 × 6 m room (plus a 3 % margin); the stray line 900 m away is ignored.
+  await expect(dialog.getByTestId('cad-size')).toContainText('whole drawing 10.6 m × 6.6 m');
+  await dialog.getByRole('button', { name: 'Use whole drawing' }).click();
+
+  await expect(page.locator('[data-layer="underlay"] image')).toBeVisible();
+  const u = (await saved(page)).underlay;
+  expect(u).toMatchObject({ calibrated: true, fromCad: true });
+  expect(u.width).toBeCloseTo(10600, -1);
+  await expect(page.getByText('Scale from the drawing')).toBeVisible();
+  // No calibration step: the scale is already right.
+  await expect(page.getByText('Set scale: click one end')).toHaveCount(0);
+  expect(errors, 'console errors').toEqual([]);
+});
+
+test('LibreDWG’s WebAssembly is served for DWG import', async ({ request }) => {
+  const res = await request.head('/vendor/libredwg/libredwg-web.wasm');
+  expect(res.status()).toBe(200);
 });
