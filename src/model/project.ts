@@ -46,6 +46,8 @@ export interface PlanUnderlay {
   page?: number;
   pageCount?: number;
   cropped?: boolean;
+  /** Drawn from a DWG/DXF: the scale comes from the drawing itself. */
+  fromCad?: boolean;
 }
 
 export interface Project {

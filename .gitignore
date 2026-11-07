@@ -14,3 +14,4 @@ build/
 *.blend1
 scripts/blender/.cache/
 __pycache__/
+public/vendor/

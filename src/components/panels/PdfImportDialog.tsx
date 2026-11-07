@@ -116,19 +116,53 @@ function CropStep({
   onDone: (crop: Crop | null) => void;
 }) {
   const [preview, setPreview] = useState<{ src: string; aspect: number } | null>(null);
-  const [crop, setCrop] = useState<Crop | null>(null);
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const box = useRef<HTMLDivElement | null>(null);
-
   useEffect(() => {
     let live = true;
     setPreview(null);
-    setCrop(null);
     pdf.preview(page, CROP_PREVIEW).then((p) => live && setPreview(p)).catch(() => {});
     return () => {
       live = false;
     };
   }, [pdf, page]);
+  return (
+    <CropPicker
+      preview={preview}
+      alt={`Page ${page}`}
+      busy={busy}
+      hint="Drag a box around the floor plan to keep just that part — it is then drawn much sharper. Or use the whole page."
+      wholeLabel="Use whole page"
+      onBack={onBack}
+      backLabel="← Other page"
+      onDone={onDone}
+    />
+  );
+}
+
+/** A picture of a page or drawing with a box to drag around the part to keep. */
+export function CropPicker({
+  preview,
+  alt,
+  busy,
+  hint,
+  wholeLabel,
+  onBack,
+  backLabel,
+  onDone,
+}: {
+  preview: { src: string; aspect: number } | null;
+  alt: string;
+  busy: string | null;
+  hint: string;
+  wholeLabel: string;
+  onBack?: () => void;
+  backLabel?: string;
+  onDone: (crop: Crop | null) => void;
+}) {
+  const [crop, setCrop] = useState<Crop | null>(null);
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const box = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => setCrop(null), [preview]);
 
   const at = (e: React.PointerEvent) => {
     const r = box.current!.getBoundingClientRect();
@@ -147,9 +181,7 @@ function CropStep({
 
   return (
     <div className="flex min-h-0 flex-col gap-3">
-      <p className="text-[12px] leading-relaxed text-ink-700">
-        Drag a box around the floor plan to keep just that part — it is then drawn much sharper. Or use the whole page.
-      </p>
+      <p className="text-[12px] leading-relaxed text-ink-700">{hint}</p>
       <div className="min-h-0 overflow-auto bg-wall-100 p-2">
         {preview ? (
           <div
@@ -168,7 +200,7 @@ function CropStep({
               start.current = null;
             }}
           >
-            <img src={preview.src} alt={`Page ${page}`} draggable={false} className="block h-full w-full bg-white" />
+            <img src={preview.src} alt={alt} draggable={false} className="block h-full w-full bg-white" />
             {crop && (
               <div
                 data-testid="pdf-crop-box"
@@ -184,7 +216,7 @@ function CropStep({
             )}
           </div>
         ) : (
-          <p className="py-16 text-center text-[12px] text-ink-500">Rendering page {page}…</p>
+          <p className="py-16 text-center text-[12px] text-ink-500">Rendering…</p>
         )}
       </div>
       <div className="flex items-center justify-end gap-2">
@@ -195,11 +227,11 @@ function CropStep({
         )}
         {onBack && (
           <Button variant="ghost" onClick={onBack} disabled={!!busy} className={busy ? '' : 'mr-auto'}>
-            ← Other page
+            {backLabel}
           </Button>
         )}
         <Button variant="subtle" onClick={() => onDone(null)} disabled={!!busy || !preview}>
-          Use whole page
+          {wholeLabel}
         </Button>
         <Button variant="primary" onClick={() => onDone(selected)} disabled={!!busy || !selected}>
           Use selection
