@@ -9,6 +9,7 @@ import { Button } from '../ui/Button';
 import { Menu, MenuItem, MenuSeparator } from '../ui/Menu';
 import { CloudActions, CloudStatus } from '../cloud/CloudBar';
 import { PdfDialog } from './PdfDialog';
+import { LockIcon } from '../ui/LockIcon';
 import type { CloudUser } from '@/lib/cloud/useCloudUser';
 
 interface Props {
@@ -36,6 +37,9 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
   const canUndo = usePlannerStore((s) => s.past.length > 0);
   const canRedo = usePlannerStore((s) => s.future.length > 0);
   const is3d = view.viewMode === '3d';
+  const layoutLocked = usePlannerStore((s) => !!s.project.layoutLocked);
+  const setLayoutLocked = usePlannerStore((s) => s.setLayoutLocked);
+  const lockedTitle = 'The floor layout is locked — unlock it to change walls, doors, windows and pillars';
 
   const fit = useFitToPlan();
 
@@ -161,10 +165,22 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
             <Button variant="ghost" active={tool === 'select'} onClick={() => setTool('select')} title="Select (Esc)">
               Select
             </Button>
-            <Button variant="ghost" active={tool === 'draw-room'} disabled={is3d} onClick={startRoom}>
+            <Button
+              variant="ghost"
+              active={tool === 'draw-room'}
+              disabled={is3d || layoutLocked}
+              title={layoutLocked ? lockedTitle : undefined}
+              onClick={startRoom}
+            >
               Draw area
             </Button>
-            <Button variant="ghost" active={tool === 'add-pillar'} onClick={() => setTool('add-pillar')}>
+            <Button
+              variant="ghost"
+              active={tool === 'add-pillar'}
+              disabled={layoutLocked}
+              title={layoutLocked ? lockedTitle : undefined}
+              onClick={() => setTool('add-pillar')}
+            >
               + Pillar
             </Button>
             <Button
@@ -176,6 +192,24 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
               + Box
             </Button>
           </div>
+
+          {divider}
+
+          {/* Floor layout lock: walls, doors, windows and pillars stay put; fixtures still move */}
+          <Button
+            variant="subtle"
+            active={layoutLocked}
+            aria-pressed={layoutLocked}
+            onClick={() => setLayoutLocked(!layoutLocked)}
+            title={
+              layoutLocked
+                ? 'Unlock the floor layout to change walls, doors, windows and pillars'
+                : 'Lock walls, doors, windows and pillars so they can’t be moved by accident'
+            }
+          >
+            <LockIcon locked={layoutLocked} />
+            {layoutLocked ? 'Layout locked' : 'Lock layout'}
+          </Button>
         </>
       )}
 

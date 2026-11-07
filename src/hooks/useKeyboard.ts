@@ -53,6 +53,11 @@ export function useKeyboard() {
         return;
       }
 
+      if (key === 'l' && !meta && !e.altKey) {
+        s.toggleLockSelected();
+        return;
+      }
+
       if (meta && key === 'd') {
         e.preventDefault();
         s.duplicateSelected();

@@ -63,6 +63,11 @@ export interface Project {
   electrical?: ElectricalPoint[];
   /** Notes written on the plan. */
   annotations?: PlanNote[];
+  /**
+   * The floor layout is locked: walls, corners, doors, windows and pillars
+   * stay as they are; only the fixtures (and notes, electrical) move.
+   */
+  layoutLocked?: boolean;
 }
 
 /** Shape produced by the export action. Includes derived metrics so

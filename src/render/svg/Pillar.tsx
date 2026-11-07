@@ -13,9 +13,11 @@ interface Props {
   grouped?: boolean;
   onPointerDown: (e: React.PointerEvent<SVGElement>) => void;
   onRotateHandleDown: (e: React.PointerEvent<SVGElement>) => void;
+  /** Held by the floor-layout lock: no move cursor, no rotate handle. */
+  locked?: boolean;
 }
 
-export function Pillar({ pillar, view, selected, grouped, onPointerDown, onRotateHandleDown }: Props) {
+export function Pillar({ pillar, view, selected, grouped, onPointerDown, onRotateHandleDown, locked }: Props) {
   const { width, depth } = pillar.size;
   const x = pillar.position.x - width / 2;
   const y = pillar.position.y - depth / 2;
@@ -27,7 +29,7 @@ export function Pillar({ pillar, view, selected, grouped, onPointerDown, onRotat
     <g transform={`rotate(${rotDeg} ${pillar.position.x} ${pillar.position.y})`}>
       <rect
         onPointerDown={onPointerDown}
-        style={{ cursor: 'move' }}
+        style={{ cursor: locked ? 'default' : 'move' }}
         x={x}
         y={y}
         width={width}
@@ -37,7 +39,7 @@ export function Pillar({ pillar, view, selected, grouped, onPointerDown, onRotat
         strokeWidth={stroke}
       />
       {selected && <SelectionFrame cx={pillar.position.x} cy={pillar.position.y} w={width} h={depth} view={view} />}
-      {selected && !grouped && (
+      {selected && !grouped && !locked && (
         <RotateHandle
           cx={pillar.position.x}
           cy={pillar.position.y}

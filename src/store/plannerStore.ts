@@ -48,6 +48,7 @@ import { findAsset } from '@/lib/assetCatalog';
 import { RACK_CATEGORY, itemMount, rackSize } from '@/lib/racks';
 import { alignPositions, distributePositions, isGroupable, rotatePositions, type AlignMode } from '@/lib/group';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
+import { LAYOUT_LOCKED_MESSAGE, isLayoutKind, isLocked, itemLockedMessage } from '@/lib/locks';
 import type { CloudProject, CloudRole, SaveResult, SharedProject } from '@/lib/cloud/api';
 
 export type Tool =
@@ -245,6 +246,14 @@ interface PlannerState {
   toggleNoteArrow: (id: string) => void;
   /** Objects: rotate by `delta`. Doors: positive flips the hinge side, negative the swing. */
   rotateSelected: (delta: number) => void;
+  /** Lock or unlock the floor layout (walls, corners, doors, windows, pillars). */
+  setLayoutLocked: (locked: boolean) => void;
+  /** Lock or unlock fixtures in place. */
+  setItemsLocked: (ids: string[], locked: boolean) => void;
+  /** L: lock the selected fixtures, or unlock them if they all are. */
+  toggleLockSelected: () => void;
+  /** Explain why something can't be moved (a press on a locked thing). */
+  explainLock: (sel: Selection) => void;
   duplicateSelected: () => void;
   deleteSelected: () => void;
 
@@ -335,6 +344,11 @@ const formatMm = (v: number) => `${Math.round(v).toLocaleString('da-DK')} mm`;
 
 function info(message: string): Notice {
   return { id: ++noticeSeq, tone: 'info', message };
+}
+
+/** The same message again keeps its notice (so a drag doesn't flash it anew). */
+function sameNotice(current: Notice | null, message: string): Notice {
+  return current?.message === message ? current : info(message);
 }
 
 /** Adds an opening of `kind` with its default size; returns its id. */
@@ -454,6 +468,32 @@ export const usePlannerStore = create<PlannerState>()(
         s.future = [];
       };
 
+      /** True (and says why) while the floor layout is locked. */
+      const layoutBlocked = (s: Draft<PlannerState>) => {
+        if (!s.project.layoutLocked) return false;
+        s.notice = sameNotice(s.notice, LAYOUT_LOCKED_MESSAGE);
+        return true;
+      };
+
+      /** True (and says why) when the fixture is locked in place. */
+      const itemBlocked = (s: Draft<PlannerState>, it: { locked?: boolean; name: string }) => {
+        if (!it.locked) return false;
+        s.notice = sameNotice(s.notice, itemLockedMessage(it.name));
+        return true;
+      };
+
+      /** The members a group edit may move: not locked ones. */
+      const movable = (s: Draft<PlannerState>, members: Selection[]) => {
+        const free = members.filter((m) => !isLocked(s.project, m));
+        if (free.length < members.length) {
+          s.notice = sameNotice(
+            s.notice,
+            `${members.length - free.length} locked ${members.length - free.length === 1 ? 'object stays' : 'objects stay'} in place.`,
+          );
+        }
+        return free;
+      };
+
       return {
         project: makeProject(),
         view: { ...DEFAULT_VIEW },
@@ -480,6 +520,7 @@ export const usePlannerStore = create<PlannerState>()(
 
         setTool: (t) =>
           set((s) => {
+            if ((t === 'draw-room' || t === 'add-pillar' || t === 'add-opening') && layoutBlocked(s)) return;
             s.tool = t;
             // Tool change clears any in-progress selection that no longer applies.
             if (t !== 'select') s.selection = null;
@@ -514,6 +555,7 @@ export const usePlannerStore = create<PlannerState>()(
 
         pickOpening: (kind) =>
           set((s) => {
+            if (layoutBlocked(s)) return;
             s.pendingOpening = kind;
             s.pendingAssetRef = null;
             s.tool = 'add-opening';
@@ -524,7 +566,7 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const room = s.project.room;
             const kind = s.pendingOpening;
-            if (!kind) return;
+            if (!kind || layoutBlocked(s)) return;
             const t = openingType(kind);
             const where = room?.closed ? placeOpening(room, p, t.width, openingReach(s.view.zoom)) : null;
             if (!room || !where?.ok) {
@@ -550,7 +592,7 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const room = s.project.room;
             const w = room ? wallFrame(room, index) : null;
-            if (!room || !w) return;
+            if (!room || !w || layoutBlocked(s)) return;
             const t = openingType(kind);
             const offset = fitOpening(room, index, t.width, w.length / 2);
             if (offset === null) {
@@ -568,7 +610,7 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const room = s.project.room;
             const o = room?.openings.find((x) => x.id === id);
-            if (!room || !o) return;
+            if (!room || !o || layoutBlocked(s)) return;
             record(s);
             Object.assign(o, patch);
             o.width = mm(Math.max(MIN_OPENING_WIDTH, o.width));
@@ -593,7 +635,7 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const room = s.project.room;
             const o = room?.openings.find((x) => x.id === id);
-            if (!room || !o) return;
+            if (!room || !o || layoutBlocked(s)) return;
             // Stay on the current wall while the pointer is near it, so it
             // doesn't jump to the next wall when dragged towards a corner.
             const current = room.corners.findIndex((c) => c.id === o.wallStartCornerId);
@@ -622,7 +664,7 @@ export const usePlannerStore = create<PlannerState>()(
             const room = s.project.room;
             const o = room?.openings.find((x) => x.id === id);
             const span = room && o ? openingSpan(room, o) : null;
-            if (!room || !o || !span) return;
+            if (!room || !o || !span || layoutBlocked(s)) return;
             const hit = projectOnWall(room, span.index, p);
             const gap = stretchAround(room, span.index, span.offset, o.id);
             if (!hit || !gap) return;
@@ -856,8 +898,9 @@ export const usePlannerStore = create<PlannerState>()(
 
         translateSelected: (dx, dy) =>
           set((s) => {
-            const members = selectedMembers(s);
-            if (members.length === 0 || (dx === 0 && dy === 0)) return;
+            if (dx === 0 && dy === 0) return;
+            const members = movable(s, selectedMembers(s));
+            if (members.length === 0) return;
             record(s);
             for (const m of members) {
               const o =
@@ -880,7 +923,9 @@ export const usePlannerStore = create<PlannerState>()(
             const members = selectedMembers(s);
             if (members.length < 2) return;
             record(s);
-            applyPositions(s, alignPositions(get().project, members, mode));
+            const free = new Set(movable(s, members).map((m) => m.id));
+            const next = alignPositions(get().project, members, mode);
+            applyPositions(s, new Map([...next].filter(([id]) => free.has(id))));
             touch(s.project);
           }),
 
@@ -889,7 +934,9 @@ export const usePlannerStore = create<PlannerState>()(
             const members = selectedMembers(s);
             if (members.length < 3) return;
             record(s);
-            applyPositions(s, distributePositions(get().project, members, axis));
+            const free = new Set(movable(s, members).map((m) => m.id));
+            const next = distributePositions(get().project, members, axis);
+            applyPositions(s, new Map([...next].filter(([id]) => free.has(id))));
             touch(s.project);
           }),
 
@@ -984,6 +1031,7 @@ export const usePlannerStore = create<PlannerState>()(
 
         startRoom: () =>
           set((s) => {
+            if (layoutBlocked(s)) return;
             if (!s.project.room) {
               record(s);
               s.project.room = {
@@ -1027,7 +1075,7 @@ export const usePlannerStore = create<PlannerState>()(
         setWallLength: (index, lengthMm) =>
           set((s) => {
             const room = s.project.room;
-            if (!room) return;
+            if (!room || layoutBlocked(s)) return;
             const next = resizeWall(room.corners, room.closed, index, lengthMm);
             if (next === room.corners) return;
             record(s);
@@ -1054,7 +1102,7 @@ export const usePlannerStore = create<PlannerState>()(
         moveCorner: (cornerId, p) =>
           set((s) => {
             const room = s.project.room;
-            if (!room) return;
+            if (!room || layoutBlocked(s)) return;
             const c = room.corners.find((c) => c.id === cornerId);
             if (!c) return;
             record(s);
@@ -1066,7 +1114,7 @@ export const usePlannerStore = create<PlannerState>()(
         insertCorner: (afterCornerId, p) =>
           set((s) => {
             const room = s.project.room;
-            if (!room) return;
+            if (!room || layoutBlocked(s)) return;
             const idx = room.corners.findIndex((c) => c.id === afterCornerId);
             if (idx < 0) return;
             record(s);
@@ -1101,7 +1149,7 @@ export const usePlannerStore = create<PlannerState>()(
         deleteCorner: (cornerId) =>
           set((s) => {
             const room = s.project.room;
-            if (!room) return;
+            if (!room || layoutBlocked(s)) return;
             if (room.corners.length <= 3 && room.closed) return; // refuse to break a triangle
             if (!room.corners.some((c) => c.id === cornerId)) return;
             record(s);
@@ -1121,7 +1169,7 @@ export const usePlannerStore = create<PlannerState>()(
 
         updateRoomMeta: (patch) =>
           set((s) => {
-            if (!s.project.room) return;
+            if (!s.project.room || layoutBlocked(s)) return;
             record(s);
             if (patch.wallThickness !== undefined) s.project.room.wallThickness = patch.wallThickness;
             if (patch.wallHeight !== undefined) s.project.room.wallHeight = patch.wallHeight;
@@ -1132,7 +1180,7 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const room = s.project.room;
             const corner = room?.corners[index];
-            if (!room || !corner || !wallFrame(room, index)) return;
+            if (!room || !corner || !wallFrame(room, index) || layoutBlocked(s)) return;
             record(s);
             const walls = (room.walls ??= {});
             const style = { ...walls[corner.id] };
@@ -1151,6 +1199,7 @@ export const usePlannerStore = create<PlannerState>()(
 
         addPillarAt: (p) =>
           set((s) => {
+            if (layoutBlocked(s)) return;
             record(s);
             const snapped = maybeSnap(s.view, p);
             const id = newId('pil');
@@ -1227,7 +1276,7 @@ export const usePlannerStore = create<PlannerState>()(
         updatePillar: (id, patch) =>
           set((s) => {
             const p = s.project.pillars.find((x) => x.id === id);
-            if (!p) return;
+            if (!p || layoutBlocked(s)) return;
             record(s);
             Object.assign(p, patch);
             if (patch.size) p.size = { ...p.size, ...patch.size };
@@ -1240,6 +1289,9 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const it = s.project.inventory.find((x) => x.id === id);
             if (!it) return;
+            // A locked fixture keeps its place, turn, size and units; its name may change.
+            const moves = (['position', 'rotation', 'size', 'modules', 'assetRef'] as const).some((k) => k in patch);
+            if (moves && itemBlocked(s, it)) return;
             record(s);
             Object.assign(it, patch);
             if (patch.size) it.size = { ...it.size, ...patch.size };
@@ -1251,7 +1303,7 @@ export const usePlannerStore = create<PlannerState>()(
         moveInventory: (id, p, opts) =>
           set((s) => {
             const it = s.project.inventory.find((x) => x.id === id);
-            if (!it) return;
+            if (!it || itemBlocked(s, it)) return;
             record(s);
             const hit =
               itemMount(it) === 'wall' && opts?.wallSnap !== false && s.project.room
@@ -1270,8 +1322,10 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const sel = s.selection;
             if (!sel) return;
-            const members = selectedMembers(s);
-            if (members.length > 1) {
+            const all = selectedMembers(s);
+            if (all.length > 1) {
+              const members = movable(s, all);
+              if (members.length === 0) return;
               record(s);
               const next = rotatePositions(get().project, members, delta);
               for (const m of members) {
@@ -1294,7 +1348,7 @@ export const usePlannerStore = create<PlannerState>()(
             }
             if (sel.kind === 'opening') {
               const o = s.project.room?.openings.find((x) => x.id === sel.id);
-              if (!o || (o.kind !== 'door' && o.kind !== 'double-door')) return;
+              if (!o || (o.kind !== 'door' && o.kind !== 'double-door') || layoutBlocked(s)) return;
               record(s);
               if (delta > 0) o.hinge = o.hinge === 'start' ? 'end' : 'start';
               else o.swing = o.swing === 'in' ? 'out' : 'in';
@@ -1308,6 +1362,7 @@ export const usePlannerStore = create<PlannerState>()(
                   ? s.project.inventory.find((x) => x.id === sel.id)
                   : undefined;
             if (!target) return;
+            if (sel.kind === 'pillar' ? layoutBlocked(s) : itemBlocked(s, target as InventoryItem)) return;
             record(s);
             target.rotation = normalizeAngle(target.rotation + delta);
             touch(s.project);
@@ -1326,7 +1381,7 @@ export const usePlannerStore = create<PlannerState>()(
               for (const m of members) {
                 if (m.kind === 'pillar') {
                   const o = s.project.pillars.find((x) => x.id === m.id);
-                  if (!o) continue;
+                  if (!o || s.project.layoutLocked) continue;
                   const id = newId('pil');
                   s.project.pillars.push({ ...o, id, position: shift(o.position), size: { ...o.size } });
                   copies.push({ kind: 'pillar', id });
@@ -1340,6 +1395,7 @@ export const usePlannerStore = create<PlannerState>()(
                     position: shift(o.position),
                     size: { ...o.size },
                     ...(o.modules ? { modules: [...o.modules] } : {}),
+                    locked: undefined,
                   });
                   copies.push({ kind: 'inventory', id });
                 } else if (m.kind === 'note') {
@@ -1362,7 +1418,7 @@ export const usePlannerStore = create<PlannerState>()(
             }
             if (sel.kind === 'pillar') {
               const orig = s.project.pillars.find((x) => x.id === sel.id);
-              if (!orig) return;
+              if (!orig || layoutBlocked(s)) return;
               record(s);
               const id = newId('pil');
               s.project.pillars.push({
@@ -1383,6 +1439,7 @@ export const usePlannerStore = create<PlannerState>()(
                 position: { x: (orig.position.x + offset) as Mm, y: (orig.position.y + offset) as Mm },
                 size: { ...orig.size },
                 ...(orig.modules ? { modules: [...orig.modules] } : {}),
+                locked: undefined,
               });
               s.selection = { kind: 'inventory', id };
             } else {
@@ -1397,16 +1454,19 @@ export const usePlannerStore = create<PlannerState>()(
           const members = selectedMembers(get());
           if (members.length > 1) {
             set((s) => {
+              const free = movable(s, members);
+              if (free.length === 0) return;
               record(s);
-              const gone = (kind: string) => new Set(members.filter((m) => m.kind === kind).map((m) => m.id));
+              const gone = (kind: string) => new Set(free.filter((m) => m.kind === kind).map((m) => m.id));
               const pillars = gone('pillar');
               const items = gone('inventory');
               const notes = gone('note');
               s.project.pillars = s.project.pillars.filter((x) => !pillars.has(x.id));
               s.project.inventory = s.project.inventory.filter((x) => !items.has(x.id));
               if (s.project.annotations) s.project.annotations = s.project.annotations.filter((x) => !notes.has(x.id));
-              s.selection = null;
-              s.multi = [];
+              const kept = members.filter((m) => !free.includes(m));
+              s.multi = kept.length > 1 ? kept : [];
+              s.selection = kept.at(-1) ?? null;
               touch(s.project);
             });
             return;
@@ -1417,16 +1477,17 @@ export const usePlannerStore = create<PlannerState>()(
           }
           set((s) => {
             if (sel.kind === 'pillar') {
-              if (!s.project.pillars.some((x) => x.id === sel.id)) return;
+              if (!s.project.pillars.some((x) => x.id === sel.id) || layoutBlocked(s)) return;
               record(s);
               s.project.pillars = s.project.pillars.filter((x) => x.id !== sel.id);
             } else if (sel.kind === 'inventory') {
-              if (!s.project.inventory.some((x) => x.id === sel.id)) return;
+              const it = s.project.inventory.find((x) => x.id === sel.id);
+              if (!it || itemBlocked(s, it)) return;
               record(s);
               s.project.inventory = s.project.inventory.filter((x) => x.id !== sel.id);
             } else if (sel.kind === 'opening') {
               const room = s.project.room;
-              if (!room?.openings.some((x) => x.id === sel.id)) return;
+              if (!room?.openings.some((x) => x.id === sel.id) || layoutBlocked(s)) return;
               record(s);
               room.openings = room.openings.filter((x) => x.id !== sel.id);
             } else if (sel.kind === 'electrical') {
@@ -1444,6 +1505,57 @@ export const usePlannerStore = create<PlannerState>()(
             touch(s.project);
           });
         },
+
+        setLayoutLocked: (locked) =>
+          set((s) => {
+            if (!!s.project.layoutLocked === locked) return;
+            record(s);
+            if (locked) s.project.layoutLocked = true;
+            else delete s.project.layoutLocked;
+            // Put down anything that would change the layout.
+            if (locked && (s.tool === 'draw-room' || s.tool === 'add-pillar' || s.tool === 'add-opening')) {
+              s.tool = 'select';
+              s.pendingOpening = null;
+              s.drawLength = '';
+            }
+            s.notice = locked
+              ? info('Floor layout locked: walls, doors, windows and pillars stay put. Fixtures still move.')
+              : null;
+            touch(s.project);
+          }),
+
+        setItemsLocked: (ids, locked) =>
+          set((s) => {
+            const items = s.project.inventory.filter((x) => ids.includes(x.id) && !!x.locked !== locked);
+            if (items.length === 0) return;
+            record(s);
+            for (const it of items) {
+              if (locked) it.locked = true;
+              else delete it.locked;
+            }
+            s.notice = null;
+            touch(s.project);
+          }),
+
+        toggleLockSelected: () => {
+          const st = get();
+          const ids = selectedMembers(st)
+            .filter((m) => m.kind === 'inventory')
+            .map((m) => m.id);
+          if (ids.length === 0) return;
+          const items = st.project.inventory.filter((x) => ids.includes(x.id));
+          st.setItemsLocked(ids, !items.every((x) => x.locked));
+        },
+
+        explainLock: (sel) =>
+          set((s) => {
+            if (sel.kind === 'inventory') {
+              const it = s.project.inventory.find((x) => x.id === sel.id);
+              if (it) itemBlocked(s, it);
+            } else if (isLayoutKind(sel.kind)) {
+              layoutBlocked(s);
+            }
+          }),
 
         openRackBuilder: (editId = null) =>
           setState((s) => {
@@ -1469,7 +1581,7 @@ export const usePlannerStore = create<PlannerState>()(
         updateRack: (id, rack) =>
           set((s) => {
             const it = s.project.inventory.find((x) => x.id === id);
-            if (!it || rack.modules.length === 0) return;
+            if (!it || rack.modules.length === 0 || itemBlocked(s, it)) return;
             record(s);
             const size = rackSize(rack.modules);
             // Keep the back edge where it was (e.g. against its wall): move

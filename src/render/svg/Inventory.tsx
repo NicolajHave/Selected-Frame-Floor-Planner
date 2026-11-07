@@ -37,7 +37,7 @@ export function Inventory({ item, view, selected, grouped, onPointerDown, onRota
 
   return (
     <g transform={`rotate(${rotDeg} ${item.position.x} ${item.position.y})`}>
-      <g onPointerDown={onPointerDown} style={{ cursor: 'move' }}>
+      <g onPointerDown={onPointerDown} style={{ cursor: item.locked ? 'default' : 'move' }} data-locked={item.locked ? '' : undefined}>
         <rect
           x={x}
           y={y}
@@ -125,7 +125,8 @@ export function Inventory({ item, view, selected, grouped, onPointerDown, onRota
           />
         )}
       </g>
-      {selected && !grouped && (
+      {item.locked && <LockBadge x={x + width} y={y} view={view} />}
+      {selected && !grouped && !item.locked && (
         <RotateHandle
           cx={item.position.x}
           cy={item.position.y}
@@ -134,6 +135,24 @@ export function Inventory({ item, view, selected, grouped, onPointerDown, onRota
           onPointerDown={onRotateHandleDown}
         />
       )}
+    </g>
+  );
+}
+
+/** A padlock at the item's back-right corner, a constant size on screen. */
+function LockBadge({ x, y, view }: { x: number; y: number; view: ViewState }) {
+  const r = pxStroke(view, 8);
+  const k = pxStroke(view, 1);
+  return (
+    <g pointerEvents="none" data-testid="lock-badge" transform={`translate(${x} ${y})`}>
+      <circle r={r} fill="var(--wall-stroke)" />
+      <rect x={-3.5 * k} y={-0.5 * k} width={7 * k} height={5 * k} rx={k} fill="#F7F5F0" />
+      <path
+        d={`M${-2.2 * k} ${-0.5 * k}V${-2 * k}a${2.2 * k} ${2.2 * k} 0 0 1 ${4.4 * k} 0V${-0.5 * k}`}
+        fill="none"
+        stroke="#F7F5F0"
+        strokeWidth={1.2 * k}
+      />
     </g>
   );
 }

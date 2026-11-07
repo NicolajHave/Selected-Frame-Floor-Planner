@@ -25,6 +25,8 @@ import { openingType } from '@/lib/openingTypes';
 import type { Point } from '@/model/geometry';
 import type { Mm, Radians } from '@/model/units';
 import { mm } from '@/model/units';
+import type { Selection } from '@/model/objects';
+import { isLocked } from '@/lib/locks';
 
 const ROTATE_STEP = Math.PI / 12; // 15°
 
@@ -134,7 +136,9 @@ export function Canvas() {
     | { type: 'note-target'; id: string }
     /** Several selected objects dragged together; `last` is the previous pointer position. */
     | { type: 'group'; last: Point }
-    | { type: 'marquee'; start: Point };
+    | { type: 'marquee'; start: Point }
+    /** Pressed on something locked: a drag only explains why it doesn't move. */
+    | { type: 'locked'; sel: Selection; startX: number; startY: number };
   const drag = useRef<DragKind | null>(null);
 
   const getRect = useCallback(() => svgRef.current?.getBoundingClientRect() ?? null, []);
@@ -214,6 +218,13 @@ export function Canvas() {
 
       const d = drag.current;
       if (!d) return;
+      if (d.type === 'locked') {
+        if (Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 4) {
+          usePlannerStore.getState().explainLock(d.sel);
+          drag.current = null;
+        }
+        return;
+      }
       if (d.type === 'pan') {
         setPan(d.startPanX + (e.clientX - d.startX), d.startPanY + (e.clientY - d.startY));
       } else if (d.type === 'corner') {
@@ -262,7 +273,7 @@ export function Canvas() {
   const onPointerUp = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       const d = drag.current;
-      const wasEditing = d && d.type !== 'pan' && d.type !== 'marquee';
+      const wasEditing = d && d.type !== 'pan' && d.type !== 'marquee' && d.type !== 'locked';
       drag.current = null;
       if (wasEditing) endGesture();
       if (d?.type === 'marquee') {
@@ -389,9 +400,18 @@ export function Canvas() {
       return;
     }
     setSelection({ kind: 'corner', id: cornerId });
+    if (pressLocked({ kind: 'corner', id: cornerId }, e)) return;
     beginGesture();
     drag.current = { type: 'corner', cornerId };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  /** If `sel` is locked, start a press that only explains so; returns true when it was. */
+  const pressLocked = (sel: Selection, e: React.PointerEvent<SVGElement>) => {
+    if (!isLocked(project, sel)) return false;
+    drag.current = { type: 'locked', sel, startX: e.clientX, startY: e.clientY };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+    return true;
   };
 
   const startMarquee = (world: Point, pointerId: number) => {
@@ -452,6 +472,7 @@ export function Canvas() {
     e.stopPropagation();
     if (groupPointerDown('pillar', id, e)) return;
     setSelection({ kind: 'pillar', id });
+    if (pressLocked({ kind: 'pillar', id }, e)) return;
     const rect = getRect();
     if (!rect) return;
     const world = eventToWorld(view, rect, e.clientX, e.clientY);
@@ -471,6 +492,7 @@ export function Canvas() {
     e.stopPropagation();
     if (groupPointerDown('inventory', id, e)) return;
     setSelection({ kind: 'inventory', id });
+    if (pressLocked({ kind: 'inventory', id }, e)) return;
     const rect = getRect();
     if (!rect) return;
     const world = eventToWorld(view, rect, e.clientX, e.clientY);
@@ -506,6 +528,7 @@ export function Canvas() {
     if (tool !== 'select' || !room) return; // let placement clicks through
     e.stopPropagation();
     setSelection({ kind: 'opening', id });
+    if (pressLocked({ kind: 'opening', id }, e)) return;
     const rect = getRect();
     const o = room.openings.find((x) => x.id === id);
     const span = o ? openingSpan(room, o) : null;
@@ -520,6 +543,7 @@ export function Canvas() {
   const onPointerDownOpeningEnd = (id: string, end: 'start' | 'end', e: React.PointerEvent<SVGElement>) => {
     if (tool !== 'select') return;
     e.stopPropagation();
+    if (pressLocked({ kind: 'opening', id }, e)) return;
     beginGesture();
     drag.current = { type: 'opening-end', id, end };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
@@ -636,6 +660,7 @@ export function Canvas() {
             view={view}
             selected={isSelected('pillar', p.id)}
             grouped={grouped}
+            locked={!!project.layoutLocked}
             onPointerDown={(e) => onPointerDownPillar(p.id, e)}
             onRotateHandleDown={(e) => onRotateHandleDown('pillar', p.id, e)}
           />

@@ -65,6 +65,7 @@ export function EmptySelection() {
           <Key k="⇧ + click">Select several</Key>
           <Key k="⇧ + drag">Select everything in a box</Key>
           <Key k="⌘A">Select all fixtures, pillars and notes</Key>
+          <Key k="L">Lock / unlock selected fixtures</Key>
           <Key k="⌘D">Duplicate selected</Key>
           <Key k="Delete">Remove selected</Key>
           <Key k="Alt + drag">Place freely, no wall snap</Key>
