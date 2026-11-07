@@ -6,6 +6,7 @@ import { Section } from '../ui/Section';
 import { NumberField } from '../ui/NumberField';
 import { TextField } from '../ui/TextField';
 import { Button } from '../ui/Button';
+import { LockIcon } from '../ui/LockIcon';
 import { findAsset } from '@/lib/assetCatalog';
 import { wallHeightNear } from '@/geometry/wallStyle';
 import { rackAssets, rackSummary } from '@/lib/racks';
@@ -19,12 +20,32 @@ export function InventoryProperties({ id }: { id: string }) {
   const room = usePlannerStore((s) => s.project.room);
 
   const openRackBuilder = usePlannerStore((s) => s.openRackBuilder);
+  const setItemsLocked = usePlannerStore((s) => s.setItemsLocked);
   if (!item) return null;
+  const locked = !!item.locked;
   const asset = findAsset(item.assetRef);
   const rack = item.modules?.length ? item.modules : null;
 
   return (
     <div className="flex h-full flex-col">
+      <div className="px-5 pt-4">
+        <Button
+          variant="subtle"
+          active={locked}
+          aria-pressed={locked}
+          className="w-full justify-center"
+          onClick={() => setItemsLocked([id], !locked)}
+          title="L"
+        >
+          <LockIcon locked={locked} />
+          {locked ? 'Locked in place — unlock' : 'Lock in place'}
+        </Button>
+        {locked && (
+          <p className="mt-2 text-[11px] leading-snug text-ink-500">
+            It can't be moved, turned, resized or deleted until it is unlocked.
+          </p>
+        )}
+      </div>
       <Section title="Inventory">
         <TextField
           label="Name"
@@ -54,6 +75,7 @@ export function InventoryProperties({ id }: { id: string }) {
 
       <div className="h-px bg-wall-200" />
 
+      <fieldset disabled={locked} className={locked ? 'min-w-0 opacity-60' : 'min-w-0'}>
       {rack && (
         <>
           <Section title="Wall rack">
@@ -140,12 +162,14 @@ export function InventoryProperties({ id }: { id: string }) {
 
       <div className="h-px bg-wall-200" />
 
+      </fieldset>
+
       <Section title="Actions">
         <div className="flex gap-2">
           <Button variant="subtle" onClick={duplicate} className="flex-1 justify-center">
             Duplicate
           </Button>
-          <Button variant="subtle" onClick={remove} className="flex-1 justify-center">
+          <Button variant="subtle" onClick={remove} disabled={locked} className="flex-1 justify-center">
             Delete
           </Button>
         </div>

@@ -5,6 +5,7 @@ import { selectedMembers, usePlannerStore } from '@/store/plannerStore';
 import type { AlignMode } from '@/lib/group';
 import { Section } from '../ui/Section';
 import { Button } from '../ui/Button';
+import { LockIcon } from '../ui/LockIcon';
 
 const ALIGN: { mode: AlignMode; label: string; name: string }[] = [
   { mode: 'left', label: 'Left', name: 'Align left edges' },
@@ -23,6 +24,13 @@ export function GroupProperties() {
   const rotate = usePlannerStore((s) => s.rotateSelected);
   const duplicate = usePlannerStore((s) => s.duplicateSelected);
   const remove = usePlannerStore((s) => s.deleteSelected);
+  const setItemsLocked = usePlannerStore((s) => s.setItemsLocked);
+  const itemIds = members.filter((m) => m.kind === 'inventory').map((m) => m.id);
+  const lockedCount = usePlannerStore(
+    (s) => s.project.inventory.filter((x) => x.locked && itemIds.includes(x.id)).length,
+  );
+  const layoutLocked = usePlannerStore((s) => !!s.project.layoutLocked);
+  const heldCount = lockedCount + (layoutLocked ? members.filter((m) => m.kind === 'pillar').length : 0);
   const count = (kind: string) => members.filter((m) => m.kind === kind).length;
   const parts = [
     [count('inventory'), 'fixture'],
@@ -43,6 +51,33 @@ export function GroupProperties() {
           Drag any of them to move them all. Shift-click adds or removes one; shift-drag on empty floor
           selects everything in a box.
         </p>
+        {heldCount > 0 && (
+          <p className="text-[11px] leading-relaxed text-ink-700" data-testid="group-locked">
+            {heldCount} of them {heldCount === 1 ? 'is' : 'are'} locked and {heldCount === 1 ? 'stays' : 'stay'} in place.
+          </p>
+        )}
+        {itemIds.length > 0 && (
+          <div className="flex gap-2">
+            <Button
+              variant="subtle"
+              className="flex-1 justify-center"
+              disabled={lockedCount === itemIds.length}
+              onClick={() => setItemsLocked(itemIds, true)}
+            >
+              <LockIcon locked />
+              Lock all
+            </Button>
+            <Button
+              variant="subtle"
+              className="flex-1 justify-center"
+              disabled={lockedCount === 0}
+              onClick={() => setItemsLocked(itemIds, false)}
+            >
+              <LockIcon locked={false} />
+              Unlock all
+            </Button>
+          </div>
+        )}
       </Section>
 
       <div className="h-px bg-wall-200" />

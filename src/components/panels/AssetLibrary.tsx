@@ -17,6 +17,7 @@ export function AssetLibrary() {
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
   const pickOpening = usePlannerStore((s) => s.pickOpening);
   const openRackBuilder = usePlannerStore((s) => s.openRackBuilder);
+  const layoutLocked = usePlannerStore((s) => !!s.project.layoutLocked);
   const pendingRack = usePlannerStore((s) => s.pendingRack);
   const pendingElectrical = usePlannerStore((s) => s.pendingElectrical);
   const pickElectrical = usePlannerStore((s) => s.pickElectrical);
@@ -67,12 +68,18 @@ export function AssetLibrary() {
           <h4 className="px-1 pb-2 pt-1 text-[10px] font-medium uppercase tracking-widest2 text-ink-500">
             Doors &amp; windows
           </h4>
+          {layoutLocked && (
+            <p className="px-1 pb-2 text-[11px] leading-snug text-ink-500">
+              The floor layout is locked. Unlock it in the top bar to add or move doors and windows.
+            </p>
+          )}
           <div className="grid grid-cols-2 gap-2">
             {OPENING_TYPES.map((t) => (
               <OpeningCard
                 key={t.kind}
                 type={t}
                 active={tool === 'add-opening' && pendingOpening === t.kind}
+                disabled={layoutLocked}
                 onPick={() => pickOpening(t.kind)}
               />
             ))}
@@ -250,13 +257,24 @@ function FootprintThumbnail({ asset, active }: { asset: AssetEntry; active: bool
   );
 }
 
-function OpeningCard({ type, active, onPick }: { type: OpeningType; active: boolean; onPick: () => void }) {
+function OpeningCard({
+  type,
+  active,
+  disabled,
+  onPick,
+}: {
+  type: OpeningType;
+  active: boolean;
+  disabled?: boolean;
+  onPick: () => void;
+}) {
   return (
     <button
       onClick={onPick}
+      disabled={disabled}
       title={`Place ${type.name}`}
       className={clsx(
-        'flex flex-col items-center gap-1 rounded-[2px] border bg-wall-50 px-2 py-2 text-center transition-colors',
+        'flex flex-col items-center gap-1 rounded-[2px] border bg-wall-50 px-2 py-2 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-40',
         active ? 'border-ink-900 bg-wall-100' : 'border-wall-200 hover:border-ink-500 hover:bg-wall-100',
       )}
     >

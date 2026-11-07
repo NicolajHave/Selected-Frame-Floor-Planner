@@ -9,6 +9,7 @@ import type { Mm } from '@/model/units';
 import type { SelectionKind } from '@/model/objects';
 import { usePlannerStore } from '@/store/plannerStore';
 import { MM } from '../units';
+import { isLocked } from '@/lib/locks';
 
 const FLOOR = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
@@ -48,6 +49,8 @@ export function useFloorDrag(
       const store = usePlannerStore.getState();
       store.setSelection({ kind, id });
       if (store.readOnly) return; // viewers can inspect, not move
+      // Locked: selected, but a drag orbits the view as if on empty floor.
+      if (isLocked(store.project, { kind, id })) return;
       const hit = floorPoint(e.ray);
       if (!hit) return;
       drag.current = { dx: hit.x - position.x, dy: hit.y - position.y };

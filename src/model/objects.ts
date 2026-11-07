@@ -78,6 +78,8 @@ export interface InventoryItem extends PlacedObjectBase {
    * `assetRef`. See lib/racks.ts.
    */
   modules?: string[];
+  /** Locked in place: it can't be moved, turned, resized or deleted until unlocked. */
+  locked?: boolean;
 }
 
 export type PlacedObject = Pillar | InventoryItem;
