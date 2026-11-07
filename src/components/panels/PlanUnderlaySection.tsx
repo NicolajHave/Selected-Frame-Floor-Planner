@@ -2,7 +2,8 @@
 
 import { useRef, useState } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
-import { rasterizePlanFile } from '@/lib/planImport';
+import { isPdf, openPdf, rasterizePlanFile, type Crop, type PdfSource, type RasterPlan } from '@/lib/planImport';
+import { PdfImportDialog } from './PdfImportDialog';
 import type { Mm } from '@/model/units';
 import { Section } from '../ui/Section';
 import { Button } from '../ui/Button';
@@ -18,7 +19,12 @@ export function PlanUnderlaySection() {
   const fileInput = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [pages, setPages] = useState(1);
+  const [pdf, setPdf] = useState<{ source: PdfSource; fileName: string } | null>(null);
+
+  const closePdf = () => {
+    pdf?.source.close();
+    setPdf(null);
+  };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -27,32 +33,40 @@ export function PlanUnderlaySection() {
     setBusy(true);
     setError(null);
     try {
-      const raster = await rasterizePlanFile(file);
-      // Fit the plan into the visible part of the canvas; calibration fixes the scale.
-      const { view } = usePlannerStore.getState();
-      const stage = document.querySelector('[data-stage]')?.getBoundingClientRect();
-      const sw = stage?.width ?? 800;
-      const sh = stage?.height ?? 600;
-      const width = Math.min((FILL * sw) / view.zoom, (FILL * sh) / view.zoom / raster.aspect);
-      const cx = (sw / 2 - view.pan.x) / view.zoom;
-      const cy = (sh / 2 - view.pan.y) / view.zoom;
-      setUnderlay({
-        src: raster.src,
-        fileName: file.name,
-        aspect: raster.aspect,
-        width: width as Mm,
-        position: { x: (cx - width / 2) as Mm, y: (cy - (width * raster.aspect) / 2) as Mm },
-        opacity: 0.6,
-        locked: true,
-        calibrated: false,
-      });
-      setPages(raster.pageCount);
-      startCalibration();
+      if (isPdf(file)) {
+        // Choose the page (and the part of it) in a dialog first.
+        setPdf({ source: await openPdf(file), fileName: file.name });
+        return;
+      }
+      place(await rasterizePlanFile(file), file.name);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not read that file.');
     } finally {
       setBusy(false);
     }
+  };
+
+  const place = (raster: RasterPlan, fileName: string, pdfPage?: { page: number; crop: Crop | null }) => {
+    // Fit the plan into the visible part of the canvas; calibration fixes the scale.
+    const { view } = usePlannerStore.getState();
+    const stage = document.querySelector('[data-stage]')?.getBoundingClientRect();
+    const sw = stage?.width ?? 800;
+    const sh = stage?.height ?? 600;
+    const width = Math.min((FILL * sw) / view.zoom, (FILL * sh) / view.zoom / raster.aspect);
+    const cx = (sw / 2 - view.pan.x) / view.zoom;
+    const cy = (sh / 2 - view.pan.y) / view.zoom;
+    setUnderlay({
+      src: raster.src,
+      fileName,
+      aspect: raster.aspect,
+      width: width as Mm,
+      position: { x: (cx - width / 2) as Mm, y: (cy - (width * raster.aspect) / 2) as Mm },
+      opacity: 0.6,
+      locked: true,
+      calibrated: false,
+      ...(pdfPage ? { page: pdfPage.page, pageCount: raster.pageCount, ...(pdfPage.crop ? { cropped: true } : {}) } : {}),
+    });
+    startCalibration();
   };
 
   return (
@@ -89,7 +103,8 @@ export function PlanUnderlaySection() {
             </span>
             <span className={underlay.calibrated ? 'text-[11px] text-ink-500' : 'text-[11px] text-amber-700'}>
               {underlay.calibrated ? 'Scale set' : 'Scale not set — measurements will be wrong'}
-              {pages > 1 && ` · page 1 of ${pages}`}
+              {underlay.pageCount && underlay.pageCount > 1 && ` · page ${underlay.page ?? 1} of ${underlay.pageCount}`}
+              {underlay.cropped && ' · part of the page'}
             </span>
           </div>
 
@@ -134,6 +149,17 @@ export function PlanUnderlaySection() {
       )}
 
       {error && <p className="text-[11px] text-red-700">{error}</p>}
+      {pdf && (
+        <PdfImportDialog
+          pdf={pdf.source}
+          fileName={pdf.fileName}
+          onClose={closePdf}
+          onImport={(raster, page, crop) => {
+            place(raster, pdf.fileName, { page, crop });
+            closePdf();
+          }}
+        />
+      )}
     </Section>
   );
 }
