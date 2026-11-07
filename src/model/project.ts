@@ -42,6 +42,10 @@ export interface PlanUnderlay {
   opacity: number;         // 0..1
   locked: boolean;         // locked underlays ignore the pointer
   calibrated: boolean;     // scale set from a known distance
+  /** PDFs: which page it is (1-based), of how many, and whether only part of it was kept. */
+  page?: number;
+  pageCount?: number;
+  cropped?: boolean;
 }
 
 export interface Project {

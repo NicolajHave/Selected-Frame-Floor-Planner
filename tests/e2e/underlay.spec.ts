@@ -3,6 +3,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { openFresh, saved, toScreen, trackErrors } from './helpers';
 
 const PLAN_PDF = path.join(__dirname, '../fixtures/sample-plan.pdf');
+const THREE_PAGES = path.join(__dirname, '../fixtures/three-pages.pdf');
 
 // The fixture is A4 landscape (842 × 595 pt) at 1:100 with a 10 m dimension
 // line from x = 60 pt to 60 + 283.46 pt, 55 pt above the bottom edge.
@@ -14,6 +15,8 @@ const DIM_Y_PT = PAGE_H_PT - 55;
 
 async function importPlan(page: Page) {
   await page.getByTestId('underlay-file').setInputFiles(PLAN_PDF);
+  // One page: straight to "keep the plan"; take all of it.
+  await page.getByRole('dialog').getByRole('button', { name: 'Use whole page' }).click();
   await expect(page.locator('[data-layer="underlay"] image')).toBeVisible();
   await expect(page.getByText('Set scale: click one end')).toBeVisible();
 }
@@ -119,4 +122,32 @@ test('import a raster image', async ({ page }) => {
   const u = (await saved(page)).underlay;
   expect(u.fileName).toBe('plan.png');
   expect(u.aspect).toBeCloseTo(0.5, 3);
+});
+
+test('choose a page of a longer PDF and keep only the plan on it', async ({ page }) => {
+  const errors = trackErrors(page);
+  await openFresh(page);
+  await page.getByTestId('underlay-file').setInputFiles(THREE_PAGES);
+  const dialog = page.getByRole('dialog', { name: 'Choose the page with the floor plan' });
+  await expect(dialog.getByRole('button', { name: /^Page \d$/ })).toHaveCount(3);
+  await dialog.getByRole('button', { name: 'Page 3' }).click();
+
+  // Drag a box around the lower-right quarter of the page.
+  const crop = page.getByTestId('pdf-crop');
+  await expect(page.getByRole('img', { name: 'Page 3' })).toBeVisible();
+  const box = (await crop.boundingBox())!;
+  await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.95, box.y + box.height * 0.92, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByTestId('pdf-crop-box')).toBeVisible();
+  await page.getByRole('button', { name: 'Use selection' }).click();
+
+  await expect(page.locator('[data-layer="underlay"] image')).toBeVisible();
+  const u = (await saved(page)).underlay;
+  expect(u).toMatchObject({ page: 3, pageCount: 3, cropped: true });
+  // The kept part is wider than tall, like the box that was drawn (0.40 × 0.42 of an A4 landscape page).
+  expect(u.aspect).toBeCloseTo((0.42 * 595) / (0.4 * 842), 1);
+  await expect(page.getByText('page 3 of 3 · part of the page')).toBeVisible();
+  expect(errors, 'console errors').toEqual([]);
 });
