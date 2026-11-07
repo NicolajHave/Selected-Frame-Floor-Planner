@@ -6,4 +6,4 @@ ID = '105-99-006'
 
 
 def build():
-    Unit(1496, 542).frame().hang_rail().beam(1090).hang_rail(1000).bolts()
+    Unit(1496, 542).frame().hang_rail().hang_rail(1000).bolts()

@@ -6,4 +6,4 @@ ID = '105-99-004'
 
 
 def build():
-    Unit(1496, 517).frame().shelves([420, 800, 1160, 1520]).bolts()
+    Unit(1496, 517).frame().shelves().bolts()

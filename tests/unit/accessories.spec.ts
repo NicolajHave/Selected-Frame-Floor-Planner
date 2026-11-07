@@ -78,14 +78,14 @@ test('signs on tables and in front of mannequins', () => {
 test('trays fill a shelf left to right and go to the next shelf when full', () => {
   const unit = item('105-99-010');
   const host = accessoryHosts(unit)[0]!;
-  // Eye level (shelf 3, 1160 mm) first.
+  // Eye level (shelf 3, 1204 mm) first.
   expect(freeShelf(unit, host, TRAY_3X3)).toBe(2);
   const two: Accessory[] = [
     { id: 'a', assetRef: TRAY_3X3, shelf: 2 },
     { id: 'b', assetRef: TRAY_3X3, shelf: 2 },
   ];
   const placed = placeAccessories(item('105-99-010', two));
-  expect(placed.map((p) => p.z)).toEqual([1160, 1160]);
+  expect(placed.map((p) => p.z)).toEqual([1204, 1204]);
   expect(placed[1]!.x - placed[0]!.x).toBeCloseTo(287 + 15);
   // A 700 shelf takes two 3x3 trays, so the next goes to shelf 2.
   expect(freeShelf(item('105-99-010', two), host, TRAY_3X3)).toBe(1);

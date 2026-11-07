@@ -1,112 +1,148 @@
 """
-The Selected Frame wall unit system, built from the &elements parts list:
-every unit is the same frame (two columns of 40×40×4 stainless angles back
-to back, top and bottom rails, brackets with wall plates to the wall),
-`W` wide and `D` deep, with its contents: shelves, hanging rails, a mirror
-box, the jeans unit or a screen. 2288 mm high; the room side faces -Y.
+The Selected Frame wall unit system, after the &elements technical
+drawings (105-99-005-C, -007-B, -009-A, -010-A): every unit is the same
+frame, whatever its depth. Each side is a pair of 40 mm uprights (95 mm
+over both) standing 345–388 mm from the wall on arms at the top and the
+bottom; top and bottom beams, any cross beams and the slotted sidehang bar
+all run straight between the uprights, in their plane. Only the contents
+reach further forward: shelves (117–517 mm from the wall), the mirror box,
+the screen, the jeans unit. 2288 mm high; the wall is at +Y (the back of
+the catalog footprint) and the room side faces -Y.
 """
 
 from common import angle, bolt, box
 
 H = 2288
-COL = 40          # column width (x) …
-COL_D = 80        # … and depth (y): two angles back to back
+POST_W = 95       # one side's pair of uprights, across
+UPRIGHT = 40      # each upright: a 40×40 angle
+POST_D = 43       # front to back
+POST_BACK = 345   # wall to the back of the uprights
+ARM_H = 43
 FOOT = 30
-POST = H - FOOT   # column height above the feet
-SHELF_DEPTH = 400
+POST = H - FOOT   # upright height above the feet
+SHELF_FROM, SHELF_TO = 117, 517   # shelves, mm from the wall
 SHELF_T = 19
-HANG_Z = 1950     # top hanging rail, just under the top rail
+SHELF_TOPS = (484, 844, 1204, 1564)
+HANG_Z = 1865     # the slotted sidehang bar
 
 
 class Unit:
     def __init__(self, width, depth):
         self.W = width
         self.D = depth
-        self.front = -depth / 2
-        self.inner = width - 2 * COL               # clear span between the columns
-        self.left = -width / 2 + COL               # inside faces of the columns
-        self.right = width / 2 - COL
+        self.wall = depth / 2                       # catalog footprint: wall at its back
+        self.back = self.wall - POST_BACK           # back face of the uprights
+        self.front = self.back - POST_D             # front face of the uprights
+        self.mid = (self.front + self.back) / 2     # the frame's plane
+        self.inner = width - 2 * POST_W             # clear span between the uprights
+        self.left = -width / 2 + POST_W             # inside faces of the uprights
+        self.right = width / 2 - POST_W
         self.bolts_z = [H - 50, FOOT + 90]
+
+    def from_wall(self, mm):
+        """Y of a point `mm` in front of the wall."""
+        return self.wall - mm
 
     # -- the frame -----------------------------------------------------------
 
     def frame(self):
-        W, D, front = self.W, self.D, self.front
-        xo = W / 2 - 2
+        W = self.W
         zc = FOOT + POST / 2
         for side in (-1, 1):
-            x = side * xo
             inward = '-x' if side > 0 else '+x'
-            angle(f'col{side}.front', 'z', POST, (x, front + 2, zc), legs=(inward, '+y'))
-            angle(f'col{side}.back', 'z', POST, (x, front + COL_D - 2, zc), legs=(inward, '-y'))
-            for y in (front + 20, front + COL_D - 20):
-                box(f'foot{side}.{y}', (30, 30, FOOT), (side * (W / 2 - 20), y, FOOT / 2), bevel=1)
-            bx = side * (W / 2 - 3)
-            span = D - COL_D
-            for name, z, h in (('top', H - 60, 40), ('bottom', 110, 90)):
-                box(f'bracket.{name}{side}', (6, span, h), (bx, front + COL_D + span / 2, z))
-                box(f'plate.{name}{side}', (60, 6, h + 40), (bx - side * 27, D / 2 - 3, z), bevel=1)
-        angle('rail.top', 'x', self.inner, (0, front + 2, H - 40), legs=('+y', '-z'))
-        angle('rail.bottom', 'x', self.inner, (0, front + 2, FOOT + 80), legs=('+y', '+z'))
+            outward = '+x' if side > 0 else '-x'
+            # Outer and inner upright of the pair, a gap between them for the arms.
+            outer = side * (W / 2 - 2)
+            inner = side * (W / 2 - POST_W + 2)
+            angle(f'col{side}.outer', 'z', POST, (outer, self.front + 2, zc), legs=(inward, '+y'))
+            angle(f'col{side}.inner', 'z', POST, (inner, self.front + 2, zc), legs=(outward, '+y'))
+            for x in (side * (W / 2 - UPRIGHT / 2), side * (W / 2 - POST_W + UPRIGHT / 2)):
+                box(f'foot{side}.{x}', (UPRIGHT - 6, POST_D - 6, FOOT), (x, self.mid, FOOT / 2), bevel=1)
+            # Arms from the uprights back to the wall, top and bottom, with wall plates.
+            ax = side * (W / 2 - POST_W / 2)
+            # Top arm flush with the top (2288), bottom arm's top edge at 87 mm.
+            for name, z, plate_z in (('top', H - ARM_H / 2, H - 50), ('bottom', 87 - ARM_H / 2, 70)):
+                box(f'arm.{name}{side}', (15, POST_BACK, ARM_H), (ax, self.back + POST_BACK / 2, z))
+                box(f'plate.{name}{side}', (60, 6, 100), (ax, self.wall - 3, plate_z), bevel=1)
+        # Top and bottom beams between the uprights, in their plane.
+        self.beam(H - 9, name='beam.top')
+        self.beam(FOOT + 87, name='beam.bottom')
         return self
 
     def bolts(self):
         for side in (-1, 1):
-            x = side * (self.W / 2 - COL / 2)
-            for z in self.bolts_z:
-                for dz in (-8, 8):
-                    bolt(f'bolt{side}.{z}.{dz}', (x, self.front - 1.5, z + dz))
+            for x in (side * (self.W / 2 - UPRIGHT / 2), side * (self.W / 2 - POST_W + UPRIGHT / 2)):
+                for z in self.bolts_z:
+                    bolt(f'bolt{side}.{x}.{z}', (x, self.front - 1.5, z))
         return self
 
     # -- contents --------------------------------------------------------------
 
-    def shelves(self, tops, x0=None, x1=None):
-        """Shelves (MDF, oak edge, steel laminate) on angles under their front and back edges."""
+    def beam(self, z, x0=None, x1=None, name=None):
+        """A cross beam (40×40 angle) straight between the uprights, in the frame's plane."""
+        x0 = self.left if x0 is None else x0
+        x1 = self.right if x1 is None else x1
+        angle(name or f'beam.{z}', 'x', x1 - x0, ((x0 + x1) / 2, self.front + 2, z), legs=('+y', '-z'))
+        self.bolts_z.append(z - 20)
+        return self
+
+    def hang_rail(self, z=HANG_Z, x0=None, x1=None):
+        """
+        The slotted sidehang bar ("Styles"): one bar straight between the
+        uprights, in their plane; hangers hook into its slots.
+        """
         x0 = self.left if x0 is None else x0
         x1 = self.right if x1 is None else x1
         w = x1 - x0
         xc = (x0 + x1) / 2
-        y0 = self.front + 4
-        yc = y0 + SHELF_DEPTH / 2
+        box(f'hang.{z}', (w, POST_D - 3, 40), (xc, self.mid, z), bevel=1)
+        # The slots, as dark marks along its top.
+        n = max(2, int(w // 38))
+        for i in range(n):
+            x = x0 + (i + 0.5) * w / n
+            box(f'hang.{z}.slot{i}', (6, POST_D - 14, 2), (x, self.mid, z + 20.5), mat='steel_dark', bevel=0)
+        self.bolts_z.append(z)
+        return self
+
+    def shelves(self, tops=SHELF_TOPS, x0=None, x1=None):
+        """
+        Oak-edged MDF shelves 117–517 mm from the wall (so through the frame's
+        plane), on L-beams under their front and back edges.
+        """
+        x0 = self.left if x0 is None else x0
+        x1 = self.right if x1 is None else x1
+        w = x1 - x0
+        xc = (x0 + x1) / 2
+        y_front = self.from_wall(SHELF_TO)
+        y_back = self.from_wall(SHELF_FROM)
+        depth = y_back - y_front
+        yc = (y_front + y_back) / 2
         for i, top in enumerate(tops):
-            box(f'shelf{i}.core', (w - 4, SHELF_DEPTH, SHELF_T - 1), (xc, yc, top - SHELF_T / 2 - 0.5), mat='oak', bevel=0.8)
-            box(f'shelf{i}.top', (w - 8, SHELF_DEPTH - 4, 1), (xc, yc + 2, top - 0.5), mat='laminate', bevel=0)
-            angle(f'shelf{i}.front', 'x', w, (xc, self.front + 2, top - SHELF_T - 2), legs=('+y', '-z'))
-            angle(f'shelf{i}.back', 'x', w, (xc, y0 + SHELF_DEPTH - 2, top - SHELF_T - 2), legs=('-y', '-z'))
+            box(f'shelf{i}.core', (w - 4, depth, SHELF_T - 1), (xc, yc, top - SHELF_T / 2 - 0.5), mat='oak', bevel=0.8)
+            box(f'shelf{i}.top', (w - 8, depth - 4, 1), (xc, yc, top - 0.5), mat='laminate', bevel=0)
+            angle(f'shelf{i}.front', 'x', w, (xc, y_front + 22, top - SHELF_T - 2), legs=('-y', '-z'), size=20, t=3)
+            angle(f'shelf{i}.back', 'x', w, (xc, y_back - 22, top - SHELF_T - 2), legs=('+y', '-z'), size=20, t=3)
+            # Brackets from the uprights under the shelf.
+            for x in (x0 + 4, x1 - 4):
+                box(f'shelf{i}.bracket{x}', (8, depth - 50, 30), (x, yc, top - SHELF_T - 16))
             self.bolts_z.append(top - SHELF_T - 20)
         return self
 
-    def hang_rail(self, z=HANG_Z, x0=None, x1=None):
-        """A 30×15 hanging rail across the unit, halfway back so garments hang side-on."""
-        x0 = self.left if x0 is None else x0
-        x1 = self.right if x1 is None else x1
-        y = self.front + min(self.D, 450) / 2
-        box(f'hang.{z}', (x1 - x0, 15, 30), ((x0 + x1) / 2, y, z))
-        # Holders from the columns' sides to the rail.
-        for x in (x0 + 4, x1 - 4):
-            box(f'hang.{z}.holder{x}', (8, y - self.front - COL_D + 20, 40), (x, (self.front + COL_D + y) / 2, z))
-        return self
-
-    def beam(self, z):
-        """A front cross beam (40×40 angle) between the columns."""
-        angle(f'beam.{z}', 'x', self.inner, (0, self.front + 2, z), legs=('+y', '-z'))
-        self.bolts_z.append(z - 20)
-        return self
-
-    def mirror_box(self, width=300, depth=100, height=1772):
-        """Steel box with a full-height mirror on its front, at the left column."""
+    def mirror_box(self, width=300, depth=104, height=1772):
+        """Steel box with a full-height mirror on its front, at the left uprights, 330–434 mm from the wall."""
         x0 = self.left
-        z0 = FOOT + 100
-        box('mirror.box', (width, depth, height), (x0 + width / 2, self.front + depth / 2 + 4, z0 + height / 2), mat='steel', bevel=1)
-        box('mirror.glass', (width - 30, 2, height - 700), (x0 + width / 2, self.front + 3, z0 + height - (height - 700) / 2 - 20), mat='mirror', bevel=0)
+        z0 = 87
+        y_front = self.from_wall(330 + depth)
+        box('mirror.box', (width, depth, height), (x0 + width / 2, y_front + depth / 2, z0 + height / 2), mat='steel', bevel=1)
+        box('mirror.glass', (width - 30, 2, height - 60), (x0 + width / 2, y_front - 1, z0 + height / 2), mat='mirror', bevel=0)
         return x0 + width
 
     def jeans_unit(self, width=872, depth=400, height=1774):
         """The 3 mm stainless jeans unit: two columns of pigeonholes either side of a light panel."""
         x1 = self.right
         x0 = x1 - width
-        z0 = FOOT + 100
-        y0 = self.front + 4
+        z0 = 87
+        y0 = self.from_wall(self.D)     # its front is the unit's front
         t = 3
         zc = z0 + height / 2
         yc = y0 + depth / 2
@@ -127,11 +163,12 @@ class Unit:
                 box(f'jeans.shelf{k}.{j}', (b - a, depth - t, t), ((a + b) / 2, yc - t / 2, z), bevel=0.4)
         return x0
 
-    def screen(self, width=968, depth=100, height=1690):
-        """A digital screen in a 3 mm steel housing, on beams top and bottom."""
-        z0 = FOOT + 150
-        box('screen.housing', (width, depth, height), (0, self.front + depth / 2 + 4, z0 + height / 2), mat='steel_dark', bevel=1.5)
-        box('screen.glass', (width - 24, 2, height - 24), (0, self.front + 3, z0 + height / 2), mat='screen', bevel=0)
-        self.beam(z0 + 60)
-        self.beam(z0 + height - 20)
+    def screen(self, width=968, depth=55, height=1690):
+        """A digital screen in a steel housing in front of the uprights (390–445 mm from the wall), 318–2008 mm up."""
+        z0 = 318
+        y_front = self.from_wall(390 + depth)
+        box('screen.housing', (width, depth, height), (0, y_front + depth / 2, z0 + height / 2), mat='steel_dark', bevel=1.5)
+        box('screen.glass', (width - 24, 2, height - 24), (0, y_front - 1, z0 + height / 2), mat='screen', bevel=0)
+        self.beam(425)
+        self.beam(1905)
         return self
