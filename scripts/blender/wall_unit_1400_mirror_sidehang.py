@@ -8,4 +8,4 @@ ID = '105-99-007'
 def build():
     u = Unit(1496, 434).frame()
     edge = u.mirror_box()
-    u.beam(1890).hang_rail(1750, x0=edge).bolts()
+    u.hang_rail(x0=edge).bolts()

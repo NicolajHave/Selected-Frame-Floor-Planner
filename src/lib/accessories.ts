@@ -36,15 +36,19 @@ const RACK_POSTS: Record<string, { x: number; top: number }> = {
 /** The sign's pin goes down between the two uprights; the holder rests on top. */
 const RACK_SIGN_PIN = 95;
 
-/** Shelf wall units: the shelves' usable span along the unit, their tops, and their middle front to back. */
+/**
+ * Shelf wall units (&elements 105-99-010-A): shelves between the uprights
+ * (95 mm each side), tops at 484 / 844 / 1204 / 1564 mm, 117–517 mm from the wall.
+ */
 const SHELF_UNITS: Record<string, { x0: number; x1: number }> = {
-  '105-99-004': { x0: -704, x1: 704 },
-  '105-99-010': { x0: -361, x1: 361 },
+  '105-99-004': { x0: -653, x1: 653 },
+  '105-99-010': { x0: -310, x1: 310 },
 };
-export const SHELF_TOPS = [420, 800, 1160, 1520] as const;
+export const SHELF_TOPS = [484, 844, 1204, 1564] as const;
 /** New trays go to the eye-level shelves first. */
 const SHELF_FILL_ORDER = [2, 1, 3, 0];
-const SHELF_Y = 52;
+/** Middle of the shelves front to back, from a unit's centre (517 deep: wall at −258.5, shelves 117–517 off it). */
+const SHELF_Y = -517 / 2 + (117 + 517) / 2;
 /** Clearance at the shelf ends and between trays, mm. */
 const TRAY_GAP = 15;
 

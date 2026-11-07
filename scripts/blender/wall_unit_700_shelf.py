@@ -6,4 +6,5 @@ ID = '105-99-010'
 
 
 def build():
-    Unit(810, 517).frame().shelves([420, 800, 1160, 1520]).bolts()
+    # Per 105-99-010-A: shelves at 484, 844, 1204 and 1564.
+    Unit(810, 517).frame().shelves().bolts()
