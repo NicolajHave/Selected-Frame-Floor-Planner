@@ -2,6 +2,7 @@ import type { InventoryItem } from '@/model/objects';
 import type { Point } from '@/model/geometry';
 import { findAsset } from './assetCatalog';
 import { rackSlots } from './racks';
+import { placeAccessories } from './accessories';
 import data from './planShapes.json';
 
 type Pt = [number, number];
@@ -15,6 +16,8 @@ type Pt = [number, number];
 export interface PlanShape {
   fill: Pt[][];
   lines: Pt[][];
+  /** Accessories (signs, trays) drawn on top, as their own filled outlines. */
+  extra?: Pt[][];
 }
 
 const SHAPES = data as unknown as Record<string, PlanShape>;
@@ -28,7 +31,20 @@ export function planShape(assetId: string): PlanShape | null {
  * unrotated); a wall rack is its units side by side. Null when there is no
  * model shape, so the plan falls back to the footprint rectangle.
  */
-export function itemPlanShape(item: Pick<InventoryItem, 'assetRef' | 'modules'>): PlanShape | null {
+export function itemPlanShape(
+  item: Pick<InventoryItem, 'assetRef' | 'modules' | 'accessories'>,
+): PlanShape | null {
+  const base = baseShape(item);
+  if (!base || !item.accessories?.length) return base;
+  const extra: Pt[][] = [];
+  for (const p of placeAccessories(item)) {
+    const s = planShape(p.asset.id);
+    if (s) extra.push(...s.fill.map((r) => r.map(([x, y]) => [x + p.x, y + p.y] as Pt)));
+  }
+  return { ...base, extra };
+}
+
+function baseShape(item: Pick<InventoryItem, 'assetRef' | 'modules'>): PlanShape | null {
   if (item.modules?.length) {
     const out: PlanShape = { fill: [], lines: [] };
     for (const slot of rackSlots(item.modules)) {
@@ -46,15 +62,15 @@ export function itemPlanShape(item: Pick<InventoryItem, 'assetRef' | 'modules'>)
 
 /** The shape placed in the plan: rotated about and moved to the item's position. */
 export function placedPlanShape(
-  item: Pick<InventoryItem, 'assetRef' | 'modules' | 'position' | 'rotation'>,
-): { fill: Point[][]; lines: Point[][] } | null {
+  item: Pick<InventoryItem, 'assetRef' | 'modules' | 'accessories' | 'position' | 'rotation'>,
+): { fill: Point[][]; lines: Point[][]; extra: Point[][] } | null {
   const s = itemPlanShape(item);
   if (!s) return null;
   const c = Math.cos(item.rotation);
   const sn = Math.sin(item.rotation);
   const place = (r: Pt[]) =>
     r.map(([x, y]) => ({ x: item.position.x + x * c - y * sn, y: item.position.y + x * sn + y * c }) as Point);
-  return { fill: s.fill.map(place), lines: s.lines.map(place) };
+  return { fill: s.fill.map(place), lines: s.lines.map(place), extra: (s.extra ?? []).map(place) };
 }
 
 /** SVG path data for rings (closed) or polylines (open). */

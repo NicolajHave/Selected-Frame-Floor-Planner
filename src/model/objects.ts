@@ -80,6 +80,18 @@ export interface InventoryItem extends PlacedObjectBase {
   modules?: string[];
   /** Locked in place: it can't be moved, turned, resized or deleted until unlocked. */
   locked?: boolean;
+  /** Signs and trays that belong to this fixture (lib/accessories.ts). */
+  accessories?: Accessory[];
+}
+
+/** A catalog accessory on a fixture: placed by rule, not by hand. */
+export interface Accessory {
+  id: string;
+  assetRef: string;
+  /** On a wall rack: which unit (index into `modules`) it belongs to. */
+  module?: number;
+  /** Trays: which shelf, 0 = lowest. */
+  shelf?: number;
 }
 
 export type PlacedObject = Pillar | InventoryItem;

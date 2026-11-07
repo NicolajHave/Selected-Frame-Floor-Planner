@@ -2,6 +2,7 @@ import type { InventoryItem } from '@/model/objects';
 import { findAsset } from './assetCatalog';
 import { COLUMNS, priceOf, type PriceEntry } from './prices';
 import { columnCounts, wallRuns } from './columns';
+import { placeAccessories } from './accessories';
 
 export interface PartsListRow {
   itemNumber: string;
@@ -52,12 +53,13 @@ export interface PartsList {
 export function buildPartsList(inventory: InventoryItem[]): PartsList {
   const byKey = new Map<string, PartsListRow>();
 
-  // A wall rack counts as each of its units.
-  const units = inventory.flatMap((item) =>
-    item.modules?.length
+  // A wall rack counts as each of its units; signs and trays count on their own.
+  const units = inventory.flatMap((item) => [
+    ...(item.modules?.length
       ? item.modules.map((ref) => ({ item, asset: findAsset(ref) })).filter((u) => u.asset)
-      : [{ item, asset: findAsset(item.assetRef) }],
-  );
+      : [{ item, asset: findAsset(item.assetRef) }]),
+    ...placeAccessories(item).map((p) => ({ item, asset: p.asset as ReturnType<typeof findAsset> })),
+  ]);
 
   for (const { item, asset } of units) {
     const key = asset

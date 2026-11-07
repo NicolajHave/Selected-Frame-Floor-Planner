@@ -68,6 +68,16 @@ export function Inventory({ item, view, selected, grouped, onPointerDown, onRota
                 strokeLinejoin="round"
               />
             )}
+            {shape.extra && shape.extra.length > 0 && (
+              <path
+                data-testid="plan-accessories"
+                d={pathData(shape.extra, true)}
+                fill="var(--inv-fill)"
+                stroke="var(--wall-stroke)"
+                strokeWidth={pxStroke(view, 0.8)}
+                strokeLinejoin="round"
+              />
+            )}
           </g>
         )}
         {item.modules?.length && !shape ? (
