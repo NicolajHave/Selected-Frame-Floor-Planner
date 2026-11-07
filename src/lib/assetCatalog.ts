@@ -135,7 +135,7 @@ export const ASSET_CATALOG: readonly AssetEntry[] = [
       stepUrl: '/assets/3d/105-06-001-E.step' }),
   entry('105-06-002', 'Floor Rack 700', 'Racks', [800, 500, 1508],
     { material: SS, weightKg: 15.4, hsCodes: [HS_STEEL], hangerCount: 25 }),
-  entry('105-06-010', 'Jeans Rack Single', 'Racks', [1310, 500, 1508],
+  entry('105-06-010', 'Single Shelf Floor Rack', 'Racks', [1310, 500, 1508],
     { material: SS_OAK, weightKg: 27.4, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 25 }),
   entry('105-06-011', 'Double Shelf Floor Rack', 'Racks', [1310, 500, 1508],
     { material: SS_OAK, weightKg: 37.7, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 10 }),

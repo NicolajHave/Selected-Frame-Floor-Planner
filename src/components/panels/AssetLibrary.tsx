@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { clsx } from 'clsx';
 import { ASSET_CATALOG, ASSET_CATEGORIES, type AssetEntry } from '@/lib/assetCatalog';
+import { isAccessory } from '@/lib/accessories';
 import { usePlannerStore } from '@/store/plannerStore';
 import { formatLength } from '@/model/units';
 import { OPENING_TYPES, type OpeningType } from '@/lib/openingTypes';
@@ -139,7 +140,8 @@ export function AssetLibrary() {
         </section>
 
         {ASSET_CATEGORIES.map((category) => {
-          const entries = ASSET_CATALOG.filter((a) => a.category === category);
+          // Accessories are added from the fixture they belong to, not placed alone.
+          const entries = ASSET_CATALOG.filter((a) => a.category === category && !isAccessory(a.id));
           if (entries.length === 0) return null;
           return (
             <section key={category}>

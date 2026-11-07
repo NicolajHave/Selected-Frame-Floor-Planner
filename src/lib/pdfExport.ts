@@ -278,6 +278,8 @@ function drawPlanPage(
           doc.lines(pts.slice(1).map(([x, y], i) => [x - pts[i]![0], y - pts[i]![1]]), pts[0]![0], pts[0]![1], [1, 1], 'S', false);
         }
       }
+      // Signs and trays on top.
+      for (const r of shape.extra) planShapePath(doc, [r.map(P)], fill, edge, 0.12);
       continue;
     }
     polygon(doc, corners, fill, electrical ? [190, 192, 186] : SAGE, 0.2);

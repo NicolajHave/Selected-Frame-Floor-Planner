@@ -12,6 +12,7 @@ import { useFloorDrag } from './useFloorDrag';
 import { SelectionBox } from './SelectionBox';
 import { useSceneMode } from './mode';
 import { rackSlots } from '@/lib/racks';
+import { placeAccessories } from '@/lib/accessories';
 
 export function InventoryMeshes({ items }: { items: InventoryItem[] }) {
   const selectedId = usePlannerStore((s) =>
@@ -54,6 +55,7 @@ function InventoryMesh({ item, selected }: { item: InventoryItem; selected: bool
       ) : (
         <PlaceholderBox item={item} />
       )}
+      <AccessoryModels item={item} interactive={interactive} />
       {selected && interactive && (
         <SelectionBox w={item.size.width * MM} h={item.size.height * MM} d={item.size.depth * MM} />
       )}
@@ -87,6 +89,27 @@ function RackModels({ modules, interactive }: { modules: string[]; interactive: 
           </group>
         );
       })}
+    </>
+  );
+}
+
+/** Signs and trays on the fixture, where their rules put them. */
+function AccessoryModels({ item, interactive }: { item: InventoryItem; interactive: boolean }) {
+  const placed = placeAccessories(item);
+  if (!placed.length) return null;
+  return (
+    <>
+      {placed.map((p) => (
+        <group key={p.accessory.id} position={[p.x * MM, p.z * MM, p.y * MM]}>
+          {interactive ? (
+            <Suspense fallback={null}>
+              <GlbModel url={p.asset.glbUrl} />
+            </Suspense>
+          ) : (
+            <GlbModel url={p.asset.glbUrl} />
+          )}
+        </group>
+      ))}
     </>
   );
 }

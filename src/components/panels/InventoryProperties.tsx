@@ -11,6 +11,7 @@ import { findAsset } from '@/lib/assetCatalog';
 import { wallHeightNear } from '@/geometry/wallStyle';
 import { rackAssets, rackSummary } from '@/lib/racks';
 import { ObjectIssues } from './LayoutCheckSection';
+import { AccessoriesSection } from './AccessoriesSection';
 
 export function InventoryProperties({ id }: { id: string }) {
   const item = usePlannerStore((s) => s.project.inventory.find((i) => i.id === id));
@@ -76,6 +77,7 @@ export function InventoryProperties({ id }: { id: string }) {
       <div className="h-px bg-wall-200" />
 
       <fieldset disabled={locked} className={locked ? 'min-w-0 opacity-60' : 'min-w-0'}>
+      <AccessoriesSection item={item} />
       {rack && (
         <>
           <Section title="Wall rack">

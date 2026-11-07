@@ -12,6 +12,7 @@ import type {
   RoomPolygon,
   Pillar,
   InventoryItem,
+  Accessory,
   Opening,
   OpeningKind,
   ElectricalKind,
@@ -48,6 +49,7 @@ import { findAsset } from '@/lib/assetCatalog';
 import { RACK_CATEGORY, itemMount, rackSize } from '@/lib/racks';
 import { alignPositions, distributePositions, isGroupable, rotatePositions, type AlignMode } from '@/lib/group';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
+import { TRAY_3X3, TRAY_3X5, accessoryHosts, accessoryOptions, freeShelf, roomFor } from '@/lib/accessories';
 import { LAYOUT_LOCKED_MESSAGE, isLayoutKind, isLocked, itemLockedMessage } from '@/lib/locks';
 import type { CloudProject, CloudRole, SaveResult, SharedProject } from '@/lib/cloud/api';
 
@@ -254,6 +256,11 @@ interface PlannerState {
   toggleLockSelected: () => void;
   /** Explain why something can't be moved (a press on a locked thing). */
   explainLock: (sel: Selection) => void;
+  /** Add a sign or tray to a fixture (or to unit `module` of a wall rack). */
+  addAccessory: (itemId: string, assetRef: string, module?: number) => void;
+  removeAccessory: (itemId: string, accessoryId: string) => void;
+  /** Move a tray to another shelf of its unit. */
+  setAccessoryShelf: (itemId: string, accessoryId: string, shelf: number) => void;
   duplicateSelected: () => void;
   deleteSelected: () => void;
 
@@ -341,6 +348,10 @@ function applyPositions(s: Draft<PlannerState>, positions: Map<string, Point>) {
 const openingReach = (zoom: number) => Math.max(600, 25 / zoom);
 
 const formatMm = (v: number) => `${Math.round(v).toLocaleString('da-DK')} mm`;
+
+function copyAccessories(list: readonly Accessory[]): Accessory[] {
+  return list.map((a) => ({ ...a, id: newId('acc') }));
+}
 
 function info(message: string): Notice {
   return { id: ++noticeSeq, tone: 'info', message };
@@ -1395,6 +1406,7 @@ export const usePlannerStore = create<PlannerState>()(
                     position: shift(o.position),
                     size: { ...o.size },
                     ...(o.modules ? { modules: [...o.modules] } : {}),
+                    ...(o.accessories ? { accessories: copyAccessories(o.accessories) } : {}),
                     locked: undefined,
                   });
                   copies.push({ kind: 'inventory', id });
@@ -1439,6 +1451,7 @@ export const usePlannerStore = create<PlannerState>()(
                 position: { x: (orig.position.x + offset) as Mm, y: (orig.position.y + offset) as Mm },
                 size: { ...orig.size },
                 ...(orig.modules ? { modules: [...orig.modules] } : {}),
+                ...(orig.accessories ? { accessories: copyAccessories(orig.accessories) } : {}),
                 locked: undefined,
               });
               s.selection = { kind: 'inventory', id };
@@ -1557,6 +1570,58 @@ export const usePlannerStore = create<PlannerState>()(
             }
           }),
 
+        addAccessory: (itemId, assetRef, module) =>
+          set((s) => {
+            const it = s.project.inventory.find((x) => x.id === itemId);
+            if (!it || itemBlocked(s, it)) return;
+            const host = accessoryHosts(it).find((h) => h.module === module);
+            const asset = findAsset(assetRef);
+            if (!host || !asset || roomFor(it, host, assetRef) <= 0) return;
+            let shelf: number | undefined;
+            if (assetRef === TRAY_3X3 || assetRef === TRAY_3X5) {
+              const free = freeShelf(it, host, assetRef);
+              if (free === null) {
+                s.notice = info(`No room for another ${asset.name} on the shelves of ${host.asset.name}.`);
+                return;
+              }
+              shelf = free;
+            }
+            record(s);
+            (it.accessories ??= []).push({
+              id: newId('acc'),
+              assetRef,
+              ...(module !== undefined ? { module } : {}),
+              ...(shelf !== undefined ? { shelf } : {}),
+            });
+            touch(s.project);
+          }),
+
+        removeAccessory: (itemId, accessoryId) =>
+          set((s) => {
+            const it = s.project.inventory.find((x) => x.id === itemId);
+            if (!it?.accessories?.some((a) => a.id === accessoryId) || itemBlocked(s, it)) return;
+            record(s);
+            it.accessories = it.accessories.filter((a) => a.id !== accessoryId);
+            if (it.accessories.length === 0) delete it.accessories;
+            touch(s.project);
+          }),
+
+        setAccessoryShelf: (itemId, accessoryId, shelf) =>
+          set((s) => {
+            const it = s.project.inventory.find((x) => x.id === itemId);
+            const a = it?.accessories?.find((x) => x.id === accessoryId);
+            if (!it || !a || (a.shelf ?? 0) === shelf || itemBlocked(s, it)) return;
+            const host = accessoryHosts(it).find((h) => h.module === a.module);
+            const others = { ...it, accessories: it.accessories!.filter((x) => x.id !== accessoryId) };
+            if (!host || freeShelf(others, host, a.assetRef, [shelf]) === null) {
+              s.notice = info(`That shelf is full: move or remove a tray there first.`);
+              return;
+            }
+            record(s);
+            a.shelf = shelf;
+            touch(s.project);
+          }),
+
         openRackBuilder: (editId = null) =>
           setState((s) => {
             s.rackBuilder = { editId };
@@ -1594,6 +1659,15 @@ export const usePlannerStore = create<PlannerState>()(
             it.name = rack.name;
             it.modules = [...rack.modules];
             it.size = size;
+            // Accessories stay on their unit if it is still there and still takes them.
+            if (it.accessories) {
+              const kept = it.accessories.filter((a) => {
+                const ref = a.module !== undefined ? rack.modules[a.module] : undefined;
+                return !!ref && accessoryOptions(ref).some((o) => o.asset.id === a.assetRef);
+              });
+              if (kept.length) it.accessories = kept;
+              else delete it.accessories;
+            }
             s.rackBuilder = null;
             touch(s.project);
           }),
