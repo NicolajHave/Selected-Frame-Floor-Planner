@@ -130,6 +130,13 @@ URL. No environment variables are needed.
     30 minutes or more, and any you keep yourself with **Save version**
     (with a label, e.g. "Before moving the fitting rooms"). **Restore**
     puts one back; Undo brings the current plan back.
+14. **Comments** (cloud plans and view-only links): **Comments** (top
+    right of the plan) opens the discussion. Colleagues comment as
+    themselves; people with a view-only link (the store, the installer)
+    give their name. **Pin to the plan** ties a comment to a spot (and the
+    layout on screen) — it shows as a numbered pin. Owners and editors
+    **Resolve** comments (and can reopen them). New comments are fetched
+    every 30 seconds.
 14. **Cloud drive** (signed in): **Plan underlay → From cloud drive…**
     is a shared place for store drawings (PDF, DWG, DXF, PNG/JPG/WebP,
     up to 50 MB each). Upload a drawing once, tagged with its shop, and
