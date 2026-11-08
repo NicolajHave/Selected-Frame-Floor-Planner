@@ -176,6 +176,15 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
             </Button>
             <Button
               variant="ghost"
+              active={tool === 'draw-rect'}
+              disabled={is3d || layoutLocked}
+              title={layoutLocked ? lockedTitle : 'Drag a rectangle to make a room; then adjust it like any other'}
+              onClick={() => setTool('draw-rect')}
+            >
+              Rectangle
+            </Button>
+            <Button
+              variant="ghost"
               active={tool === 'add-pillar'}
               disabled={layoutLocked}
               title={layoutLocked ? lockedTitle : undefined}

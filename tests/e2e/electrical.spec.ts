@@ -90,6 +90,34 @@ test('notes with an arrow on the plan', async ({ page }) => {
   expect(moved.target.y).toBeCloseTo(room.minY + 600, -2);
 });
 
+test('note text is kept as you type — new lines, clicking away, switching notes, undo', async ({ page }) => {
+  await placeAt(page, 'Note', room.minX + 3000, room.minY + 3000);
+  const text = page.getByRole('textbox', { name: 'Note text' });
+  await expect(text).toBeFocused();
+  // Enter makes a new line; the plan shows the text while typing.
+  await page.keyboard.type('Power here');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('and data');
+  const [first] = (await saved(page)).annotations;
+  expect(first.text).toBe('Power here\nand data');
+  await expect(page.locator(`[data-note="${first.id}"]`)).toContainText('and data');
+
+  // Straight on to a second note: the first keeps its text, the second gets its own.
+  await placeAt(page, 'Note', room.minX + 6000, room.minY + 3000);
+  await expect(text).toBeFocused();
+  await expect(text).toHaveValue('');
+  await page.keyboard.type('Logo power');
+  // Click away on the floor without leaving the field first.
+  const away = await toScreen(page, room.minX + 1000, room.minY + 1000);
+  await page.mouse.click(away.x, away.y);
+  const notes = (await saved(page)).annotations;
+  expect(notes.map((n: { text: string }) => n.text)).toEqual(['Power here\nand data', 'Logo power']);
+
+  // The typing was one undo step: undo empties the second note, not letter by letter.
+  await page.keyboard.press('Control+z');
+  expect((await saved(page)).annotations[1].text).toBe('');
+});
+
 test('the PDF has an electrical plan, outlets in the elevations and notes on the plan', async ({ page }) => {
   test.setTimeout(90_000);
   await placeAt(page, 'Double socket', room.minX + 2500, room.minY + 100);

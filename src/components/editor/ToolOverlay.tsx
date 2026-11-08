@@ -39,8 +39,13 @@ export function ToolOverlay() {
     hint = calibration?.a
       ? 'Now click the other end of that distance.'
       : 'Set scale: click one end of a distance you know on the plan — a wall, a door or a dimension line. Esc cancels.';
+  } else if (tool === 'draw-rect') {
+    hint =
+      room && room.corners.length > 0
+        ? 'Drag a rectangle for the room — it replaces the current walls. Then drag corners or type exact lengths to adjust. Esc cancels.'
+        : 'Drag a rectangle for the room. Then drag corners or type exact lengths to adjust. Esc cancels.';
   } else if (!room || (room.corners.length === 0 && tool !== 'draw-room')) {
-    hint = 'Start with "Draw area" in the toolbar — or import the store plan from the panel on the right and trace it.';
+    hint = 'Start with "Rectangle" or "Draw area" in the toolbar — or import the store plan from the panel on the right and trace it.';
   } else if (tool === 'draw-room') {
     if (!room || room.corners.length === 0) {
       hint = 'Click on the canvas to place the first corner.';

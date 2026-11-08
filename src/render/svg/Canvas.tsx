@@ -19,7 +19,8 @@ import { clearanceGuides } from '@/lib/layout';
 import { rectCorners } from '@/geometry/transform';
 import { closestPointOnPolygon } from '@/geometry/insert';
 import { boundingBox } from '@/geometry/polygon';
-import { pointAtDistance } from '@/geometry/snap';
+import { pointAtDistance, snapPoint } from '@/geometry/snap';
+import { RectDraft } from './RectDraft';
 import { openingSpan, placeOpening, projectOnWall } from '@/geometry/openings';
 import { openingType } from '@/lib/openingTypes';
 import type { Point } from '@/model/geometry';
@@ -44,6 +45,7 @@ export function Canvas() {
   const selectMany = usePlannerStore((s) => s.selectMany);
   const translateSelected = usePlannerStore((s) => s.translateSelected);
   const [marquee, setMarquee] = useState<{ a: Point; b: Point } | null>(null);
+  const [rectDraft, setRectDraft] = useState<{ a: Point; b: Point } | null>(null);
   const calibration = usePlannerStore((s) => s.calibration);
   const wallDraft = usePlannerStore((s) => s.wallDraft);
   const highlightedWall = usePlannerStore((s) => s.highlightedWall);
@@ -140,6 +142,8 @@ export function Canvas() {
     /** Several selected objects dragged together; `last` is the previous pointer position. */
     | { type: 'group'; last: Point }
     | { type: 'marquee'; start: Point }
+    /** Dragging out a rectangular room from `start`. */
+    | { type: 'rect'; start: Point }
     /** Pressed on something locked: a drag only explains why it doesn't move. */
     | { type: 'locked'; sel: Selection; startX: number; startY: number };
   const drag = useRef<DragKind | null>(null);
@@ -165,6 +169,13 @@ export function Canvas() {
         const draft = usePlannerStore.getState().wallDraft;
         const p = { x: world.x, y: world.y };
         void runWallTrace(e.shiftKey && draft ? [...draft.seeds, p] : [p], draft?.gapMm ?? DEFAULT_GAP_MM);
+        return;
+      }
+      if (tool === 'draw-rect') {
+        const start = view.snapToGrid ? snapPoint(world, view.gridSize) : world;
+        drag.current = { type: 'rect', start };
+        setRectDraft({ a: start, b: start });
+        (e.currentTarget as Element).setPointerCapture(e.pointerId);
         return;
       }
       if (tool === 'draw-room') {
@@ -235,6 +246,10 @@ export function Canvas() {
         }
         return;
       }
+      if (d.type === 'rect') {
+        setRectDraft({ a: d.start, b: view.snapToGrid ? snapPoint(world, view.gridSize) : world });
+        return;
+      }
       if (d.type === 'pan') {
         setPan(d.startPanX + (e.clientX - d.startX), d.startPanY + (e.clientY - d.startY));
       } else if (d.type === 'corner') {
@@ -283,8 +298,13 @@ export function Canvas() {
   const onPointerUp = useCallback(
     (e: React.PointerEvent<SVGSVGElement>) => {
       const d = drag.current;
-      const wasEditing = d && d.type !== 'pan' && d.type !== 'marquee' && d.type !== 'locked';
+      const wasEditing = d && d.type !== 'pan' && d.type !== 'marquee' && d.type !== 'locked' && d.type !== 'rect';
       drag.current = null;
+      if (d?.type === 'rect') {
+        const rect = getRect();
+        if (rect) usePlannerStore.getState().addRectRoom(d.start, eventToWorld(view, rect, e.clientX, e.clientY));
+        setRectDraft(null);
+      }
       if (wasEditing) endGesture();
       if (d?.type === 'marquee') {
         setMarquee(null);
@@ -381,6 +401,7 @@ export function Canvas() {
   const cursorClass = useMemo(() => {
     switch (tool) {
       case 'draw-room':     return 'cursor-crosshair';
+      case 'draw-rect':     return 'cursor-crosshair';
       case 'calibrate':     return 'cursor-crosshair';
       case 'add-pillar':    return 'cursor-copy';
       case 'add-inventory': return 'cursor-copy';
@@ -689,6 +710,8 @@ export function Canvas() {
             onRotateHandleDown={(e) => onRotateHandleDown('inventory', it.id, e)}
           />
         ))}
+
+        {rectDraft && <RectDraft a={rectDraft.a} b={rectDraft.b} view={view} />}
 
         {/* Preview line while drawing */}
         {previewLine && (
