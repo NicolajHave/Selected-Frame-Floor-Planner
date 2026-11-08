@@ -73,14 +73,14 @@ export function PartsListSection() {
 
           <div className="flex flex-col gap-1 border-t border-wall-200 pt-3" data-testid="capacity">
             <span className="text-[10px] uppercase tracking-widest2 text-ink-500">Capacity</span>
-            <Total label="Hangers" value={list.totalHangers > 0 ? String(list.totalHangers) : '–'} />
+            <Total label="Hanger capacity" value={list.totalHangers > 0 ? String(list.totalHangers) : '–'} />
             <Total
               label="Shelf metres"
               value={list.totalShelfMeters > 0 ? `${list.totalShelfMeters.toLocaleString('da-DK')} m` : '–'}
             />
             {areaM2 > 0 && (list.totalHangers > 0 || list.totalShelfMeters > 0) && (
               <Total
-                label="Per m² floor"
+                label="Capacity per m²"
                 value={`${Math.round(list.totalHangers / areaM2)} hangers · ${(list.totalShelfMeters / areaM2).toLocaleString('da-DK', { maximumFractionDigits: 2 })} m shelf`}
               />
             )}
