@@ -117,6 +117,12 @@ URL. No environment variables are needed.
     30 minutes or more, and any you keep yourself with **Save version**
     (with a label, e.g. "Before moving the fitting rooms"). **Restore**
     puts one back; Undo brings the current plan back.
+14. **Cloud drive** (signed in): **Plan underlay → From cloud drive…**
+    is a shared place for store drawings (PDF, DWG, DXF, PNG/JPG/WebP,
+    up to 50 MB each). Upload a drawing once, tagged with its shop, and
+    everyone planning can search for it and **Use as plan** — it opens in
+    the same page/crop or CAD dialog as a file from disk. Only the person
+    who uploaded a drawing can delete it.
 
 The plan autosaves in the browser. **File → Save file copy / Open file**
 round-trip a file; **File → Export data** writes the plan plus derived

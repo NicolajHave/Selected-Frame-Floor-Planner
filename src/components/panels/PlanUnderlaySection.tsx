@@ -10,6 +10,9 @@ import type { Mm } from '@/model/units';
 import { Section } from '../ui/Section';
 import { Button } from '../ui/Button';
 import { LockIcon } from '../ui/LockIcon';
+import { DriveDialog } from '../cloud/DriveDialog';
+import { CLOUD_ENABLED } from '@/lib/cloud/config';
+import { useCloudUser } from '@/lib/cloud/useCloudUser';
 
 /** Fraction of the visible canvas a freshly imported plan fills. */
 const FILL = 0.8;
@@ -31,16 +34,24 @@ export function PlanUnderlaySection() {
   const layoutLocked = usePlannerStore((s) => !!s.project.layoutLocked);
   const setZoom = usePlannerStore((s) => s.setZoom);
   const setPan = usePlannerStore((s) => s.setPan);
+  const shared = usePlannerStore((s) => !!s.shared);
+  const { user } = useCloudUser();
+  const [driveOpen, setDriveOpen] = useState(false);
+  const canUseDrive = CLOUD_ENABLED && !!user && !shared;
 
   const closePdf = () => {
     pdf?.source.close();
     setPdf(null);
   };
 
-  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
+    if (file) void importFile(file);
+  };
+
+  /** Imports a plan file, from disk or the cloud drive. */
+  const importFile = async (file: File) => {
     setBusy(true);
     setError(null);
     try {
@@ -137,6 +148,11 @@ export function PlanUnderlaySection() {
           >
             {busy ? 'Reading plan…' : 'Import plan (PDF, image, DWG/DXF)'}
           </Button>
+          {canUseDrive && (
+            <Button variant="ghost" className="justify-center" disabled={busy} onClick={() => setDriveOpen(true)}>
+              From cloud drive…
+            </Button>
+          )}
         </>
       ) : (
         <>
@@ -201,6 +217,17 @@ export function PlanUnderlaySection() {
               Remove
             </Button>
           </div>
+          {canUseDrive && (
+            <Button
+              variant="ghost"
+              className="justify-center"
+              disabled={busy || pinned}
+              onClick={() => setDriveOpen(true)}
+              title="Replace the plan with a drawing from the shared cloud drive, or upload one"
+            >
+              Replace from cloud drive…
+            </Button>
+          )}
 
           <div className="flex flex-col gap-1 border-t border-wall-200 pt-3">
             <Button
@@ -227,6 +254,7 @@ export function PlanUnderlaySection() {
       )}
 
       {error && <p className="text-[11px] text-red-700">{error}</p>}
+      {driveOpen && <DriveDialog onClose={() => setDriveOpen(false)} onUse={(file) => void importFile(file)} />}
       {cad && (
         <CadImportDialog
           file={cad}
