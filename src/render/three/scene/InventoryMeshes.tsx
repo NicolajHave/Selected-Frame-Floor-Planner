@@ -31,7 +31,7 @@ function InventoryMesh({ item, selected }: { item: InventoryItem; selected: bool
   const asset = findAsset(item.assetRef);
   const moveInventory = usePlannerStore((s) => s.moveInventory);
   const handlers = useFloorDrag('inventory', item.id, item.position, (p, free) =>
-    moveInventory(item.id, p, { wallSnap: !free }),
+    moveInventory(item.id, p, { wallSnap: !free, objectSnap: !free }),
   );
   const interactive = useSceneMode() === 'interactive';
 

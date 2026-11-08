@@ -15,6 +15,7 @@ import { CalibrationMarks, Underlay } from './Underlay';
 import { OpeningPreview, Openings } from './Openings';
 import { ElectricalMarks, PlanNotes } from './Electrical';
 import { GuideMarks, IssueMarks } from './LayoutMarks';
+import { SnapMarks } from './SnapMarks';
 import { clearanceGuides } from '@/lib/layout';
 import { rectCorners } from '@/geometry/transform';
 import { closestPointOnPolygon } from '@/geometry/insert';
@@ -77,6 +78,7 @@ export function Canvas() {
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
 
   const metrics = useDerivedMetrics();
+  const snapGuides = usePlannerStore((s) => s.snapGuides);
   const issues = useLayoutIssues();
 
   // Distances around the selected object (live while it is dragged).
@@ -262,7 +264,7 @@ export function Canvas() {
         moveInventory(
           d.id,
           { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
-          { wallSnap: !e.altKey },
+          { wallSnap: !e.altKey, objectSnap: !e.altKey },
         );
       } else if (d.type === 'opening') {
         moveOpening(d.id, world, d.grab);
@@ -300,6 +302,7 @@ export function Canvas() {
       const d = drag.current;
       const wasEditing = d && d.type !== 'pan' && d.type !== 'marquee' && d.type !== 'locked' && d.type !== 'rect';
       drag.current = null;
+      usePlannerStore.getState().clearSnapGuides();
       if (d?.type === 'rect') {
         const rect = getRect();
         if (rect) usePlannerStore.getState().addRectRoom(d.start, eventToWorld(view, rect, e.clientX, e.clientY));
@@ -790,6 +793,7 @@ export function Canvas() {
 
         {view.showLayoutCheck && <IssueMarks project={project} issues={issues} view={view} />}
         <GuideMarks guides={guides} view={view} />
+        <SnapMarks guides={snapGuides} view={view} />
 
         {marquee && (
           <rect

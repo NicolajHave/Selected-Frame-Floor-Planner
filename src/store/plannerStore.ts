@@ -29,6 +29,9 @@ import * as variants from '@/lib/variants';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
+import { rectCorners } from '@/geometry/transform';
+import { boxOf, snapToObjects, squareAngle, type SnapGuide } from '@/geometry/objectSnap';
+import { DEFAULT_MIN_AISLE } from '@/lib/layout';
 import { setWallLength as resizeWall } from '@/geometry/walls';
 import { wallHeightNear } from '@/geometry/wallStyle';
 import {
@@ -105,6 +108,8 @@ export interface Notice {
 export interface PlaceOptions {
   /** Pull wall-mounted catalog items flush onto the nearest wall. */
   wallSnap?: boolean;
+  /** Line up with nearby fixtures and keep the aisle to them (default on; Alt turns it off). */
+  objectSnap?: boolean;
 }
 
 /** The cloud project the open plan is saved to. */
@@ -154,6 +159,9 @@ interface PlannerState {
   /** In-progress underlay scale calibration; null outside the calibrate tool. */
   calibration: Calibration | null;
   wallDraft: WallDraft | null;
+  /** Lines showing what a dragged fixture snapped to (cleared when the drag ends). */
+  snapGuides: SnapGuide[];
+  clearSnapGuides: () => void;
   /** Digits typed while drawing: the next wall's length in mm. */
   drawLength: string;
   /** Wall index highlighted on the canvas (e.g. hovered in the wall list). */
@@ -569,6 +577,7 @@ export const usePlannerStore = create<PlannerState>()(
         shared: null,
         calibration: null,
         wallDraft: null,
+        snapGuides: [],
         drawLength: '',
         highlightedWall: null,
         past: [],
@@ -1526,13 +1535,30 @@ export const usePlannerStore = create<PlannerState>()(
               itemMount(it) === 'wall' && opts?.wallSnap !== false && s.project.room
                 ? snapToWall(s.project.room, p, it.size.depth)
                 : null;
+            let guides: SnapGuide[] = [];
             if (hit) {
               it.position = hit.position;
               it.rotation = hit.rotation;
+            } else if (opts?.objectSnap !== false && squareAngle(it.rotation)) {
+              const others = [
+                ...s.project.inventory.filter((x) => x.id !== id && squareAngle(x.rotation)),
+                ...s.project.pillars.filter((x) => squareAngle(x.rotation)),
+              ].map((o) => boxOf(rectCorners(o.position, o.size, o.rotation)));
+              const box = boxOf(rectCorners(p, it.size, it.rotation));
+              // About 10 px on screen, whatever the zoom.
+              const r = snapToObjects(p, box, others, 10 / s.view.zoom, s.project.minAisle ?? DEFAULT_MIN_AISLE);
+              it.position = r.position;
+              guides = r.guides;
             } else {
               it.position = { x: p.x, y: p.y };
             }
+            if (guides.length || s.snapGuides.length) s.snapGuides = guides;
             touch(s.project);
+          }),
+
+        clearSnapGuides: () =>
+          setState((s) => {
+            if (s.snapGuides.length) s.snapGuides = [];
           }),
 
         rotateSelected: (delta) =>
