@@ -18,6 +18,8 @@ export interface PartsListRow {
   totalWeightKg?: number;
   hsCodes: string[];
   hangersPerUnit?: number;
+  /** Shelf length per unit, metres. */
+  shelfMetersPerUnit?: number;
   totalHangers?: number;
   /** False for placeholders that aren't in the SIS catalog. */
   catalog: boolean;
@@ -40,6 +42,8 @@ export interface PartsList {
   /** Units whose weight the catalog doesn't state. */
   unitsWithoutWeight: number;
   totalHangers: number;
+  /** Shelf length for folded goods, metres. */
+  totalShelfMeters: number;
   /** Sum over rows with a known price, euro. */
   totalPriceEur: number;
   /** Units with no price in the price list. */
@@ -86,6 +90,7 @@ export function buildPartsList(inventory: InventoryItem[]): PartsList {
             unitWeightKg: asset.weightKg,
             hsCodes: asset.hsCodes,
             hangersPerUnit: asset.hangerCount,
+            shelfMetersPerUnit: asset.shelfMeters,
             catalog: true,
             itemIds: [item.id],
           }
@@ -152,6 +157,7 @@ export function buildPartsList(inventory: InventoryItem[]): PartsList {
     totalWeightKg: rows.reduce((n, r) => n + (r.totalWeightKg ?? 0), 0),
     unitsWithoutWeight: rows.reduce((n, r) => n + (r.unitWeightKg === undefined ? r.quantity : 0), 0),
     totalHangers: rows.reduce((n, r) => n + (r.totalHangers ?? 0), 0),
+    totalShelfMeters: Math.round(rows.reduce((n, r) => n + (r.shelfMetersPerUnit ?? 0) * r.quantity, 0) * 100) / 100,
     totalPriceEur: rows.reduce((n, r) => n + (r.totalPriceEur ?? 0), 0),
     unitsWithoutPrice: rows.reduce((n, r) => n + (r.unitPriceEur === undefined ? r.quantity : 0), 0),
   };

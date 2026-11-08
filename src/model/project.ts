@@ -71,6 +71,8 @@ export interface Project {
   minAisle?: Mm;
   /** Free text for the PDF's "Notes for this draft". */
   notes?: string;
+  /** What the fixtures may cost, euro (compared with the parts list total). */
+  budgetEur?: number;
   /** Sockets, data, logo power… for the electrical plan. */
   electrical?: ElectricalPoint[];
   /** Notes written on the plan. */
