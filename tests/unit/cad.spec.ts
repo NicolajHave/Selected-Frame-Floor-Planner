@@ -59,3 +59,26 @@ test('the extent ignores a stray line far away', () => {
 test('MTEXT formatting codes are stripped', () => {
   expect(plainMtext('{\\fArial|b1;Réserve}\\PStock')).toBe('Réserve Stock');
 });
+
+test('each line remembers its layer; block contents on layer 0 take the reference’s layer', () => {
+  const blocks: CadSource['blocks'] = new Map([
+    ['DESK', { base: { x: 0, y: 0 }, entities: [{ layer: '0', kind: 'line', a: { x: 0, y: 0 }, b: { x: 10, y: 0 } }] }],
+  ]);
+  const d = flatten(
+    src(
+      [
+        { layer: 'WALLS', kind: 'line', a: { x: 0, y: 0 }, b: { x: 100, y: 0 } },
+        { layer: 'FURNITURE', kind: 'insert', block: 'DESK', p: { x: 0, y: 0 }, sx: 1, sy: 1, rot: 0, cols: 2, rows: 1, colSpacing: 20, rowSpacing: 0 },
+        { layer: 'TEXT', kind: 'text', p: { x: 0, y: 0 }, h: 10, rot: 0, text: 'Shop' },
+      ],
+      blocks,
+    ),
+  );
+  expect(d.pathLayers).toEqual(['WALLS', 'FURNITURE', 'FURNITURE']);
+  expect(d.texts[0]!.layer).toBe('TEXT');
+  expect(d.layers).toEqual([
+    { name: 'FURNITURE', count: 2 },
+    { name: 'WALLS', count: 1 },
+    { name: 'TEXT', count: 1 },
+  ]);
+});

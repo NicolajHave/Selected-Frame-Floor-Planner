@@ -5,7 +5,11 @@ export interface FlatDrawing {
   unitMm: number;
   /** Polylines as flat [x0, y0, x1, y1, …] arrays. */
   paths: Float64Array[];
-  texts: { x: number; y: number; h: number; rot: number; text: string }[];
+  /** The layer each path is drawn on (after layer-0 block contents take their reference's layer). */
+  pathLayers: string[];
+  /** Lines per layer, most first: for showing and hiding layers. */
+  layers: { name: string; count: number }[];
+  texts: { x: number; y: number; h: number; rot: number; text: string; layer: string }[];
   /** Where the drawing really is: outliers (stray far-off lines) left out. */
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
 }
@@ -79,6 +83,8 @@ function bulgePoints(pts: (Xy & { bulge?: number })[], closed: boolean): Xy[] {
 /** Expands blocks and curves into polylines in model space. */
 export function flatten(src: CadSource): FlatDrawing {
   const paths: Float64Array[] = [];
+  const pathLayers: string[] = [];
+  let layer = '0';
   const texts: FlatDrawing['texts'] = [];
 
   const push = (m: M, pts: Xy[]) => {
@@ -90,13 +96,15 @@ export function flatten(src: CadSource): FlatDrawing {
       a[i * 2 + 1] = q.y;
     });
     paths.push(a);
+    pathLayers.push(layer);
   };
 
   const walk = (list: CadEntity[], m: M, inherited: string | null, depth: number) => {
     for (const e of list) {
       // Entities on layer 0 inside a block take the layer of the block reference.
-      const layer = e.layer === '0' && inherited ? inherited : e.layer;
-      if (src.hiddenLayers.has(layer)) continue;
+      const own = e.layer === '0' && inherited ? inherited : e.layer;
+      if (src.hiddenLayers.has(own)) continue;
+      layer = own;
       switch (e.kind) {
         case 'line':
           push(m, [e.a, e.b]);
@@ -121,7 +129,7 @@ export function flatten(src: CadSource): FlatDrawing {
           if (!e.text.trim()) break;
           const p = apply(m, e.p);
           const dir = apply(m, { x: e.p.x + Math.cos(e.rot), y: e.p.y + Math.sin(e.rot) });
-          texts.push({ x: p.x, y: p.y, h: e.h * scaleOf(m), rot: Math.atan2(dir.y - p.y, dir.x - p.x), text: e.text });
+          texts.push({ x: p.x, y: p.y, h: e.h * scaleOf(m), rot: Math.atan2(dir.y - p.y, dir.x - p.x), text: e.text, layer });
           break;
         }
         case 'insert': {
@@ -145,7 +153,7 @@ export function flatten(src: CadSource): FlatDrawing {
                 e.p.y + sin * ox + cos * oy,
               ];
               const base: M = [1, 0, 0, 1, -block.base.x, -block.base.y];
-              walk(block.entities, mul(m, mul(place, base)), layer, depth + 1);
+              walk(block.entities, mul(m, mul(place, base)), own, depth + 1);
             }
           }
           break;
@@ -155,7 +163,11 @@ export function flatten(src: CadSource): FlatDrawing {
   };
 
   walk(src.entities, IDENTITY, null, 0);
-  return { unitMm: src.unitMm, paths, texts, bounds: robustBounds(paths) };
+  const counts = new Map<string, number>();
+  for (const l of pathLayers) counts.set(l, (counts.get(l) ?? 0) + 1);
+  for (const t of texts) counts.set(t.layer, (counts.get(t.layer) ?? 0) + 1);
+  const layers = [...counts].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  return { unitMm: src.unitMm, paths, pathLayers, layers, texts, bounds: robustBounds(paths) };
 }
 
 /**

@@ -162,7 +162,8 @@ export function CropPicker({
   const start = useRef<{ x: number; y: number } | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => setCrop(null), [preview]);
+  // A new picture of the same page (e.g. layers switched) keeps the box.
+  useEffect(() => setCrop(null), [preview?.aspect]);
 
   const at = (e: React.PointerEvent) => {
     const r = box.current!.getBoundingClientRect();

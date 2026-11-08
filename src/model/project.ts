@@ -48,6 +48,12 @@ export interface PlanUnderlay {
   cropped?: boolean;
   /** Drawn from a DWG/DXF: the scale comes from the drawing itself. */
   fromCad?: boolean;
+  /**
+   * Locked in place by the user: it can't be moved, rescaled, replaced or
+   * removed until unlocked (its opacity can still change). `locked` above
+   * only means "not being dragged right now".
+   */
+  pinned?: boolean;
 }
 
 export interface Project {

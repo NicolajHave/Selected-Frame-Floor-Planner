@@ -25,7 +25,13 @@ export const CAD_MAX_SIDE = 3200;
  * as dark lines on white. Returns a JPEG, its aspect (height / width) and
  * the real width it covers, in mm (at `unitMm` millimetres per drawing unit).
  */
-export function renderCad(d: FlatDrawing, crop: Crop | null, maxSide = CAD_MAX_SIDE, unitMm = d.unitMm) {
+export function renderCad(
+  d: FlatDrawing,
+  crop: Crop | null,
+  maxSide = CAD_MAX_SIDE,
+  unitMm = d.unitMm,
+  hidden: ReadonlySet<string> = new Set(),
+) {
   const b = d.bounds;
   const c = crop ?? { x: 0, y: 0, w: 1, h: 1 };
   const W = b.maxX - b.minX;
@@ -48,7 +54,9 @@ export function renderCad(d: FlatDrawing, crop: Crop | null, maxSide = CAD_MAX_S
   ctx.lineWidth = Math.max(1, maxSide / 2400);
   ctx.lineJoin = 'round';
   ctx.beginPath();
-  for (const p of d.paths) {
+  for (let k = 0; k < d.paths.length; k++) {
+    const p = d.paths[k]!;
+    if (hidden.has(d.pathLayers[k]!)) continue;
     // Skip what is wholly outside the window.
     let inside = false;
     for (let i = 0; i < p.length && !inside; i += 2) {
@@ -74,7 +82,7 @@ export function renderCad(d: FlatDrawing, crop: Crop | null, maxSide = CAD_MAX_S
   ctx.textBaseline = 'alphabetic';
   for (const t of d.texts) {
     const px = t.h * s;
-    if (px < 3 || t.x < x0 || t.x > x1 || t.y < y0 || t.y > y1) continue;
+    if (px < 3 || hidden.has(t.layer) || t.x < x0 || t.x > x1 || t.y < y0 || t.y > y1) continue;
     ctx.save();
     ctx.translate((t.x - x0) * s, (y1 - t.y) * s);
     ctx.rotate(-t.rot);
