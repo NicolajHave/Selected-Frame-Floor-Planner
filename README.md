@@ -91,6 +91,14 @@ URL. No environment variables are needed.
    (Shift: faster); walls and fixtures can't be walked through. A small
    map shows where you are — click it to jump. **Snapshot** saves the
    current view (overview or walk) as a PNG.
+11. **Layout variants**: **+ Layout variant** (top left of the plan)
+   tries another layout of the fixtures in the same room — a copy of the
+   current one or an empty one. Tabs (Layout A, B, …) switch between
+   them; the room, walls, doors, pillars, electrical points and notes are
+   shared. The active tab's menu renames, duplicates or deletes a layout.
+   **Compare** puts them side by side: fixtures, price, €/m², hanger
+   capacity, shelf metres, layout problems and the budget. View-only
+   links can switch between the layouts too; the PDF names the layout.
 11. **Parts list** (right panel, nothing selected) totals units, weight,
    hanger capacity and **price** (EUR, with €/m² of floor), and exports a
    CSV for Excel with SKU, unit and total price, price source and

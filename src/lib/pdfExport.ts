@@ -1,6 +1,7 @@
 'use client';
 
 import type { jsPDF as JsPdf } from 'jspdf';
+import { activeVariantName } from './variants';
 import type { Point } from '@/model/geometry';
 import type { Project } from '@/model/project';
 import type { ElectricalPoint, RoomPolygon } from '@/model/objects';
@@ -74,8 +75,10 @@ export async function buildPlanPdf(project: Project, opts: PdfOptions): Promise<
   const progress = opts.onProgress ?? (() => {});
   const { jsPDF, GState } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a3', compress: true });
-  doc.setProperties({ title: `${project.name} — shop plan`, creator: 'Selected Frame Shop Planner' });
-  const info: DocInfo = { name: project.name || 'Untitled plan', date: today(), liveUrl: opts.liveUrl ?? null };
+  const variant = activeVariantName(project);
+  const title = `${project.name || 'Untitled plan'}${variant ? ` · ${variant}` : ''}`;
+  doc.setProperties({ title: `${title} — shop plan`, creator: 'Selected Frame Shop Planner' });
+  const info: DocInfo = { name: title, date: today(), liveUrl: opts.liveUrl ?? null };
 
   const parts = buildPartsList(project.inventory);
   // Fixtures are numbered by parts-list row; wall racks are R1, R2, …
@@ -150,7 +153,8 @@ const px = (paperMm: number) => Math.round(paperMm * PX_PER_MM);
 
 export async function downloadPlanPdf(project: Project, opts: PdfOptions): Promise<void> {
   const doc = await buildPlanPdf(project, opts);
-  const base = (project.name || 'plan').trim().replace(/\s+/g, '-').toLowerCase();
+  const variant = activeVariantName(project);
+  const base = `${project.name || 'plan'}${variant ? ` ${variant}` : ''}`.trim().replace(/\s+/g, '-').toLowerCase();
   doc.save(`${base}-plan.pdf`);
 }
 
@@ -672,6 +676,7 @@ function drawColumn(
   const walls = room ? wallLengths(room.corners, room.closed).reduce((a, b) => a + b, 0) : 0;
   const rows: [string, string][] = [
     ['Project', project.name || 'Untitled plan'],
+    ...(activeVariantName(project) ? ([['Layout', activeVariantName(project)!]] as [string, string][]) : []),
     ['Date', new Date().toLocaleDateString('da-DK')],
     ['Scale', scale ? `1:${scale} (A3)` : '—'],
     ['Floor area', room?.closed ? `${num(areaM2, 2, true)} m²` : '—'],
