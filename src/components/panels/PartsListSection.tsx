@@ -69,12 +69,28 @@ export function PartsListSection() {
                 (list.unitsWithoutWeight ? ` + ${list.unitsWithoutWeight} unweighed` : '')
               }
             />
-            {list.totalHangers > 0 && (
-              <Total label="Hanger capacity" value={String(list.totalHangers)} />
+          </div>
+
+          <div className="flex flex-col gap-1 border-t border-wall-200 pt-3" data-testid="capacity">
+            <span className="text-[10px] uppercase tracking-widest2 text-ink-500">Capacity</span>
+            <Total label="Hangers" value={list.totalHangers > 0 ? String(list.totalHangers) : '–'} />
+            <Total
+              label="Shelf metres"
+              value={list.totalShelfMeters > 0 ? `${list.totalShelfMeters.toLocaleString('da-DK')} m` : '–'}
+            />
+            {areaM2 > 0 && (list.totalHangers > 0 || list.totalShelfMeters > 0) && (
+              <Total
+                label="Per m² floor"
+                value={`${Math.round(list.totalHangers / areaM2)} hangers · ${(list.totalShelfMeters / areaM2).toLocaleString('da-DK', { maximumFractionDigits: 2 })} m shelf`}
+              />
             )}
+          </div>
+
+          <div className="flex flex-col gap-1 border-t border-wall-200 pt-3">
             {showPrices && (
               <>
                 <Total label="Total price" value={eur(Math.round(list.totalPriceEur * 100) / 100)} />
+                <Budget total={list.totalPriceEur} />
                 {areaM2 > 0 && (
                   <Total label="Per m² floor" value={eur(Math.round((list.totalPriceEur / areaM2) * 100) / 100)} />
                 )}
@@ -103,6 +119,51 @@ function Total({ label, value }: { label: string; value: string }) {
     <div className="flex items-baseline justify-between">
       <span className="text-[11px] text-ink-500">{label}</span>
       <span className="font-mono text-[12px] text-ink-900">{value}</span>
+    </div>
+  );
+}
+
+/** The fixtures budget: set it, and see how the parts list total compares. */
+function Budget({ total }: { total: number }) {
+  const budget = usePlannerStore((s) => s.project.budgetEur);
+  const setBudget = usePlannerStore((s) => s.setBudget);
+  const readOnly = usePlannerStore((s) => s.readOnly);
+  const share = budget ? total / budget : 0;
+  const over = budget !== undefined && total > budget;
+  return (
+    <div className="flex flex-col gap-1 py-1" data-testid="budget">
+      <label className="flex items-baseline justify-between gap-2">
+        <span className="text-[11px] text-ink-500">Budget</span>
+        <span className="flex items-baseline gap-1">
+          <input
+            aria-label="Budget (EUR)"
+            inputMode="numeric"
+            disabled={readOnly}
+            defaultValue={budget ?? ''}
+            key={budget ?? 'none'}
+            placeholder="set…"
+            onBlur={(e) => setBudget(Number(e.target.value.replace(/[^0-9]/g, '')) || null)}
+            onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+            className="w-24 border-b border-wall-300 bg-transparent text-right font-mono text-[12px] text-ink-900 outline-none focus:border-ink-900"
+          />
+          <span className="font-mono text-[11px] text-ink-500">€</span>
+        </span>
+      </label>
+      {budget !== undefined && (
+        <>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-wall-200">
+            <div
+              className={over ? 'h-full bg-red-600' : 'h-full bg-ink-900'}
+              style={{ width: `${Math.min(100, share * 100)}%` }}
+            />
+          </div>
+          <span className={over ? 'text-[11px] text-red-700' : 'text-[11px] text-ink-500'} data-testid="budget-status">
+            {over
+              ? `${eur(Math.round((total - budget) * 100) / 100)} over budget (${Math.round(share * 100)} %)`
+              : `${eur(Math.round((budget - total) * 100) / 100)} left (${Math.round(share * 100)} % used)`}
+          </span>
+        </>
+      )}
     </div>
   );
 }

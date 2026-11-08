@@ -217,6 +217,8 @@ interface PlannerState {
   toggleLayoutCheck: () => void;
   setMinAisle: (mmValue: number) => void;
   setNotes: (notes: string) => void;
+  /** Set (or clear, with null) the fixtures budget, euro. */
+  setBudget: (eur: number | null) => void;
 
   // history
   undo: () => void;
@@ -1095,6 +1097,16 @@ export const usePlannerStore = create<PlannerState>()(
             if (!(mmValue > 0) || s.project.minAisle === mmValue) return;
             record(s);
             s.project.minAisle = mm(mmValue);
+            touch(s.project);
+          }),
+
+        setBudget: (eur) =>
+          set((s) => {
+            const next = eur && eur > 0 ? Math.round(eur) : undefined;
+            if (s.project.budgetEur === next) return;
+            record(s);
+            if (next) s.project.budgetEur = next;
+            else delete s.project.budgetEur;
             touch(s.project);
           }),
 

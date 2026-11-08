@@ -49,6 +49,8 @@ export interface AssetEntry {
   hsCodes: string[];
   /** Garment hanging capacity, where the catalog states one. */
   hangerCount?: number;
+  /** Shelf length for folded goods, metres (shelves × their width). */
+  shelfMeters?: number;
 }
 
 const HS_STEEL = '94032080';
@@ -64,6 +66,7 @@ interface Spec {
   weightKg?: number;
   hsCodes: string[];
   hangerCount?: number;
+  shelfMeters?: number;
 }
 
 function entry(
@@ -89,6 +92,7 @@ function entry(
     weightKg: spec.weightKg,
     hsCodes: spec.hsCodes,
     hangerCount: spec.hangerCount,
+    shelfMeters: spec.shelfMeters,
   };
 }
 
@@ -109,19 +113,19 @@ export const ASSET_CATALOG: readonly AssetEntry[] = [
   entry('105-99-003', 'Wall Unit Sidehang', 'Wall Units', [1496, 434, 2288],
     { mount: 'wall', material: SS, weightKg: 34, hsCodes: [HS_STEEL], hangerCount: 35 }),
   entry('105-99-004', 'Wall Unit 1400 - Shelves', 'Wall Units', [1496, 517, 2288],
-    { mount: 'wall', material: SS_OAK, weightKg: 71.3, hsCodes: [HS_STEEL, HS_WOOD] }),
+    { shelfMeters: 5.22, mount: 'wall', material: SS_OAK, weightKg: 71.3, hsCodes: [HS_STEEL, HS_WOOD] }),
   entry('105-99-005', 'Wall Unit 1400 - Single Shelf Sidehang', 'Wall Units', [1496, 517, 2288],
-    { mount: 'wall', material: SS_OAK, weightKg: 50.4, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 35 }),
+    { shelfMeters: 1.31, mount: 'wall', material: SS_OAK, weightKg: 50.4, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 35 }),
   entry('105-99-006', 'Wall Unit 1400 - 2-level Sidehang', 'Wall Units', [1496, 542, 2288],
     { mount: 'wall', material: SS, weightKg: 37.5, hsCodes: [HS_STEEL], hangerCount: 40 }),
   entry('105-99-007', 'Wall Unit 1400 - Mirror Sidehang', 'Wall Units', [1496, 434, 2288],
     { mount: 'wall', material: SS, weightKg: 58.6, hsCodes: [HS_STEEL], hangerCount: 28 }),
   entry('105-99-008', 'Wall Unit - Category Library', 'Wall Units', [1496, 529.5, 2288],
-    { mount: 'wall', material: SS, weightKg: 172, hsCodes: [HS_STEEL], hangerCount: 10 }),
+    { shelfMeters: 3.55, mount: 'wall', material: SS, weightKg: 172, hsCodes: [HS_STEEL], hangerCount: 10 }),
   entry('105-99-009', 'Wall Unit 1400 - Screen', 'Wall Units', [1496, 445, 2288],
     { mount: 'wall', material: SS, weightKg: 317.6, hsCodes: [HS_STEEL] }),
   entry('105-99-010', 'Wall Unit 700 - Shelf', 'Wall Units', [810, 517, 2288],
-    { mount: 'wall', material: SS_OAK, weightKg: 48.2, hsCodes: [HS_STEEL, HS_WOOD] }),
+    { shelfMeters: 2.48, mount: 'wall', material: SS_OAK, weightKg: 48.2, hsCodes: [HS_STEEL, HS_WOOD] }),
   entry('105-99-011', 'Wall Unit 700 - 2-Level Sidehang', 'Wall Units', [810, 389, 2288],
     { mount: 'wall', material: SS, weightKg: 31.7, hsCodes: [HS_STEEL], hangerCount: 26 }),
   entry('105-99-012', 'Wall Unit 700 - Sidehang', 'Wall Units', [810, 389, 2288],
@@ -136,11 +140,11 @@ export const ASSET_CATALOG: readonly AssetEntry[] = [
   entry('105-06-002', 'Floor Rack 700', 'Racks', [800, 500, 1508],
     { material: SS, weightKg: 15.4, hsCodes: [HS_STEEL], hangerCount: 25 }),
   entry('105-06-010', 'Single Shelf Floor Rack', 'Racks', [1310, 500, 1508],
-    { material: SS_OAK, weightKg: 27.4, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 25 }),
+    { shelfMeters: 1.68, material: SS_OAK, weightKg: 27.4, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 25 }),
   entry('105-06-011', 'Double Shelf Floor Rack', 'Racks', [1310, 500, 1508],
-    { material: SS_OAK, weightKg: 37.7, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 10 }),
+    { shelfMeters: 3.28, material: SS_OAK, weightKg: 37.7, hsCodes: [HS_STEEL, HS_WOOD], hangerCount: 10 }),
   entry('105-06-013', 'Triple Shelf Floor Rack', 'Racks', [1300, 500, 1508],
-    { material: SS_OAK, weightKg: 45.8, hsCodes: [HS_STEEL, HS_WOOD] }),
+    { shelfMeters: 4.8, material: SS_OAK, weightKg: 45.8, hsCodes: [HS_STEEL, HS_WOOD] }),
   entry('105-06-014', 'Floor Rack 1400 H1700', 'Racks', [1310, 500, 1708],
     { material: SS, weightKg: 17.5, hsCodes: [HS_STEEL], hangerCount: 50 }),
   // The catalog prints 105-06-014 for both H1700 racks; the id is ours.

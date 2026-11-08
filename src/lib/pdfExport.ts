@@ -679,6 +679,7 @@ function drawColumn(
     ['Wall height', room ? wallHeightLabel(room) : '—'],
     ['Fixtures', `${parts.totalUnits} units · ${num(parts.totalWeightKg, 1)} kg`],
     ['Hanger capacity', parts.totalHangers ? num(parts.totalHangers) : '—'],
+    ['Shelf metres', parts.totalShelfMeters ? `${num(parts.totalShelfMeters, 2, true)} m` : '—'],
   ];
   let ty = titleTop;
   doc.setDrawColor(...INK);
