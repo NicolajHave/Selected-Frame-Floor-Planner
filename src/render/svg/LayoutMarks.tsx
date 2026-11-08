@@ -109,7 +109,7 @@ interface DimensionProps {
 }
 
 /** A measured line with end ticks and its length in mm. */
-function Dimension({ from, to, label, color, view, dashed }: DimensionProps) {
+export function Dimension({ from, to, label, color, view, dashed }: DimensionProps) {
   const len = Math.hypot(to.x - from.x, to.y - from.y) || 1;
   const ux = (to.x - from.x) / len;
   const uy = (to.y - from.y) / len;

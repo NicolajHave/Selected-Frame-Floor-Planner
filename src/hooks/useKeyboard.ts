@@ -3,8 +3,21 @@
 import { useEffect } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { downloadJson } from '@/lib/io';
+import type { Point } from '@/model/geometry';
+import { planPointer } from '@/render/svg/pointer';
+import { screenToWorld } from '@/render/svg/viewport';
 
 const QUARTER_TURN = Math.PI / 2;
+
+/** Where a paste lands: under the pointer on the plan, else the middle of the view. */
+function pasteTarget(): Point {
+  const s = usePlannerStore.getState();
+  if (s.view.viewMode === '2d' && planPointer.world) return planPointer.world;
+  const stage = document.querySelector('[data-stage]')?.getBoundingClientRect();
+  const w = stage?.width ?? 800;
+  const h = stage?.height ?? 600;
+  return screenToWorld(s.view, { x: w / 2, y: h / 2 });
+}
 
 export function useKeyboard() {
   useEffect(() => {
@@ -55,6 +68,20 @@ export function useKeyboard() {
 
       if (key === 'l' && !meta && !e.altKey) {
         s.toggleLockSelected();
+        return;
+      }
+
+      // Copy and paste fixtures between plans and layouts. Without a selection,
+      // Ctrl+C is left to the browser (copying text on the page).
+      if (meta && key === 'c' && !e.shiftKey && s.selection) {
+        if (window.getSelection()?.toString()) return;
+        e.preventDefault();
+        s.copySelected();
+        return;
+      }
+      if (meta && key === 'v' && !e.shiftKey && !s.readOnly) {
+        e.preventDefault();
+        s.pasteClip(pasteTarget());
         return;
       }
 

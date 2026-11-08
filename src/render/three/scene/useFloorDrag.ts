@@ -75,6 +75,7 @@ export function useFloorDrag(
       if (controls) controls.enabled = true;
       gl.domElement.style.cursor = 'grab';
       usePlannerStore.getState().endGesture();
+      usePlannerStore.getState().clearSnapGuides();
     },
     // Keep the floor's click handler from deselecting what we just selected.
     onClick: (e: ThreeEvent<MouseEvent>) => {

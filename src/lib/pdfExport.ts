@@ -301,6 +301,7 @@ function drawPlanPage(
       const n = numberOf.get(it.id);
       if (n !== undefined) badge(doc, X(it.position.x), Y(it.position.y), n);
     }
+    drawKeptDimensions(doc, project, P, scale);
     drawPlanNotes(doc, project, P);
   }
 
@@ -556,6 +557,36 @@ function drawWallDimensions(doc: JsPdf, room: RoomPolygon, P: (p: Point) => read
     const ty = (a[1] + b[1]) / 2 + upY * 1;
     doc.text(num(len), tx, ty, { align: 'center', angle });
   });
+}
+
+/** Dimension lines kept with the measuring tape. */
+function drawKeptDimensions(doc: JsPdf, project: Project, P: (p: Point) => readonly [number, number], scale: number) {
+  const list = project.dimensions ?? [];
+  if (!list.length) return;
+  doc.setDrawColor(...INK);
+  doc.setTextColor(...INK);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  for (const d of list) {
+    const len = Math.hypot(d.b.x - d.a.x, d.b.y - d.a.y);
+    if (len < 1) continue;
+    const a = P(d.a);
+    const b = P(d.b);
+    const ux = (d.b.x - d.a.x) / len;
+    const uy = (d.b.y - d.a.y) / len;
+    doc.setLineWidth(0.18);
+    doc.line(...a, ...b);
+    // End ticks across the line, 1.5 mm long on paper.
+    for (const p of [d.a, d.b]) {
+      const t = 0.75 * scale;
+      doc.line(...P(pt(p.x - uy * t, p.y + ux * t)), ...P(pt(p.x + uy * t, p.y - ux * t)));
+    }
+    let angle = (-Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+    if (angle > 90) angle -= 180;
+    if (angle <= -90) angle += 180;
+    const rad = (angle * Math.PI) / 180;
+    doc.text(num(len), (a[0] + b[0]) / 2 - Math.sin(rad), (a[1] + b[1]) / 2 - Math.cos(rad), { align: 'center', angle });
+  }
 }
 
 /** The room's wall height, or the range when walls differ. */

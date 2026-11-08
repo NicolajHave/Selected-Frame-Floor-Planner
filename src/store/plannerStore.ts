@@ -26,9 +26,13 @@ import type {
 import { mm, rad } from '@/model/units';
 import { newId } from '@/lib/id';
 import * as variants from '@/lib/variants';
+import { clipCount, makeClip, placeClip, readClip, writeClip } from '@/lib/clipboard';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
+import { rectCorners } from '@/geometry/transform';
+import { boxOf, snapToObjects, squareAngle, type SnapGuide } from '@/geometry/objectSnap';
+import { DEFAULT_MIN_AISLE } from '@/lib/layout';
 import { setWallLength as resizeWall } from '@/geometry/walls';
 import { wallHeightNear } from '@/geometry/wallStyle';
 import {
@@ -65,6 +69,8 @@ export type Tool =
   | 'add-opening'
   | 'add-electrical'
   | 'add-note'
+  /** Click two points to measure between them. */
+  | 'measure'
   | 'calibrate'
   /** Click inside a room on the plan underlay to draft its walls. */
   | 'trace-room';
@@ -105,6 +111,8 @@ export interface Notice {
 export interface PlaceOptions {
   /** Pull wall-mounted catalog items flush onto the nearest wall. */
   wallSnap?: boolean;
+  /** Line up with nearby fixtures and keep the aisle to them (default on; Alt turns it off). */
+  objectSnap?: boolean;
 }
 
 /** The cloud project the open plan is saved to. */
@@ -154,6 +162,16 @@ interface PlannerState {
   /** In-progress underlay scale calibration; null outside the calibrate tool. */
   calibration: Calibration | null;
   wallDraft: WallDraft | null;
+  /** The measurement in progress: `b` is null until the second click. */
+  measure: { a: Point; b: Point | null } | null;
+  measureClick: (p: Point) => void;
+  /** Keeps the finished measurement as a dimension line on the plan. */
+  keepMeasure: () => void;
+  removeDimension: (id: string) => void;
+  clearDimensions: () => void;
+  /** Lines showing what a dragged fixture snapped to (cleared when the drag ends). */
+  snapGuides: SnapGuide[];
+  clearSnapGuides: () => void;
   /** Digits typed while drawing: the next wall's length in mm. */
   drawLength: string;
   /** Wall index highlighted on the canvas (e.g. hovered in the wall list). */
@@ -302,6 +320,10 @@ interface PlannerState {
   /** Move a tray to another shelf of its unit. */
   setAccessoryShelf: (itemId: string, accessoryId: string, shelf: number) => void;
   duplicateSelected: () => void;
+  /** Ctrl+C: puts the selected fixtures, pillars and notes on the planner's clipboard. */
+  copySelected: () => void;
+  /** Ctrl+V: pastes the clipboard (from any plan or layout) centred on `at`. */
+  pasteClip: (at: Point) => void;
   deleteSelected: () => void;
 
   // wall racks
@@ -569,6 +591,8 @@ export const usePlannerStore = create<PlannerState>()(
         shared: null,
         calibration: null,
         wallDraft: null,
+        snapGuides: [],
+        measure: null,
         drawLength: '',
         highlightedWall: null,
         past: [],
@@ -590,6 +614,41 @@ export const usePlannerStore = create<PlannerState>()(
             if (t !== 'calibrate') s.calibration = null;
             if (t !== 'trace-room') s.wallDraft = null;
             if (t !== 'draw-room') s.drawLength = '';
+            if (t !== 'measure') s.measure = null;
+          }),
+
+        measureClick: (p) =>
+          setState((s) => {
+            const m = s.measure;
+            s.measure = m && !m.b ? { a: m.a, b: { x: p.x, y: p.y } } : { a: { x: p.x, y: p.y }, b: null };
+          }),
+
+        keepMeasure: () =>
+          set((s) => {
+            const m = s.measure;
+            if (!m?.b || Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y) < 1) return;
+            record(s);
+            (s.project.dimensions ??= []).push({ id: newId('dim'), a: m.a, b: m.b });
+            s.measure = null;
+            touch(s.project);
+          }),
+
+        removeDimension: (id) =>
+          set((s) => {
+            const list = s.project.dimensions;
+            if (!list?.some((d) => d.id === id)) return;
+            record(s);
+            s.project.dimensions = list.filter((d) => d.id !== id);
+            if (!s.project.dimensions.length) delete s.project.dimensions;
+            touch(s.project);
+          }),
+
+        clearDimensions: () =>
+          set((s) => {
+            if (!s.project.dimensions?.length) return;
+            record(s);
+            delete s.project.dimensions;
+            touch(s.project);
           }),
 
         pickAsset: (assetId) =>
@@ -1526,13 +1585,30 @@ export const usePlannerStore = create<PlannerState>()(
               itemMount(it) === 'wall' && opts?.wallSnap !== false && s.project.room
                 ? snapToWall(s.project.room, p, it.size.depth)
                 : null;
+            let guides: SnapGuide[] = [];
             if (hit) {
               it.position = hit.position;
               it.rotation = hit.rotation;
+            } else if (opts?.objectSnap !== false && squareAngle(it.rotation)) {
+              const others = [
+                ...s.project.inventory.filter((x) => x.id !== id && squareAngle(x.rotation)),
+                ...s.project.pillars.filter((x) => squareAngle(x.rotation)),
+              ].map((o) => boxOf(rectCorners(o.position, o.size, o.rotation)));
+              const box = boxOf(rectCorners(p, it.size, it.rotation));
+              // About 10 px on screen, whatever the zoom.
+              const r = snapToObjects(p, box, others, 10 / s.view.zoom, s.project.minAisle ?? DEFAULT_MIN_AISLE);
+              it.position = r.position;
+              guides = r.guides;
             } else {
               it.position = { x: p.x, y: p.y };
             }
+            if (guides.length || s.snapGuides.length) s.snapGuides = guides;
             touch(s.project);
+          }),
+
+        clearSnapGuides: () =>
+          setState((s) => {
+            if (s.snapGuides.length) s.snapGuides = [];
           }),
 
         rotateSelected: (delta) =>
@@ -1582,6 +1658,59 @@ export const usePlannerStore = create<PlannerState>()(
             if (sel.kind === 'pillar' ? layoutBlocked(s) : itemBlocked(s, target as InventoryItem)) return;
             record(s);
             target.rotation = normalizeAngle(target.rotation + delta);
+            touch(s.project);
+          }),
+
+        copySelected: () =>
+          setState((s) => {
+            const members = selectedMembers(s);
+            if (!members.length) return;
+            const ids = (k: string) => new Set(members.filter((m) => m.kind === k).map((m) => m.id));
+            const inv = ids('inventory');
+            const pil = ids('pillar');
+            const notes = ids('note');
+            const clip = makeClip(
+              s.project.inventory.filter((x) => inv.has(x.id)),
+              s.project.pillars.filter((x) => pil.has(x.id)),
+              (s.project.annotations ?? []).filter((x) => notes.has(x.id)),
+            );
+            if (!clip) return;
+            const n = clipCount(clip);
+            s.notice = writeClip(clip)
+              ? info(`Copied ${n === 1 ? '1 item' : `${n} items`}. Paste with Ctrl+V — in this plan, another layout or another plan.`)
+              : info('Could not copy: this browser does not allow storing it.');
+          }),
+
+        pasteClip: (at) =>
+          set((s) => {
+            const clip = readClip();
+            if (!clip || !clipCount(clip)) {
+              s.notice = info('Nothing to paste yet. Select fixtures and press Ctrl+C first.');
+              return;
+            }
+            const placed = placeClip(clip, at);
+            // Pillars are part of the floor layout: they stay out while it is locked.
+            const pillars = s.project.layoutLocked ? [] : placed.pillars;
+            if (!placed.inventory.length && !pillars.length && !placed.notes.length) {
+              s.notice = info('The floor layout is locked, so the pillars were not pasted.');
+              return;
+            }
+            record(s);
+            s.project.inventory.push(...placed.inventory);
+            s.project.pillars.push(...pillars);
+            if (placed.notes.length) (s.project.annotations ??= []).push(...placed.notes);
+            const pasted: Selection[] = [
+              ...placed.inventory.map((x) => ({ kind: 'inventory' as const, id: x.id })),
+              ...pillars.map((x) => ({ kind: 'pillar' as const, id: x.id })),
+              ...placed.notes.map((x) => ({ kind: 'note' as const, id: x.id })),
+            ];
+            s.multi = pasted.length > 1 ? pasted : [];
+            s.selection = pasted.at(-1) ?? null;
+            if (s.tool !== 'select') s.tool = 'select';
+            const n = pasted.length;
+            s.notice = info(
+              `Pasted ${n === 1 ? '1 item' : `${n} items`}.${pillars.length < placed.pillars.length ? ' Pillars were left out: the floor layout is locked.' : ''}`,
+            );
             touch(s.project);
           }),
 

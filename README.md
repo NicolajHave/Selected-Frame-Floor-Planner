@@ -73,16 +73,26 @@ URL. No environment variables are needed.
    elevations at their height, and notes appear on the plan view.
 7. **Fixtures**: pick a catalog item and click the floor. Wall units and
    logos snap to the nearest wall (`Alt` places freely); logos hang at
-   2.4 m and need walls of at least 2.6 m.
+   2.4 m and need walls of at least 2.6 m. Dragged fixtures snap to the
+   ones around them: edges and centres line up, and they stop exactly
+   the minimum aisle (900 mm) from a neighbour beside them — orange
+   lines show what they snapped to (`Alt` places freely).
 8. **Several at once**: shift-click fixtures, pillars or notes, or
    shift-drag a box on the floor (`⌘A` selects all). Drag one to move
    them all; the panel lines them up (left, centre, right, top, middle,
    bottom), spaces them out evenly, rotates, duplicates or deletes them.
+   `⌘C` / `Ctrl+C` copies the selection (with accessories) and `⌘V` /
+   `Ctrl+V` pastes it under the pointer — in the same plan, another
+   layout or another plan in this browser.
 9. **Distances and layout check**: the selected object shows its
    distance to the nearest wall or object in each direction. The panel
    (nothing selected) lists overlaps, objects in walls, blocked doors and
    aisles narrower than the minimum (900 mm by default, editable); they
-   are marked on the plan and counted in the footer.
+   are marked on the plan and counted in the footer. **Measure** (top
+   bar) is a measuring tape: click two points — corners of walls,
+   fixtures, pillars and door openings snap, `Shift` keeps it straight —
+   and **Keep on plan** leaves it as a dimension line, which the PDF
+   shows too. In the tool, × on a dimension removes it.
 10. **3D View** shows the room with openings and the catalog models;
    objects can be selected, dragged and placed there too. Walls facing
    the camera are cut away so you can always see into the shop.

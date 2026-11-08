@@ -200,6 +200,15 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
             >
               + Box
             </Button>
+            <Button
+              variant="ghost"
+              active={tool === 'measure'}
+              disabled={is3d}
+              onClick={() => setTool(tool === 'measure' ? 'select' : 'measure')}
+              title="Measuring tape: click two points (corners snap; Shift keeps it straight)"
+            >
+              Measure
+            </Button>
           </div>
 
           {divider}
