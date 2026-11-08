@@ -25,6 +25,14 @@ export function ToolOverlay() {
     );
   }
 
+  if (tool === 'measure') {
+    return (
+      <Banner>
+        <MeasurePanel />
+      </Banner>
+    );
+  }
+
   if (tool === 'calibrate' && calibration?.a && calibration.b) {
     return (
       <Banner>
@@ -88,6 +96,39 @@ function Banner({ children }: { children: React.ReactNode }) {
       <div className="pointer-events-auto rounded-[2px] border border-wall-200 bg-wall-50/95 px-3 py-1.5 text-[11px] text-ink-700 shadow-panel backdrop-blur-sm">
         {children}
       </div>
+    </div>
+  );
+}
+
+function MeasurePanel() {
+  const measure = usePlannerStore((s) => s.measure);
+  const kept = usePlannerStore((s) => s.project.dimensions?.length ?? 0);
+  const { keepMeasure, clearDimensions } = usePlannerStore.getState();
+  const done = measure?.b ? Math.round(Math.hypot(measure.b.x - measure.a.x, measure.b.y - measure.a.y)) : null;
+  return (
+    <div className="flex items-center gap-3 py-0.5" data-testid="measure-panel">
+      {done !== null ? (
+        <>
+          <span>
+            <b className="font-mono text-[13px] font-medium text-ink-900" data-testid="measure-result">
+              {done.toLocaleString('da-DK')} mm
+            </b>{' '}
+            · click to measure again
+          </span>
+          <button onClick={keepMeasure} className="rounded-[2px] bg-ink-900 px-2 py-0.5 text-[11px] font-medium text-wall-50">
+            Keep on plan
+          </button>
+        </>
+      ) : (
+        <span>
+          {measure ? 'Click the other end.' : 'Click where to measure from — corners snap, Shift keeps it straight.'} Esc stops.
+        </span>
+      )}
+      {kept > 0 && (
+        <button onClick={clearDimensions} className="text-[11px] text-ink-500 underline-offset-2 hover:underline">
+          Remove all {kept} dimension{kept === 1 ? '' : 's'}
+        </button>
+      )}
     </div>
   );
 }

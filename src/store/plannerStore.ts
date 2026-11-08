@@ -68,6 +68,8 @@ export type Tool =
   | 'add-opening'
   | 'add-electrical'
   | 'add-note'
+  /** Click two points to measure between them. */
+  | 'measure'
   | 'calibrate'
   /** Click inside a room on the plan underlay to draft its walls. */
   | 'trace-room';
@@ -159,6 +161,13 @@ interface PlannerState {
   /** In-progress underlay scale calibration; null outside the calibrate tool. */
   calibration: Calibration | null;
   wallDraft: WallDraft | null;
+  /** The measurement in progress: `b` is null until the second click. */
+  measure: { a: Point; b: Point | null } | null;
+  measureClick: (p: Point) => void;
+  /** Keeps the finished measurement as a dimension line on the plan. */
+  keepMeasure: () => void;
+  removeDimension: (id: string) => void;
+  clearDimensions: () => void;
   /** Lines showing what a dragged fixture snapped to (cleared when the drag ends). */
   snapGuides: SnapGuide[];
   clearSnapGuides: () => void;
@@ -578,6 +587,7 @@ export const usePlannerStore = create<PlannerState>()(
         calibration: null,
         wallDraft: null,
         snapGuides: [],
+        measure: null,
         drawLength: '',
         highlightedWall: null,
         past: [],
@@ -599,6 +609,41 @@ export const usePlannerStore = create<PlannerState>()(
             if (t !== 'calibrate') s.calibration = null;
             if (t !== 'trace-room') s.wallDraft = null;
             if (t !== 'draw-room') s.drawLength = '';
+            if (t !== 'measure') s.measure = null;
+          }),
+
+        measureClick: (p) =>
+          setState((s) => {
+            const m = s.measure;
+            s.measure = m && !m.b ? { a: m.a, b: { x: p.x, y: p.y } } : { a: { x: p.x, y: p.y }, b: null };
+          }),
+
+        keepMeasure: () =>
+          set((s) => {
+            const m = s.measure;
+            if (!m?.b || Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y) < 1) return;
+            record(s);
+            (s.project.dimensions ??= []).push({ id: newId('dim'), a: m.a, b: m.b });
+            s.measure = null;
+            touch(s.project);
+          }),
+
+        removeDimension: (id) =>
+          set((s) => {
+            const list = s.project.dimensions;
+            if (!list?.some((d) => d.id === id)) return;
+            record(s);
+            s.project.dimensions = list.filter((d) => d.id !== id);
+            if (!s.project.dimensions.length) delete s.project.dimensions;
+            touch(s.project);
+          }),
+
+        clearDimensions: () =>
+          set((s) => {
+            if (!s.project.dimensions?.length) return;
+            record(s);
+            delete s.project.dimensions;
+            touch(s.project);
           }),
 
         pickAsset: (assetId) =>

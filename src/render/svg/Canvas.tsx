@@ -16,6 +16,8 @@ import { OpeningPreview, Openings } from './Openings';
 import { ElectricalMarks, PlanNotes } from './Electrical';
 import { GuideMarks, IssueMarks } from './LayoutMarks';
 import { SnapMarks } from './SnapMarks';
+import { MeasureMarks } from './MeasureMarks';
+import { measurePoint, measureTargets } from '@/geometry/measureSnap';
 import { clearanceGuides } from '@/lib/layout';
 import { rectCorners } from '@/geometry/transform';
 import { closestPointOnPolygon } from '@/geometry/insert';
@@ -79,6 +81,10 @@ export function Canvas() {
 
   const metrics = useDerivedMetrics();
   const snapGuides = usePlannerStore((s) => s.snapGuides);
+  const measure = usePlannerStore((s) => s.measure);
+  const readOnlyPlan = usePlannerStore((s) => s.readOnly);
+  const measureTargetsList = useMemo(() => (tool === 'measure' ? measureTargets(project) : []), [tool, project]);
+  const [measureStraight, setMeasureStraight] = useState(false);
   const issues = useLayoutIssues();
 
   // Distances around the selected object (live while it is dragged).
@@ -161,6 +167,12 @@ export function Canvas() {
       // Placement tools act on any click that reaches the canvas — also
       // clicks bubbled through the room fill. Shapes that must intercept
       // (corners, objects in select mode) call stopPropagation themselves.
+      if (tool === 'measure') {
+        const m = usePlannerStore.getState().measure;
+        const from = m && !m.b ? m.a : null;
+        usePlannerStore.getState().measureClick(measurePoint(world, measureTargetsList, 10 / view.zoom, from, e.shiftKey));
+        return;
+      }
       if (tool === 'calibrate') {
         // Raw point: grid snapping would defeat the purpose.
         addCalibrationPoint(world);
@@ -229,7 +241,7 @@ export function Canvas() {
         (e.currentTarget as Element).setPointerCapture(e.pointerId);
       }
     },
-    [tool, view, addCorner, addPillarAt, addInventoryAt, addOpeningAt, addElectricalAt, addNoteAt, addCalibrationPoint, setSelection, getRect],
+    [tool, view, measureTargetsList, addCorner, addPillarAt, addInventoryAt, addOpeningAt, addElectricalAt, addNoteAt, addCalibrationPoint, setSelection, getRect],
   );
 
   const onPointerMove = useCallback(
@@ -238,6 +250,7 @@ export function Canvas() {
       if (!rect) return;
       const world = eventToWorld(view, rect, e.clientX, e.clientY);
       setHoverWorld(world);
+      if (tool === 'measure' && e.shiftKey !== measureStraight) setMeasureStraight(e.shiftKey);
 
       const d = drag.current;
       if (!d) return;
@@ -294,7 +307,7 @@ export function Canvas() {
         else updateInventory(d.id, { rotation });
       }
     },
-    [view, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, moveElectrical, updateNote, updateUnderlay, translateSelected, getRect],
+    [view, tool, measureStraight, setPan, moveCorner, updatePillar, updateInventory, moveInventory, moveOpening, resizeOpening, moveElectrical, updateNote, updateUnderlay, translateSelected, getRect],
   );
 
   const onPointerUp = useCallback(
@@ -411,6 +424,7 @@ export function Canvas() {
       case 'add-opening':   return 'cursor-copy';
       case 'add-electrical': return 'cursor-copy';
       case 'add-note':      return 'cursor-text';
+      case 'measure':       return 'cursor-crosshair';
       default:              return 'cursor-grab active:cursor-grabbing';
     }
   }, [tool]);
@@ -476,6 +490,13 @@ export function Canvas() {
    */
   const onPanPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     const pan = e.button === 1 || e.button === 2 || (e.button === 0 && spaceHeld.current);
+    // Measuring: every left click is a measuring point, whatever is under it
+    // (corners and fixtures would otherwise grab it) — except a dimension's ×.
+    if (!pan && tool === 'measure' && e.button === 0 && !(e.target as Element).closest?.('[data-remove-dimension]')) {
+      e.stopPropagation();
+      onCanvasPointerDown(e);
+      return;
+    }
     if (!pan) return;
     e.preventDefault();
     e.stopPropagation();
@@ -794,6 +815,22 @@ export function Canvas() {
         {view.showLayoutCheck && <IssueMarks project={project} issues={issues} view={view} />}
         <GuideMarks guides={guides} view={view} />
         <SnapMarks guides={snapGuides} view={view} />
+        <MeasureMarks
+          dimensions={project.dimensions ?? []}
+          live={
+            measure
+              ? {
+                  a: measure.a,
+                  b:
+                    measure.b ??
+                    (hoverWorld ? measurePoint(hoverWorld, measureTargetsList, 10 / view.zoom, measure.a, measureStraight) : measure.a),
+                }
+              : null
+          }
+          view={view}
+          editable={tool === 'measure' && !readOnlyPlan}
+          onRemove={(id) => usePlannerStore.getState().removeDimension(id)}
+        />
 
         {marquee && (
           <rect

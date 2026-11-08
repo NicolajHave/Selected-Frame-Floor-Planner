@@ -56,6 +56,13 @@ export interface PlanUnderlay {
   pinned?: boolean;
 }
 
+/** A kept measurement: a dimension line on the plan (and in the PDF). */
+export interface PlanDimension {
+  id: string;
+  a: Point;
+  b: Point;
+}
+
 /** One fixture layout of the shop (see src/lib/variants.ts). */
 export interface LayoutVariant {
   id: string;
@@ -90,6 +97,7 @@ export interface Project {
    * stay as they are; only the fixtures (and notes, electrical) move.
    */
   layoutLocked?: boolean;
+  dimensions?: PlanDimension[];
   /** Fixture layouts (A, B, …) sharing this room; absent with just one layout. */
   variants?: LayoutVariant[];
   activeVariantId?: string;
