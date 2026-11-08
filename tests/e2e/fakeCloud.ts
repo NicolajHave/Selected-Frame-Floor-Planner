@@ -75,6 +75,10 @@ export class FakeCloud {
   /** The fp-drawings bucket: object name → bytes and who uploaded them. */
   files = new Map<string, { bytes: Buffer; owner: string; contentType: string }>();
   drawings: { id: string; path: string; file_name: string; shop: string | null; size_bytes: number; uploaded_by_email: string; uploaded_at: string }[] = [];
+  comments: {
+    id: string; project_id: string; author_name: string; author_email: string | null; via_link: boolean; body: string;
+    x: number | null; y: number | null; variant_id: string | null; created_at: string; resolved_at: string | null; resolved_by_email: string | null;
+  }[] = [];
   /** Every RPC call, for assertions. */
   calls: { fn: string; email: string | null; args: Record<string, unknown> }[] = [];
   private seq = 0;
@@ -127,6 +131,31 @@ export class FakeCloud {
     return [...(this.versions.get(id) ?? [])]
       .sort((a, b) => b.saved_at.localeCompare(a.saved_at))
       .map(({ data: _d, ...rest }) => rest);
+  }
+
+  private linkProject(token: string): string {
+    const l = this.links.get(token);
+    if (!l || l.revoked) throw new RpcError('This link no longer works.', 'P0002');
+    return l.project_id;
+  }
+
+  private commentsOf(id: string) {
+    return this.comments.filter((c) => c.project_id === id).map(({ project_id: _p, ...rest }) => rest);
+  }
+
+  private putComment(id: string, name: string, email: string | null, viaLink: boolean, args: Record<string, any>) {
+    const body = String(args.p_body ?? '').trim();
+    if (!body) throw new RpcError('Write a comment first.', '22023');
+    if (!String(name ?? '').trim()) throw new RpcError('Give your name (up to 80 characters).', '22023');
+    const pinned = args.p_x !== null && args.p_y !== null && args.p_x !== undefined;
+    const c = {
+      id: `c${++this.seq}`, project_id: id, author_name: String(name).trim(), author_email: email, via_link: viaLink, body,
+      x: pinned ? args.p_x : null, y: pinned ? args.p_y : null, variant_id: args.p_variant || null,
+      created_at: new Date(Date.now() + this.seq).toISOString(), resolved_at: null, resolved_by_email: null,
+    };
+    this.comments.push(c);
+    const { project_id: _p, ...rest } = c;
+    return rest;
   }
 
   private role(email: string | null, id: string): Role | null {
@@ -249,6 +278,29 @@ export class FakeCloud {
         if (d.uploaded_by_email !== email) throw new RpcError(`Only ${d.uploaded_by_email} can delete this drawing.`, '42501');
         this.drawings = this.drawings.filter((x) => x !== d);
         return null;
+      }
+      case 'fp_list_comments': {
+        this.require(email, args.p_id, ['owner', 'editor', 'viewer']);
+        return this.commentsOf(args.p_id);
+      }
+      case 'fp_add_comment': {
+        this.require(email, args.p_id, ['owner', 'editor', 'viewer']);
+        return this.putComment(args.p_id, email!, email, false, args);
+      }
+      case 'fp_list_shared_comments': {
+        return this.commentsOf(this.linkProject(args.p_token));
+      }
+      case 'fp_add_shared_comment': {
+        return this.putComment(this.linkProject(args.p_token), args.p_name, null, true, args);
+      }
+      case 'fp_set_comment_resolved': {
+        const c = this.comments.find((x) => x.id === args.p_comment);
+        if (!c) throw new RpcError('Comment not found.', 'P0002');
+        this.require(email, c.project_id, ['owner', 'editor']);
+        c.resolved_at = args.p_resolved ? new Date().toISOString() : null;
+        c.resolved_by_email = args.p_resolved ? email : null;
+        const { project_id: _p, ...rest } = c;
+        return rest;
       }
       case 'fp_list_members': {
         this.require(email, args.p_id, ['owner', 'editor', 'viewer']);

@@ -19,6 +19,8 @@ import { useCloudUser } from '@/lib/cloud/useCloudUser';
 import { useCloudSync } from '@/lib/cloud/sync';
 import { CloudBanners } from '../cloud/CloudBanners';
 import { RackBuilder } from '../racks/RackBuilder';
+import { CommentPins, CommentsButton, CommentsPanel, useCommentsSync } from '../comments/Comments';
+import type { CommentTarget } from '@/lib/cloud/comments';
 
 // WebGL only exists in the browser; keep three out of the server bundle.
 const ThreeCanvas = dynamic(
@@ -69,6 +71,20 @@ export function PlannerShell() {
 
   useCloudSync(user, CLOUD_ENABLED && restored && !shareToken);
 
+  // Comments: on a cloud plan you're signed in to, or through a view-only link.
+  const cloudLink = usePlannerStore((s) => s.cloud);
+  const sharedOpen = usePlannerStore((s) => !!s.shared);
+  const commentTarget: CommentTarget | null = !CLOUD_ENABLED
+    ? null
+    : shareToken
+      ? sharedOpen
+        ? { kind: 'link', token: shareToken }
+        : null
+      : user && cloudLink
+        ? { kind: 'member', projectId: cloudLink.projectId, canResolve: cloudLink.role !== 'viewer' }
+        : null;
+  useCommentsSync(commentTarget);
+
   const [autosave, setAutosave] = useState<AutosaveStatus>('saved');
   useEffect(() => {
     const on = (e: Event) => setAutosave((e as CustomEvent<AutosaveStatus>).detail);
@@ -105,9 +121,12 @@ export function PlannerShell() {
             <>
               <Canvas />
               <ToolOverlay />
+              <CommentPins />
             </>
           )}
           <VariantBar />
+          <CommentsButton />
+          <CommentsPanel />
           <NoticeToast />
           <CloudBanners user={user} />
           {shareError && (
