@@ -69,6 +69,7 @@ export function EmptySelection() {
           <Key k="⌘D">Duplicate selected</Key>
           <Key k="Delete">Remove selected</Key>
           <Key k="Alt + drag">Place freely, no wall snap</Key>
+          <Key k="Right-drag">Move the view (also middle button, or Space + drag)</Key>
           <Key k="Esc">Cancel tool / deselect</Key>
         </dl>
         <p className="text-[11px] leading-relaxed text-ink-500">

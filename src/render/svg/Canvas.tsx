@@ -445,6 +445,41 @@ export function Canvas() {
     return true;
   };
 
+  /** Space held down: a left drag pans, like the right or middle button. */
+  const spaceHeld = useRef(false);
+  useEffect(() => {
+    const typing = (t: EventTarget | null) => (t as HTMLElement | null)?.matches?.('input, textarea, select, [contenteditable="true"]');
+    const down = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !typing(e.target)) {
+        spaceHeld.current = true;
+        e.preventDefault();
+      }
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.code === 'Space') spaceHeld.current = false;
+    };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+    };
+  }, []);
+
+  /**
+   * Right- or middle-button drag (or Space + drag) pans the plan from
+   * anywhere: over the room, a wall or a fixture too, not only empty floor.
+   * Runs before the shapes' own handlers and keeps them out of it.
+   */
+  const onPanPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    const pan = e.button === 1 || e.button === 2 || (e.button === 0 && spaceHeld.current);
+    if (!pan) return;
+    e.preventDefault();
+    e.stopPropagation();
+    drag.current = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: view.pan.x, startPanY: view.pan.y };
+    (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
   const startMarquee = (world: Point, pointerId: number) => {
     drag.current = { type: 'marquee', start: world };
     setMarquee({ a: world, b: world });
@@ -641,7 +676,9 @@ export function Canvas() {
     <svg
       ref={svgRef}
       className={`block h-full w-full select-none ${cursorClass}`}
+      onPointerDownCapture={onPanPointerDown}
       onPointerDown={onCanvasPointerDown}
+      onContextMenu={(e) => e.preventDefault()}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onWheel={onWheel}
