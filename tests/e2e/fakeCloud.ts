@@ -72,6 +72,9 @@ export class FakeCloud {
   members = new Map<string, Map<string, 'editor' | 'viewer'>>();
   links = new Map<string, { project_id: string; created_at: string; created_by_email: string; revoked: boolean }>();
   versions = new Map<string, Version[]>();
+  /** The fp-drawings bucket: object name → bytes and who uploaded them. */
+  files = new Map<string, { bytes: Buffer; owner: string; contentType: string }>();
+  drawings: { id: string; path: string; file_name: string; shop: string | null; size_bytes: number; uploaded_by_email: string; uploaded_at: string }[] = [];
   /** Every RPC call, for assertions. */
   calls: { fn: string; email: string | null; args: Record<string, unknown> }[] = [];
   private seq = 0;
@@ -217,6 +220,36 @@ export class FakeCloud {
         });
         return this.listVersions(p.id);
       }
+      case 'fp_list_drawings': {
+        if (!email) throw new RpcError('Sign in with a confirmed @bestseller.com account.', '42501');
+        return [...this.drawings]
+          .sort((a, b) => b.uploaded_at.localeCompare(a.uploaded_at))
+          .map((d) => ({ ...d, mine: d.uploaded_by_email === email }));
+      }
+      case 'fp_add_drawing': {
+        if (!email) throw new RpcError('Sign in with a confirmed @bestseller.com account.', '42501');
+        const f = this.files.get(args.p_path);
+        if (!f || f.owner !== email) throw new RpcError('The upload did not arrive. Try again.', 'P0002');
+        const d = {
+          id: `00000000-0000-4000-9000-${String(++this.seq).padStart(12, '0')}`,
+          path: args.p_path,
+          file_name: String(args.p_file_name || args.p_path.split('/')[1]).slice(0, 200),
+          shop: String(args.p_shop ?? '').trim().slice(0, 120) || null,
+          size_bytes: f.bytes.length,
+          uploaded_by_email: email,
+          uploaded_at: new Date(Date.now() + this.seq).toISOString(),
+        };
+        this.drawings.push(d);
+        return { ...d, mine: true };
+      }
+      case 'fp_delete_drawing': {
+        if (!email) throw new RpcError('Sign in with a confirmed @bestseller.com account.', '42501');
+        const d = this.drawings.find((x) => x.id === args.p_id);
+        if (!d) throw new RpcError('That drawing is no longer on the drive.', 'P0002');
+        if (d.uploaded_by_email !== email) throw new RpcError(`Only ${d.uploaded_by_email} can delete this drawing.`, '42501');
+        this.drawings = this.drawings.filter((x) => x !== d);
+        return null;
+      }
       case 'fp_list_members': {
         this.require(email, args.p_id, ['owner', 'editor', 'viewer']);
         return {
@@ -301,6 +334,34 @@ export class FakeCloud {
       return email
         ? json(route, 200, { id: idFor(email), email, aud: 'authenticated', role: 'authenticated' })
         : json(route, 401, { msg: 'not signed in' });
+    });
+    // Storage, for the fp-drawings bucket only (same rules as its policies).
+    await page.route('**/storage/v1/object/**', async (route) => {
+      const req = route.request();
+      const email = emailFromAuth(req.headers().authorization);
+      const m = new URL(req.url()).pathname.match(/\/storage\/v1\/object\/([^/]+)(?:\/(.*))?$/);
+      if (!m || m[1] !== 'fp-drawings') return json(route, 400, { statusCode: '404', error: 'Bucket not found', message: 'Bucket not found' });
+      if (!email) return json(route, 400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
+      const name = decodeURIComponent(m[2] ?? '');
+      if (req.method() === 'POST') {
+        if (!/^[0-9a-f-]{36}\/[^/]+\.(pdf|dwg|dxf|png|jpe?g|webp)$/.test(name.toLowerCase())) {
+          return json(route, 400, { statusCode: '403', error: 'Unauthorized', message: 'new row violates row-level security policy' });
+        }
+        this.files.set(name, { bytes: req.postDataBuffer() ?? Buffer.alloc(0), owner: email, contentType: req.headers()['content-type'] ?? 'application/octet-stream' });
+        return json(route, 200, { Id: name, Key: `fp-drawings/${name}` });
+      }
+      if (req.method() === 'GET') {
+        const f = this.files.get(name);
+        if (!f) return json(route, 400, { statusCode: '404', error: 'not_found', message: 'Object not found' });
+        return route.fulfill({ status: 200, contentType: f.contentType, body: f.bytes });
+      }
+      if (req.method() === 'DELETE') {
+        const { prefixes } = req.postDataJSON() as { prefixes: string[] };
+        const removed = prefixes.filter((n) => this.files.get(n)?.owner === email);
+        removed.forEach((n) => this.files.delete(n));
+        return json(route, 200, removed.map((n) => ({ name: n, bucket_id: 'fp-drawings' })));
+      }
+      return route.fallback();
     });
     await page.route('**/rest/v1/rpc/*', async (route) => {
       const fn = new URL(route.request().url()).pathname.split('/').pop()!;
