@@ -112,7 +112,11 @@ URL. No environment variables are needed.
     for people without an account (e.g. the store or the installer);
     links can be revoked. If someone else saved a newer version while you
     had unsaved changes, you choose: load theirs, keep yours, or save
-    yours as a copy.
+    yours as a copy. **Versions** keeps up to three earlier versions of
+    each cloud plan: one automatically when work resumes after a break of
+    30 minutes or more, and any you keep yourself with **Save version**
+    (with a label, e.g. "Before moving the fitting rooms"). **Restore**
+    puts one back; Undo brings the current plan back.
 
 The plan autosaves in the browser. **File → Save file copy / Open file**
 round-trip a file; **File → Export data** writes the plan plus derived

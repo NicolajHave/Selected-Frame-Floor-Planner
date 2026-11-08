@@ -318,6 +318,8 @@ interface PlannerState {
   markSynced: (result: SaveResult, saved: Project) => void;
   setCloudConflict: (c: CloudConflict) => void;
   openShared: (p: SharedProject) => void;
+  /** Replace the plan with an earlier version of it (one undo step). */
+  restoreVersion: (data: unknown, name: string) => void;
 }
 
 const DEFAULT_VIEW: ViewState = {
@@ -1919,6 +1921,16 @@ export const usePlannerStore = create<PlannerState>()(
           setState((s) => {
             s.cloudConflict = c;
             s.cloudStatus = 'conflict';
+          }),
+
+        restoreVersion: (data, name) =>
+          set((s) => {
+            record(s);
+            s.project = { ...migrate(data), name };
+            touch(s.project);
+            s.selection = null;
+            s.multi = [];
+            s.tool = 'select';
           }),
 
         openShared: (sp) =>

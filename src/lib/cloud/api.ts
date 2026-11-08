@@ -38,6 +38,20 @@ export interface ShareLink {
   created_by_email: string;
 }
 
+export interface CloudVersion {
+  slot: number;
+  kind: 'auto' | 'manual';
+  label: string | null;
+  name: string;
+  source_version: number;
+  saved_at: string;
+  saved_by_email: string;
+}
+
+export interface CloudVersionData extends CloudVersion {
+  data: Project;
+}
+
 export interface SharedProject {
   name: string;
   data: Project;
@@ -63,6 +77,10 @@ export const cloud = {
   saveProject: (id: string, version: number, name: string, data: Project) =>
     call<SaveResult>('fp_save_project', { p_id: id, p_version: version, p_name: name, p_data: data }),
   deleteProject: (id: string) => call<void>('fp_delete_project', { p_id: id }),
+
+  listVersions: (id: string) => call<CloudVersion[]>('fp_list_versions', { p_id: id }),
+  getVersion: (id: string, slot: number) => call<CloudVersionData>('fp_get_version', { p_id: id, p_slot: slot }),
+  saveVersion: (id: string, label: string) => call<CloudVersion[]>('fp_save_version', { p_id: id, p_label: label }),
 
   listMembers: (id: string) => call<Members>('fp_list_members', { p_id: id }),
   setMember: (id: string, email: string, role: 'editor' | 'viewer') =>
