@@ -26,6 +26,7 @@ import type {
 import { mm, rad } from '@/model/units';
 import { newId } from '@/lib/id';
 import * as variants from '@/lib/variants';
+import { clipCount, makeClip, placeClip, readClip, writeClip } from '@/lib/clipboard';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
@@ -319,6 +320,10 @@ interface PlannerState {
   /** Move a tray to another shelf of its unit. */
   setAccessoryShelf: (itemId: string, accessoryId: string, shelf: number) => void;
   duplicateSelected: () => void;
+  /** Ctrl+C: puts the selected fixtures, pillars and notes on the planner's clipboard. */
+  copySelected: () => void;
+  /** Ctrl+V: pastes the clipboard (from any plan or layout) centred on `at`. */
+  pasteClip: (at: Point) => void;
   deleteSelected: () => void;
 
   // wall racks
@@ -1653,6 +1658,59 @@ export const usePlannerStore = create<PlannerState>()(
             if (sel.kind === 'pillar' ? layoutBlocked(s) : itemBlocked(s, target as InventoryItem)) return;
             record(s);
             target.rotation = normalizeAngle(target.rotation + delta);
+            touch(s.project);
+          }),
+
+        copySelected: () =>
+          setState((s) => {
+            const members = selectedMembers(s);
+            if (!members.length) return;
+            const ids = (k: string) => new Set(members.filter((m) => m.kind === k).map((m) => m.id));
+            const inv = ids('inventory');
+            const pil = ids('pillar');
+            const notes = ids('note');
+            const clip = makeClip(
+              s.project.inventory.filter((x) => inv.has(x.id)),
+              s.project.pillars.filter((x) => pil.has(x.id)),
+              (s.project.annotations ?? []).filter((x) => notes.has(x.id)),
+            );
+            if (!clip) return;
+            const n = clipCount(clip);
+            s.notice = writeClip(clip)
+              ? info(`Copied ${n === 1 ? '1 item' : `${n} items`}. Paste with Ctrl+V — in this plan, another layout or another plan.`)
+              : info('Could not copy: this browser does not allow storing it.');
+          }),
+
+        pasteClip: (at) =>
+          set((s) => {
+            const clip = readClip();
+            if (!clip || !clipCount(clip)) {
+              s.notice = info('Nothing to paste yet. Select fixtures and press Ctrl+C first.');
+              return;
+            }
+            const placed = placeClip(clip, at);
+            // Pillars are part of the floor layout: they stay out while it is locked.
+            const pillars = s.project.layoutLocked ? [] : placed.pillars;
+            if (!placed.inventory.length && !pillars.length && !placed.notes.length) {
+              s.notice = info('The floor layout is locked, so the pillars were not pasted.');
+              return;
+            }
+            record(s);
+            s.project.inventory.push(...placed.inventory);
+            s.project.pillars.push(...pillars);
+            if (placed.notes.length) (s.project.annotations ??= []).push(...placed.notes);
+            const pasted: Selection[] = [
+              ...placed.inventory.map((x) => ({ kind: 'inventory' as const, id: x.id })),
+              ...pillars.map((x) => ({ kind: 'pillar' as const, id: x.id })),
+              ...placed.notes.map((x) => ({ kind: 'note' as const, id: x.id })),
+            ];
+            s.multi = pasted.length > 1 ? pasted : [];
+            s.selection = pasted.at(-1) ?? null;
+            if (s.tool !== 'select') s.tool = 'select';
+            const n = pasted.length;
+            s.notice = info(
+              `Pasted ${n === 1 ? '1 item' : `${n} items`}.${pillars.length < placed.pillars.length ? ' Pillars were left out: the floor layout is locked.' : ''}`,
+            );
             touch(s.project);
           }),
 

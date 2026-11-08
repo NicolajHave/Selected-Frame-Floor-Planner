@@ -16,6 +16,7 @@ import { OpeningPreview, Openings } from './Openings';
 import { ElectricalMarks, PlanNotes } from './Electrical';
 import { GuideMarks, IssueMarks } from './LayoutMarks';
 import { SnapMarks } from './SnapMarks';
+import { planPointer } from './pointer';
 import { MeasureMarks } from './MeasureMarks';
 import { measurePoint, measureTargets } from '@/geometry/measureSnap';
 import { clearanceGuides } from '@/lib/layout';
@@ -250,6 +251,7 @@ export function Canvas() {
       if (!rect) return;
       const world = eventToWorld(view, rect, e.clientX, e.clientY);
       setHoverWorld(world);
+      planPointer.world = world;
       if (tool === 'measure' && e.shiftKey !== measureStraight) setMeasureStraight(e.shiftKey);
 
       const d = drag.current;
