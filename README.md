@@ -86,6 +86,11 @@ URL. No environment variables are needed.
 10. **3D View** shows the room with openings and the catalog models;
    objects can be selected, dragged and placed there too. Walls facing
    the camera are cut away so you can always see into the shop.
+   **Walk through** puts you inside at eye height (1.65 m), just inside
+   the door: drag to look around, W A S D or the arrow keys to walk
+   (Shift: faster); walls and fixtures can't be walked through. A small
+   map shows where you are — click it to jump. **Snapshot** saves the
+   current view (overview or walk) as a PNG.
 11. **Parts list** (right panel, nothing selected) totals units, weight,
    hanger capacity and **price** (EUR, with €/m² of floor), and exports a
    CSV for Excel with SKU, unit and total price, price source and
