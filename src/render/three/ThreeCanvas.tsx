@@ -14,6 +14,7 @@ import { WalkView } from './controls/WalkView';
 import { WalkMap } from './WalkMap';
 import { floorObstacles } from '@/lib/layout';
 import { walkStart, type WalkPose } from '@/lib/walk';
+import { activeVariantName } from '@/lib/variants';
 
 export { MM } from './units';
 import { MM } from './units';
@@ -77,7 +78,8 @@ export function ThreeCanvas() {
     if (!url) return;
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${(project.name || 'Shop').replace(/[\\/:*?"<>|]+/g, '-')} - 3D${isWalking ? ' walk-through' : ''}.png`;
+    const variant = activeVariantName(project);
+    a.download = `${`${project.name || 'Shop'}${variant ? ` ${variant}` : ''}`.replace(/[\\/:*?"<>|]+/g, '-')} - 3D${isWalking ? ' walk-through' : ''}.png`;
     document.body.appendChild(a);
     a.click();
     a.remove();

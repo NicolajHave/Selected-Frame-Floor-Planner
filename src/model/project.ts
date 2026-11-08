@@ -56,6 +56,14 @@ export interface PlanUnderlay {
   pinned?: boolean;
 }
 
+/** One fixture layout of the shop (see src/lib/variants.ts). */
+export interface LayoutVariant {
+  id: string;
+  name: string;
+  /** Fixtures of a layout that isn't active; the active one's are `Project.inventory`. */
+  inventory?: InventoryItem[];
+}
+
 export interface Project {
   schemaVersion: 1;
   id: string;
@@ -82,6 +90,9 @@ export interface Project {
    * stay as they are; only the fixtures (and notes, electrical) move.
    */
   layoutLocked?: boolean;
+  /** Fixture layouts (A, B, …) sharing this room; absent with just one layout. */
+  variants?: LayoutVariant[];
+  activeVariantId?: string;
 }
 
 /** Shape produced by the export action. Includes derived metrics so

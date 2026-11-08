@@ -6,6 +6,7 @@ import { TopBar } from '../topbar/TopBar';
 import { Canvas } from '@/render/svg/Canvas';
 import { RightPanel } from '../panels/RightPanel';
 import { AssetLibrary } from '../panels/AssetLibrary';
+import { VariantBar } from './VariantBar';
 import { ToolOverlay } from './ToolOverlay';
 import { NoticeToast } from './NoticeToast';
 import { useKeyboard } from '@/hooks/useKeyboard';
@@ -106,6 +107,7 @@ export function PlannerShell() {
               <ToolOverlay />
             </>
           )}
+          <VariantBar />
           <NoticeToast />
           <CloudBanners user={user} />
           {shareError && (

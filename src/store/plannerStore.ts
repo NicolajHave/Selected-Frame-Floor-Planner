@@ -25,6 +25,7 @@ import type {
 } from '@/model';
 import { mm, rad } from '@/model/units';
 import { newId } from '@/lib/id';
+import * as variants from '@/lib/variants';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
@@ -219,6 +220,13 @@ interface PlannerState {
   setNotes: (notes: string) => void;
   /** Set (or clear, with null) the fixtures budget, euro. */
   setBudget: (eur: number | null) => void;
+
+  // layout variants (A, B, …): fixtures per layout, the room shared
+  addVariant: (mode: 'copy' | 'empty') => void;
+  /** Also works on a view-only plan: looking at the other layouts changes nothing. */
+  switchVariant: (id: string) => void;
+  renameVariant: (id: string, name: string) => void;
+  deleteVariant: (id: string) => void;
 
   // history
   undo: () => void;
@@ -1109,6 +1117,49 @@ export const usePlannerStore = create<PlannerState>()(
             record(s);
             if (next) s.project.budgetEur = next;
             else delete s.project.budgetEur;
+            touch(s.project);
+          }),
+
+        addVariant: (mode) =>
+          set((s) => {
+            if ((s.project.variants?.length ?? 0) >= variants.MAX_VARIANTS) {
+              s.notice = info(`Up to ${variants.MAX_VARIANTS} layouts per plan. Delete one to add another.`);
+              return;
+            }
+            record(s);
+            variants.addVariant(s.project as Project, mode);
+            s.selection = null;
+            s.multi = [];
+            touch(s.project);
+          }),
+
+        switchVariant: (id) =>
+          setState((s) => {
+            if (id === s.project.activeVariantId) return;
+            if (!s.readOnly) record(s);
+            if (!variants.switchVariant(s.project as Project, id)) return;
+            s.selection = null;
+            s.multi = [];
+            s.pendingAssetRef = null;
+            if (s.tool === 'add-inventory') s.tool = 'select';
+          }),
+
+        renameVariant: (id, name) =>
+          set((s) => {
+            const v = s.project.variants?.find((x) => x.id === id);
+            if (!v || !name.trim() || v.name === name.trim().slice(0, 60)) return;
+            record(s);
+            variants.renameVariant(s.project as Project, id, name);
+            touch(s.project);
+          }),
+
+        deleteVariant: (id) =>
+          set((s) => {
+            if ((s.project.variants?.length ?? 0) < 2) return;
+            record(s);
+            variants.deleteVariant(s.project as Project, id);
+            s.selection = null;
+            s.multi = [];
             touch(s.project);
           }),
 
