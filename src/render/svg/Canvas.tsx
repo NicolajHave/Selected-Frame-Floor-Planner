@@ -25,6 +25,8 @@ import { openingType } from '@/lib/openingTypes';
 import type { Point } from '@/model/geometry';
 import type { Mm, Radians } from '@/model/units';
 import { mm } from '@/model/units';
+import { DEFAULT_GAP_MM, runWallTrace } from '@/lib/traceUnderlay';
+import { WallDraftShape } from './WallDraft';
 import type { Selection } from '@/model/objects';
 import { isLocked } from '@/lib/locks';
 
@@ -43,6 +45,7 @@ export function Canvas() {
   const translateSelected = usePlannerStore((s) => s.translateSelected);
   const [marquee, setMarquee] = useState<{ a: Point; b: Point } | null>(null);
   const calibration = usePlannerStore((s) => s.calibration);
+  const wallDraft = usePlannerStore((s) => s.wallDraft);
   const highlightedWall = usePlannerStore((s) => s.highlightedWall);
   const drawLength = usePlannerStore((s) => s.drawLength);
 
@@ -155,6 +158,13 @@ export function Canvas() {
       if (tool === 'calibrate') {
         // Raw point: grid snapping would defeat the purpose.
         addCalibrationPoint(world);
+        return;
+      }
+      if (tool === 'trace-room') {
+        // Shift-click adds another part of the same room.
+        const draft = usePlannerStore.getState().wallDraft;
+        const p = { x: world.x, y: world.y };
+        void runWallTrace(e.shiftKey && draft ? [...draft.seeds, p] : [p], draft?.gapMm ?? DEFAULT_GAP_MM);
         return;
       }
       if (tool === 'draw-room') {
@@ -652,6 +662,8 @@ export function Canvas() {
         )}
 
         {room && preview && <OpeningPreview room={room} view={view} {...preview} />}
+
+        {tool === 'trace-room' && wallDraft && <WallDraftShape draft={wallDraft} view={view} />}
 
         {project.pillars.map((p) => (
           <Pillar

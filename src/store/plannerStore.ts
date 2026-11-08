@@ -49,6 +49,7 @@ import { findAsset } from '@/lib/assetCatalog';
 import { RACK_CATEGORY, itemMount, rackSize } from '@/lib/racks';
 import { alignPositions, distributePositions, isGroupable, rotatePositions, type AlignMode } from '@/lib/group';
 import { batchedLocalStorage } from '@/lib/autosaveStorage';
+import { outset } from '@/lib/wallTrace';
 import { TRAY_3X3, TRAY_3X5, accessoryHosts, accessoryOptions, freeShelf, roomFor } from '@/lib/accessories';
 import { LAYOUT_LOCKED_MESSAGE, isLayoutKind, isLocked, itemLockedMessage } from '@/lib/locks';
 import type { CloudProject, CloudRole, SaveResult, SharedProject } from '@/lib/cloud/api';
@@ -61,7 +62,24 @@ export type Tool =
   | 'add-opening'
   | 'add-electrical'
   | 'add-note'
-  | 'calibrate';
+  | 'calibrate'
+  /** Click inside a room on the plan underlay to draft its walls. */
+  | 'trace-room';
+
+/** Walls found on the underlay around a click, waiting to be used or dropped. */
+export interface WallDraft {
+  /** Where the user clicked, world mm (shift-clicks add more of the room). */
+  seeds: Point[];
+  /** Openings up to this wide are closed before filling, mm. */
+  gapMm: number;
+  /** The room's inside outline, world mm (null while working or when nothing was found). */
+  points: Point[] | null;
+  /** The fill escaped through a wider opening: the outline isn't a room. */
+  leaked: boolean;
+  areaM2: number;
+  busy: boolean;
+  error?: string;
+}
 
 /** Two clicks on the underlay that span a known real-world distance. */
 export interface Calibration {
@@ -132,6 +150,7 @@ interface PlannerState {
   pendingElectrical: ElectricalKind | null;
   /** In-progress underlay scale calibration; null outside the calibrate tool. */
   calibration: Calibration | null;
+  wallDraft: WallDraft | null;
   /** Digits typed while drawing: the next wall's length in mm. */
   drawLength: string;
   /** Wall index highlighted on the canvas (e.g. hovered in the wall list). */
@@ -174,6 +193,13 @@ interface PlannerState {
   setUnderlay: (u: PlanUnderlay | null) => void;
   updateUnderlay: (patch: Partial<PlanUnderlay>) => void;
   startCalibration: () => void;
+  /** Lock the plan underlay in place (or unlock it). */
+  setUnderlayPinned: (pinned: boolean) => void;
+  /** Start the "draft walls from the plan" tool. */
+  startWallTrace: () => void;
+  setWallDraft: (d: WallDraft | null) => void;
+  /** Replace the room with the drafted walls. */
+  applyWallDraft: () => void;
   addCalibrationPoint: (p: Point) => void;
   /** Scale the underlay so the two clicked points are `distanceMm` apart. */
   applyCalibration: (distanceMm: number) => void;
@@ -353,6 +379,8 @@ function copyAccessories(list: readonly Accessory[]): Accessory[] {
   return list.map((a) => ({ ...a, id: newId('acc') }));
 }
 
+const PLAN_LOCKED_MESSAGE = 'The plan is locked. Unlock it in the Plan underlay panel to move, rescale or replace it.';
+
 function info(message: string): Notice {
   return { id: ++noticeSeq, tone: 'info', message };
 }
@@ -524,6 +552,7 @@ export const usePlannerStore = create<PlannerState>()(
         readOnly: false,
         shared: null,
         calibration: null,
+        wallDraft: null,
         drawLength: '',
         highlightedWall: null,
         past: [],
@@ -543,6 +572,7 @@ export const usePlannerStore = create<PlannerState>()(
             if (t !== 'add-opening') s.pendingOpening = null;
             if (t !== 'add-electrical') s.pendingElectrical = null;
             if (t !== 'calibrate') s.calibration = null;
+            if (t !== 'trace-room') s.wallDraft = null;
             if (t !== 'draw-room') s.drawLength = '';
           }),
 
@@ -822,6 +852,10 @@ export const usePlannerStore = create<PlannerState>()(
         setUnderlay: (u) =>
           set((s) => {
             if (!u && !s.project.underlay) return;
+            if (s.project.underlay?.pinned) {
+              s.notice = sameNotice(s.notice, PLAN_LOCKED_MESSAGE);
+              return;
+            }
             record(s);
             s.project.underlay = u;
             touch(s.project);
@@ -831,15 +865,89 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             const u = s.project.underlay;
             if (!u) return;
+            // A locked plan keeps its place and scale; only its look can change.
+            const moves = (['position', 'width', 'aspect', 'src', 'calibrated'] as const).some((k) => k in patch);
+            if (u.pinned && moves) {
+              s.notice = sameNotice(s.notice, PLAN_LOCKED_MESSAGE);
+              return;
+            }
             record(s);
             Object.assign(u, patch);
             if (patch.position) u.position = { ...patch.position };
             touch(s.project);
           }),
 
+        setUnderlayPinned: (pinned) =>
+          set((s) => {
+            const u = s.project.underlay;
+            if (!u || !!u.pinned === pinned) return;
+            record(s);
+            if (pinned) {
+              u.pinned = true;
+              u.locked = true; // stop moving, if it was
+              if (s.tool === 'calibrate') {
+                s.tool = 'select';
+                s.calibration = null;
+              }
+            } else delete u.pinned;
+            s.notice = null;
+            touch(s.project);
+          }),
+
+        startWallTrace: () =>
+          set((s) => {
+            if (layoutBlocked(s)) return;
+            if (!s.project.underlay?.calibrated) {
+              s.notice = info('Set the plan’s scale first, so the walls come out the right size.');
+              return;
+            }
+            s.tool = 'trace-room';
+            s.wallDraft = null;
+            s.selection = null;
+            s.multi = [];
+          }),
+
+        setWallDraft: (d) =>
+          set((s) => {
+            s.wallDraft = d;
+          }),
+
+        applyWallDraft: () =>
+          set((s) => {
+            const d = s.wallDraft;
+            if (!d?.points || d.leaked || d.points.length < 3 || layoutBlocked(s)) return;
+            record(s);
+            const old = s.project.room;
+            const thickness = old?.wallThickness ?? mm(120);
+            // The draft is the inside of the walls; corners sit on the walls' centre line.
+            const corners = outset(d.points, thickness / 2).map((p) => ({
+              id: newId('cor'),
+              point: { x: Math.round(p.x) as Mm, y: Math.round(p.y) as Mm },
+            }));
+            s.project.room = {
+              id: old?.id ?? newId('room'),
+              corners,
+              closed: true,
+              wallThickness: thickness,
+              wallHeight: old?.wallHeight ?? mm(2700),
+              openings: [],
+            };
+            // Points on the old walls have nothing to hang on any more; floor boxes stay.
+            if (s.project.electrical) s.project.electrical = s.project.electrical.filter((e) => e.position);
+            s.wallDraft = null;
+            s.tool = 'select';
+            s.selection = { kind: 'room', id: s.project.room.id };
+            s.notice = info(`${corners.length} walls drafted from the plan. Drag the corners to adjust, or type exact lengths in the room panel.`);
+            touch(s.project);
+          }),
+
         startCalibration: () =>
           set((s) => {
             if (!s.project.underlay) return;
+            if (s.project.underlay.pinned) {
+              s.notice = sameNotice(s.notice, PLAN_LOCKED_MESSAGE);
+              return;
+            }
             s.tool = 'calibrate';
             s.calibration = { a: null, b: null };
             s.selection = null;

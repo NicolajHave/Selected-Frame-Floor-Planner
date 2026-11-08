@@ -34,6 +34,7 @@ export function CadImportDialog({
   const [busy, setBusy] = useState<string | null>('Reading the drawing…');
   const [error, setError] = useState<string | null>(null);
   const [unitMm, setUnitMm] = useState(1);
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     let live = true;
@@ -62,7 +63,7 @@ export function CadImportDialog({
     setBusy('Drawing it at full size…');
     // Let the status paint before the (synchronous) render.
     setTimeout(() => {
-      const r = renderCad(drawing, crop, undefined, unitMm);
+      const r = renderCad(drawing, crop, undefined, unitMm, hidden);
       onImport({ src: r.src, aspect: r.aspect, widthMm: r.widthMm, cropped: !!crop });
     }, 30);
   };
@@ -99,6 +100,33 @@ export function CadImportDialog({
             </>
           )}
         </div>
+        {drawing && drawing.layers.length > 1 && (
+          <details className="rounded-[2px] border border-wall-200 bg-wall-50 px-3 py-2 text-[12px]" data-testid="cad-layers">
+            <summary className="cursor-pointer select-none text-ink-700">
+              Layers ({drawing.layers.length - hidden.size} of {drawing.layers.length} shown) — hide furniture,
+              dimensions and text to keep just the walls
+            </summary>
+            <div className="mt-2 grid max-h-36 grid-cols-2 gap-x-4 gap-y-1 overflow-y-auto pr-1 sm:grid-cols-3">
+              {drawing.layers.map((l) => (
+                <label key={l.name} className="flex min-w-0 items-center gap-1.5 text-[11px] text-ink-900">
+                  <input
+                    type="checkbox"
+                    checked={!hidden.has(l.name)}
+                    onChange={(e) => {
+                      const next = new Set(hidden);
+                      if (e.target.checked) next.delete(l.name);
+                      else next.add(l.name);
+                      setHidden(next);
+                      setPreview(renderCad(drawing, null, 1400, unitMm, next));
+                    }}
+                  />
+                  <span className="truncate" title={l.name}>{l.name}</span>
+                  <span className="shrink-0 font-mono text-[10px] text-ink-500">{l.count}</span>
+                </label>
+              ))}
+            </div>
+          </details>
+        )}
         {error ? (
           <ErrorText>{error}</ErrorText>
         ) : (

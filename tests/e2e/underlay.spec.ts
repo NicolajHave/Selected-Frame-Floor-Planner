@@ -178,3 +178,52 @@ test('LibreDWG’s WebAssembly is served for DWG import', async ({ request }) =>
   const res = await request.head('/vendor/libredwg/libredwg-web.wasm');
   expect(res.status()).toBe(200);
 });
+
+test('lock the plan in place; draft the walls by clicking inside the room', async ({ page }) => {
+  const errors = trackErrors(page);
+  await openFresh(page);
+  await page.getByTestId('underlay-file').setInputFiles(ROOM_DXF);
+  await page.getByRole('dialog').getByRole('button', { name: 'Use whole drawing' }).click();
+  await expect(page.locator('[data-layer="underlay"] image')).toBeVisible();
+
+  // Lock: no moving, rescaling, replacing or removing — opacity still works.
+  await page.getByRole('button', { name: 'Lock plan in place' }).click();
+  await expect(page.getByRole('button', { name: 'Plan locked' })).toHaveAttribute('aria-pressed', 'true');
+  for (const name of ['Set scale', 'Move', 'Replace', 'Remove']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
+  }
+  await page.getByLabel('Underlay opacity').fill('30');
+  const u = (await saved(page)).underlay;
+  expect(u.pinned).toBe(true);
+  expect(u.opacity).toBeCloseTo(0.3);
+  // Dragging on it pans the view, it doesn't move the plan.
+  const img = (await page.locator('[data-layer="underlay"] image').boundingBox())!;
+  await page.mouse.move(img.x + img.width / 2, img.y + img.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(img.x + img.width / 2 + 80, img.y + img.height / 2 + 40, { steps: 5 });
+  await page.mouse.up();
+  expect((await saved(page)).underlay.position).toEqual(u.position);
+
+  // Draft walls: click inside the 10 × 6 m room (its table, door arc and text don't matter).
+  await page.getByRole('button', { name: 'Draft walls from plan' }).click();
+  const panel = page.getByTestId('wall-draft-panel');
+  await expect(panel).toContainText('Click inside the room');
+  // The room is the drawing's lower-left 10 × 6 m (drawn with a 3 % margin): click its middle.
+  const W = u.width;
+  const H = u.width * u.aspect;
+  const mid = await toScreen(page, u.position.x + W * 0.5, u.position.y + H * 0.5);
+  await page.mouse.click(mid.x, mid.y);
+  await expect(panel).toContainText(/Found \d+ walls/);
+  await expect(page.getByTestId('wall-draft')).toBeVisible();
+  await panel.getByRole('button', { name: 'Use as walls' }).click();
+
+  const room = (await saved(page)).room;
+  expect(room.closed).toBe(true);
+  expect(room.corners.length).toBeGreaterThanOrEqual(4);
+  // Corners sit on the wall centre line, 60 mm outside the room's inside face: about 10.1 × 6.1 m.
+  const xs = room.corners.map((c: { point: { x: number } }) => c.point.x);
+  const ys = room.corners.map((c: { point: { y: number } }) => c.point.y);
+  expect(Math.max(...xs) - Math.min(...xs)).toBeCloseTo(10120, -2);
+  expect(Math.max(...ys) - Math.min(...ys)).toBeCloseTo(6120, -2);
+  expect(errors, 'console errors').toEqual([]);
+});

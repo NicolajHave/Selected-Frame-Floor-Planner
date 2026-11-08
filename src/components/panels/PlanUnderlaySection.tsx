@@ -9,6 +9,7 @@ import { isCad } from '@/lib/cad';
 import type { Mm } from '@/model/units';
 import { Section } from '../ui/Section';
 import { Button } from '../ui/Button';
+import { LockIcon } from '../ui/LockIcon';
 
 /** Fraction of the visible canvas a freshly imported plan fills. */
 const FILL = 0.8;
@@ -23,6 +24,11 @@ export function PlanUnderlaySection() {
   const [error, setError] = useState<string | null>(null);
   const [pdf, setPdf] = useState<{ source: PdfSource; fileName: string } | null>(null);
   const [cad, setCad] = useState<File | null>(null);
+  const pinned = usePlannerStore((s) => !!s.project.underlay?.pinned);
+  const setPinned = usePlannerStore((s) => s.setUnderlayPinned);
+  const startWallTrace = usePlannerStore((s) => s.startWallTrace);
+  const tool = usePlannerStore((s) => s.tool);
+  const layoutLocked = usePlannerStore((s) => !!s.project.layoutLocked);
   const setZoom = usePlannerStore((s) => s.setZoom);
   const setPan = usePlannerStore((s) => s.setPan);
 
@@ -157,30 +163,65 @@ export function PlanUnderlaySection() {
             />
           </label>
 
+          <Button
+            variant="subtle"
+            active={pinned}
+            aria-pressed={pinned}
+            className="justify-center"
+            onClick={() => setPinned(!pinned)}
+            title={pinned ? 'Unlock to move, rescale or replace the plan' : 'Lock the plan where it is: it can’t be grabbed or moved by accident'}
+          >
+            <LockIcon locked={pinned} />
+            {pinned ? 'Plan locked' : 'Lock plan in place'}
+          </Button>
+
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="subtle" className="justify-center" onClick={startCalibration}>
+            <Button variant="subtle" className="justify-center" disabled={pinned} onClick={startCalibration}>
               Set scale
             </Button>
             <Button
               variant="subtle"
               className="justify-center"
               active={!underlay.locked}
+              disabled={pinned}
               onClick={() => updateUnderlay({ locked: !underlay.locked })}
-              title={underlay.locked ? 'Unlock to drag the plan into place' : 'Lock so the plan ignores clicks'}
+              title={underlay.locked ? 'Drag the plan into place' : 'Stop moving: the plan ignores clicks again'}
             >
               {underlay.locked ? 'Move' : 'Done moving'}
             </Button>
             <Button
               variant="subtle"
               className="justify-center"
-              disabled={busy}
+              disabled={busy || pinned}
               onClick={() => fileInput.current?.click()}
             >
               Replace
             </Button>
-            <Button variant="subtle" className="justify-center" onClick={() => setUnderlay(null)}>
+            <Button variant="subtle" className="justify-center" disabled={pinned} onClick={() => setUnderlay(null)}>
               Remove
             </Button>
+          </div>
+
+          <div className="flex flex-col gap-1 border-t border-wall-200 pt-3">
+            <Button
+              variant="subtle"
+              className="justify-center"
+              active={tool === 'trace-room'}
+              disabled={!underlay.calibrated || layoutLocked}
+              onClick={startWallTrace}
+              title={
+                layoutLocked
+                  ? 'The floor layout is locked'
+                  : underlay.calibrated
+                    ? 'Click inside a room on the plan: its walls are drafted for you to check'
+                    : 'Set the scale first'
+              }
+            >
+              Draft walls from plan
+            </Button>
+            <span className="text-[11px] leading-snug text-ink-500">
+              Click inside the room on the plan; its walls are found and drafted for you to check and adjust.
+            </span>
           </div>
         </>
       )}
