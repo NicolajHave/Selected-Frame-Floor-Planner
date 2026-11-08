@@ -28,7 +28,7 @@ export function RightPanel() {
     case 'opening':   return <LayoutGate><OpeningProperties id={selection.id} /></LayoutGate>;
     case 'wall':      return <LayoutGate><WallProperties cornerId={selection.id} /></LayoutGate>;
     case 'electrical': return <ElectricalProperties id={selection.id} />;
-    case 'note':      return <NoteProperties id={selection.id} />;
+    case 'note':      return <NoteProperties key={selection.id} id={selection.id} />;
     default:          return <EmptySelection />;
   }
 }

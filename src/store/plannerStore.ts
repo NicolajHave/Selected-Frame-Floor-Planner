@@ -57,6 +57,8 @@ import type { CloudProject, CloudRole, SaveResult, SharedProject } from '@/lib/c
 export type Tool =
   | 'select'
   | 'draw-room'
+  /** Drag out a rectangular room. */
+  | 'draw-rect'
   | 'add-pillar'
   | 'add-inventory'
   | 'add-opening'
@@ -235,6 +237,8 @@ interface PlannerState {
   setWallLength: (index: number, lengthMm: number) => void;
   setHighlightedWall: (index: number | null) => void;
   closeRoom: () => void;
+  /** Replace the room with a closed rectangle spanning two opposite corners. */
+  addRectRoom: (a: Point, b: Point) => void;
   moveCorner: (cornerId: string, p: Point) => void;
   insertCorner: (afterCornerId: string, p: Point) => void;
   deleteCorner: (cornerId: string) => void;
@@ -560,7 +564,7 @@ export const usePlannerStore = create<PlannerState>()(
 
         setTool: (t) =>
           set((s) => {
-            if ((t === 'draw-room' || t === 'add-pillar' || t === 'add-opening') && layoutBlocked(s)) return;
+            if ((t === 'draw-room' || t === 'draw-rect' || t === 'add-pillar' || t === 'add-opening') && layoutBlocked(s)) return;
             s.tool = t;
             // Tool change clears any in-progress selection that no longer applies.
             if (t !== 'select') s.selection = null;
@@ -1106,7 +1110,7 @@ export const usePlannerStore = create<PlannerState>()(
           set((s) => {
             s.view.viewMode = m;
             // Room drawing needs the 2D plan; placement tools work in both.
-            if (m === '3d' && s.tool === 'draw-room') s.tool = 'select';
+            if (m === '3d' && (s.tool === 'draw-room' || s.tool === 'draw-rect')) s.tool = 'select';
           }),
 
         undo: () => {
@@ -1205,6 +1209,35 @@ export const usePlannerStore = create<PlannerState>()(
         setHighlightedWall: (index) =>
           set((s) => {
             s.highlightedWall = index;
+          }),
+
+        addRectRoom: (a, b) =>
+          set((s) => {
+            if (layoutBlocked(s)) return;
+            const p = maybeSnap(s.view, a);
+            const q = maybeSnap(s.view, b);
+            const x0 = Math.min(p.x, q.x);
+            const x1 = Math.max(p.x, q.x);
+            const y0 = Math.min(p.y, q.y);
+            const y1 = Math.max(p.y, q.y);
+            // A click without a real drag makes nothing.
+            if (x1 - x0 < 200 || y1 - y0 < 200) return;
+            record(s);
+            const old = s.project.room;
+            const corner = (x: number, y: number) => ({ id: newId('cor'), point: { x: x as Mm, y: y as Mm } });
+            s.project.room = {
+              id: old?.id ?? newId('room'),
+              corners: [corner(x0, y0), corner(x1, y0), corner(x1, y1), corner(x0, y1)],
+              closed: true,
+              wallThickness: old?.wallThickness ?? mm(120),
+              wallHeight: old?.wallHeight ?? mm(2700),
+              openings: [],
+            };
+            // Wall points belonged to the old walls; floor boxes stay.
+            if (s.project.electrical) s.project.electrical = s.project.electrical.filter((e) => e.position);
+            s.tool = 'select';
+            s.selection = { kind: 'room', id: s.project.room.id };
+            touch(s.project);
           }),
 
         closeRoom: () =>

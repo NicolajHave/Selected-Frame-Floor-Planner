@@ -10,6 +10,8 @@ export function NoteProperties({ id }: { id: string }) {
   const update = usePlannerStore((s) => s.updateNote);
   const toggleArrow = usePlannerStore((s) => s.toggleNoteArrow);
   const remove = usePlannerStore((s) => s.deleteSelected);
+  const beginGesture = usePlannerStore((s) => s.beginGesture);
+  const endGesture = usePlannerStore((s) => s.endGesture);
   const [text, setText] = useState(note?.text ?? '');
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
@@ -22,8 +24,11 @@ export function NoteProperties({ id }: { id: string }) {
     return () => window.clearTimeout(t);
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Typing is one undo step, however it ends: blur, Esc, or the panel closing
+  // because something else was clicked.
+  useEffect(() => () => endGesture(), [endGesture]);
+
   if (!note) return null;
-  const commit = () => text !== note.text && update(id, { text });
 
   return (
     <div className="flex h-full flex-col">
@@ -35,8 +40,14 @@ export function NoteProperties({ id }: { id: string }) {
             aria-label="Note text"
             value={text}
             rows={4}
-            onChange={(e) => setText(e.target.value)}
-            onBlur={commit}
+            onFocus={beginGesture}
+            onChange={(e) => {
+              // Saved as you type (and shown on the plan straight away), so nothing is lost
+              // when you click elsewhere. Enter makes a new line.
+              setText(e.target.value);
+              update(id, { text: e.target.value });
+            }}
+            onBlur={endGesture}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) (e.target as HTMLTextAreaElement).blur();
               if (e.key === 'Escape') (e.target as HTMLTextAreaElement).blur();
