@@ -11,6 +11,7 @@ import { Button } from '../ui/Button';
 import { SignInDialog } from './SignInDialog';
 import { ProjectsDialog } from './ProjectsDialog';
 import { ShareDialog } from './ShareDialog';
+import { VersionsDialog } from './VersionsDialog';
 
 const time = (iso: string | null) =>
   iso ? new Date(iso).toLocaleTimeString('da-DK', { hour: '2-digit', minute: '2-digit' }) : '';
@@ -58,7 +59,7 @@ export function CloudStatus({ user, ready }: { user: CloudUser | null; ready: bo
 export function CloudActions({ user, ready }: { user: CloudUser | null; ready: boolean }) {
   const link = usePlannerStore((s) => s.cloud);
   const shared = usePlannerStore((s) => s.shared);
-  const [dialog, setDialog] = useState<'sign-in' | 'projects' | 'share' | null>(null);
+  const [dialog, setDialog] = useState<'sign-in' | 'projects' | 'share' | 'versions' | null>(null);
   const [menu, setMenu] = useState(false);
 
   if (!CLOUD_ENABLED || shared || !ready) return null;
@@ -70,6 +71,11 @@ export function CloudActions({ user, ready }: { user: CloudUser | null; ready: b
           <Button variant="ghost" onClick={() => setDialog('projects')} title="Plans saved in the cloud">
             Cloud
           </Button>
+          {link && (
+            <Button variant="ghost" onClick={() => setDialog('versions')} title="Earlier versions of this plan (up to 3)">
+              Versions
+            </Button>
+          )}
           {link && (
             <Button variant="ghost" onClick={() => setDialog('share')} title="Invite colleagues or create a view-only link">
               Share
@@ -109,6 +115,7 @@ export function CloudActions({ user, ready }: { user: CloudUser | null; ready: b
       {dialog === 'sign-in' && <SignInDialog onClose={() => setDialog(null)} />}
       {dialog === 'projects' && user && <ProjectsDialog user={user} onClose={() => setDialog(null)} />}
       {dialog === 'share' && <ShareDialog onClose={() => setDialog(null)} />}
+      {dialog === 'versions' && user && <VersionsDialog email={user.email} onClose={() => setDialog(null)} />}
     </div>
   );
 }

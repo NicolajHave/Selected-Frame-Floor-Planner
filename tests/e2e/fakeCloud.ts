@@ -20,7 +20,20 @@ interface Project {
   updated_by_email: string;
 }
 
+interface Version {
+  slot: number;
+  kind: 'auto' | 'manual';
+  label: string | null;
+  name: string;
+  data: unknown;
+  source_version: number;
+  saved_at: string;
+  saved_by_email: string;
+}
+
 const PASSWORD = 'correct horse';
+/** A save this long after the previous one starts a new working session. */
+const SESSION_GAP_MS = 30 * 60 * 1000;
 
 function b64url(obj: unknown): string {
   return Buffer.from(JSON.stringify(obj)).toString('base64url');
@@ -58,6 +71,7 @@ export class FakeCloud {
   projects = new Map<string, Project>();
   members = new Map<string, Map<string, 'editor' | 'viewer'>>();
   links = new Map<string, { project_id: string; created_at: string; created_by_email: string; revoked: boolean }>();
+  versions = new Map<string, Version[]>();
   /** Every RPC call, for assertions. */
   calls: { fn: string; email: string | null; args: Record<string, unknown> }[] = [];
   private seq = 0;
@@ -80,6 +94,36 @@ export class FakeCloud {
       updated_at: new Date().toISOString(),
       updated_by_email: email,
     });
+  }
+
+  /** As fp_put_version: a free slot, else the oldest one this kind may replace. */
+  private putVersion(id: string, v: Omit<Version, 'slot'>): boolean {
+    const list = this.versions.get(id) ?? [];
+    this.versions.set(id, list);
+    const used = new Set(list.map((x) => x.slot));
+    let slot = [0, 1, 2].find((n) => !used.has(n));
+    if (slot === undefined) {
+      const victim = [...list]
+        .filter((x) => v.kind === 'manual' || x.kind === 'auto')
+        .sort((a, b) => a.saved_at.localeCompare(b.saved_at))[0];
+      if (!victim) return false;
+      slot = victim.slot;
+      list.splice(list.indexOf(victim), 1);
+    }
+    list.push({ ...v, label: v.label?.trim() || null, slot });
+    return true;
+  }
+
+  /** Make the last save look `ms` old, as if the planner took a break. */
+  age(id: string, ms: number) {
+    const p = this.projects.get(id)!;
+    p.updated_at = new Date(Date.parse(p.updated_at) - ms).toISOString();
+  }
+
+  private listVersions(id: string) {
+    return [...(this.versions.get(id) ?? [])]
+      .sort((a, b) => b.saved_at.localeCompare(a.saved_at))
+      .map(({ data: _d, ...rest }) => rest);
   }
 
   private role(email: string | null, id: string): Role | null {
@@ -129,6 +173,15 @@ export class FakeCloud {
         if (p.version !== args.p_version) {
           return { ok: false, version: p.version, updated_at: p.updated_at, updated_by_email: p.updated_by_email };
         }
+        if (
+          Date.now() - Date.parse(p.updated_at) > SESSION_GAP_MS &&
+          !(this.versions.get(p.id) ?? []).some((v) => v.source_version === p.version)
+        ) {
+          this.putVersion(p.id, {
+            kind: 'auto', label: null, name: p.name, data: p.data,
+            source_version: p.version, saved_at: p.updated_at, saved_by_email: p.updated_by_email,
+          });
+        }
         Object.assign(p, {
           data: args.p_data,
           name: args.p_name?.trim() || p.name,
@@ -142,6 +195,27 @@ export class FakeCloud {
         this.require(email, args.p_id, ['owner']);
         this.projects.delete(args.p_id);
         return null;
+      }
+      case 'fp_list_versions': {
+        this.require(email, args.p_id, ['owner', 'editor', 'viewer']);
+        return this.listVersions(args.p_id);
+      }
+      case 'fp_get_version': {
+        this.require(email, args.p_id, ['owner', 'editor', 'viewer']);
+        const v = (this.versions.get(args.p_id) ?? []).find((x) => x.slot === args.p_slot);
+        if (!v) throw new RpcError('That version is no longer there.', 'P0002');
+        return v;
+      }
+      case 'fp_save_version': {
+        this.require(email, args.p_id, ['owner', 'editor']);
+        const p = this.projects.get(args.p_id)!;
+        // Distinct, increasing timestamps keep "oldest" well defined in fast tests.
+        const at = new Date(Math.max(Date.now(), ...(this.versions.get(p.id) ?? []).map((v) => Date.parse(v.saved_at) + 1)));
+        this.putVersion(p.id, {
+          kind: 'manual', label: args.p_label ?? null, name: p.name, data: p.data,
+          source_version: p.version, saved_at: at.toISOString(), saved_by_email: email!,
+        });
+        return this.listVersions(p.id);
       }
       case 'fp_list_members': {
         this.require(email, args.p_id, ['owner', 'editor', 'viewer']);
