@@ -118,13 +118,14 @@ URL. No environment variables are needed.
    shared. The active tab's menu renames, duplicates or deletes a layout.
    **Automatic proposal…** (same menu) lays the shop out for you as a new
    layout tab: **Brand shop** (a welcome table with mannequins facing the
-   entrance, fewer fixtures with wider aisles, signs on the racks, the
-   logo opposite the entrance) or **Volume shop** (wall racks along every
+   entrance, fewer fixtures with wider aisles, signs on the racks) or **Volume shop** (wall racks along every
    free wall and rows of floor racks). From 30 m² every proposal has an
    entrance / impact zone — the Iconic Table (only ever one) on a carpet
    facing the entrance with a mannequin either side of it on the carpet —
-   and a Volume Table (two from 60 m²); the logo hangs centred over the
-   leftmost wall unit of the wall facing the entrance; volume shops pair
+   and a Volume Table (two from 60 m²); every proposal with a solid wall
+   gets a logo — the LED logo from 30 m², the stainless steel one below —
+   centred over the leftmost wall unit of the wall facing the entrance
+   (or centred on that wall when it has no units); volume shops pair
    their floor racks end to end with the aisle around the pair; the number
    of floor racks follows the shop's size, and no wall racks go against
    transparent walls. Every fixture keeps at least the
