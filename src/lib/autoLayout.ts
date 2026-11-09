@@ -46,6 +46,8 @@ const WALL_UNIT_HEIGHT = 2288;
 const ICONIC_TABLE = '105-17-007';
 const VOLUME_TABLE = '105-17-001';
 const CARPET = '105-19-001';
+const LED_LOGO = '105-13-LED';
+const STEEL_LOGO = '105-13-015';
 /** From this floor area (m²) a shop gets an entrance / impact zone and a Volume Table. */
 export const IMPACT_ZONE_M2 = 30;
 /** Floor area (m²) per floor rack: brand shops show less, volume shops more. */
@@ -363,16 +365,32 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
   }
   placed.push(...keep, ...others);
 
-  // 5. Brand: the logo on the wall the entrance looks at, centred over the
-  //    leftmost wall unit on that wall (as seen from inside the shop).
-  const far = farWall as { index: number; along: number } | null;
-  if (brand && far) {
-    const logo = findAsset('105-13-001');
-    const w = wallFrame(room, far.index);
-    if (logo && w && wallHeightOf(room, far.index) >= (logo.minWallHeight ?? 0)) {
+  // 5. The logo, in every proposal with a solid wall to hang it on: the LED
+  //    logo from 30 m², the stainless steel one below. On the wall the
+  //    entrance looks at, centred over its leftmost wall unit (as seen from
+  //    inside the shop); without units there, centred on the wall's longest
+  //    stretch clear of doors and windows.
+  const logo = findAsset(area >= IMPACT_ZONE_M2 ? LED_LOGO : STEEL_LOGO);
+  if (logo) {
+    const fits = (i: number) => !wallStyle(room, i).transparent && wallHeightOf(room, i) >= (logo.minWallHeight ?? 0);
+    const ahead = (i: number) => {
+      const w = wallFrame(room, i)!;
+      const mx = (w.a.x + w.b.x) / 2;
+      const my = (w.a.y + w.b.y) / 2;
+      return door ? (mx - door.center.x) * door.nx + (my - door.center.y) * door.ny : w.length;
+    };
+    const far = farWall as { index: number; along: number } | null;
+    let index = far && fits(far.index) ? far.index : -1;
+    if (index < 0) {
+      for (let i = 0; i < room.corners.length; i++) {
+        if (wallFrame(room, i) && fits(i) && freeStretches(room, i).length && (index < 0 || ahead(i) > ahead(index))) index = i;
+      }
+    }
+    const w = index >= 0 ? wallFrame(room, index) : null;
+    if (w) {
       let leftmost: { along: number; left: number } | null = null;
       for (const p of placed) {
-        if (!p.item.modules || rackWall.get(p.item.id) !== far.index) continue;
+        if (!p.item.modules || rackWall.get(p.item.id) !== index) continue;
         const r = p.item.rotation;
         // The rack's local +x is to the right of someone facing it.
         const rx = { x: Math.cos(r), y: Math.sin(r) };
@@ -383,7 +401,8 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
           if (!leftmost || left < leftmost.left) leftmost = { along: (cx - w.a.x) * w.ux + (cy - w.a.y) * w.uy, left };
         }
       }
-      const along = leftmost?.along ?? far.along;
+      const stretches = freeStretches(room, index).sort((p, q) => q[1] - q[0] - (p[1] - p[0]));
+      const along = leftmost?.along ?? (stretches[0] ? (stretches[0][0] + stretches[0][1]) / 2 : w.length / 2);
       const off = room.wallThickness / 2 + logo.size.depth / 2;
       const item = fromAsset(logo.id, pt(w.a.x + w.ux * along + w.nx * off, w.a.y + w.uy * along + w.ny * off), Math.atan2(-w.nx, w.ny));
       if (item) placed.push({ item, outline: rectCorners(item.position, item.size, item.rotation) });

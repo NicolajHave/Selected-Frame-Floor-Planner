@@ -57,7 +57,7 @@ test('volume fits more than brand; brand has a welcome table, mannequins, signs 
   expect(b.some((i) => i.assetRef === '105-17-007')).toBe(true);
   expect(b.filter((i) => i.assetRef?.startsWith('112-18')).length).toBe(2);
   expect(b.some((i) => i.accessories?.length)).toBe(true);
-  expect(b.some((i) => i.assetRef === '105-13-001')).toBe(true);
+  expect(b.some((i) => i.assetRef === '105-13-LED')).toBe(true);
 });
 
 test('a wider aisle means fewer fixtures; no wall racks when asked; no room says so', () => {
@@ -124,7 +124,7 @@ test('no wall racks against a transparent (glass) wall', () => {
   expect(inv.some((i) => i.modules?.length)).toBe(true);
   // And no logo on it.
   const brand = proposeLayout(project(glass), { style: 'brand', aisle: 900, wallRacks: true }).inventory;
-  expect(brand.filter((i) => i.assetRef === '105-13-001' && i.position.y < 1000)).toEqual([]);
+  expect(brand.filter((i) => i.assetRef?.startsWith('105-13') && i.position.y < 1000)).toEqual([]);
 });
 
 test('two mannequins stand beside the Iconic Table, on the carpet, in either style', () => {
@@ -151,7 +151,7 @@ test('two mannequins stand beside the Iconic Table, on the carpet, in either sty
 
 test('the logo hangs centred over the leftmost wall unit on its wall', () => {
   const inv = proposeLayout(shop, { style: 'brand', aisle: 900, wallRacks: true }).inventory;
-  const logo = inv.find((i) => i.assetRef === '105-13-001')!;
+  const logo = inv.find((i) => i.assetRef === '105-13-LED')!;
   // The door is in the bottom wall, so the logo is on the top wall (y ≈ 0), facing down into the shop.
   expect(logo.position.y).toBeLessThan(200);
   const racks = inv.filter((i) => i.modules?.length && i.position.y < 1000);
@@ -174,4 +174,23 @@ test('volume racks stand in pairs, end to end, with the aisle around each pair',
     expect(touching).toHaveLength(1);
   }
   expect(layoutIssues({ ...shop, inventory: inv }, 900)).toEqual([]);
+});
+
+test('a logo in every proposal with a solid wall: LED from 30 m², stainless steel below', () => {
+  const logos = (inv: { assetRef?: string }[]) => inv.filter((i) => i.assetRef?.startsWith('105-13'));
+  for (const style of ['brand', 'volume'] as const) {
+    const big = logos(proposeLayout(shop, { style, aisle: 900, wallRacks: true }).inventory);
+    expect(big.map((l) => l.assetRef)).toEqual(['105-13-LED']);
+    const small = logos(proposeLayout(shopOf(5000, 5000), { style, aisle: 900, wallRacks: true }).inventory);
+    expect(small.map((l) => l.assetRef)).toEqual(['105-13-015']);
+    // Without wall racks too: centred on the wall facing the entrance (the top wall here).
+    const bare = logos(proposeLayout(shop, { style, aisle: 900, wallRacks: false }).inventory);
+    expect(bare).toHaveLength(1);
+    expect((bare[0] as { position: { x: number; y: number } }).position.y).toBeLessThan(200);
+    expect((bare[0] as { position: { x: number; y: number } }).position.x).toBeCloseTo(6000, -1);
+  }
+  // Every wall glass: no logo.
+  const glass = room(12000, 9000, [door('c2', 6000)]);
+  glass.walls = Object.fromEntries(glass.corners.map((c) => [c.id, { transparent: true }]));
+  expect(logos(proposeLayout(project(glass), { style: 'brand', aisle: 900, wallRacks: true }).inventory)).toEqual([]);
 });
