@@ -7,6 +7,7 @@ import { Canvas } from '@/render/svg/Canvas';
 import { RightPanel } from '../panels/RightPanel';
 import { AssetLibrary } from '../panels/AssetLibrary';
 import { VariantBar } from './VariantBar';
+import { PlanContextMenu } from './PlanContextMenu';
 import { ToolOverlay } from './ToolOverlay';
 import { NoticeToast } from './NoticeToast';
 import { useKeyboard } from '@/hooks/useKeyboard';
@@ -122,6 +123,7 @@ export function PlannerShell() {
               <Canvas />
               <ToolOverlay />
               <CommentPins />
+              <PlanContextMenu />
             </>
           )}
           <VariantBar />
