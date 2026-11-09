@@ -9,7 +9,7 @@ import { normalizeAngle, pushToWalls } from '@/geometry/wallSnap';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { polygonArea, polygonCentroid } from '@/geometry/polygon';
 import { findAsset } from './assetCatalog';
-import { RACK_CATEGORY, rackSize } from './racks';
+import { RACK_CATEGORY, rackSize, rackSlots } from './racks';
 import { RACK_SIGN } from './accessories';
 import { doorZones, innerOutline, layoutIssues } from './layout';
 import { newId } from './id';
@@ -51,6 +51,8 @@ export const IMPACT_ZONE_M2 = 30;
 /** Floor area (m²) per floor rack: brand shops show less, volume shops more. */
 const RACK_AREA_BRAND = 25;
 const RACK_AREA_VOLUME = 12;
+/** Between the Iconic Table and the mannequins beside it (mm): standing together. */
+const MANNEQUIN_GAP = 50;
 /** Kept clear in front of a door before the impact zone starts (mm). */
 const DOOR_CLEAR = 900;
 /** Free space kept beside doors and windows along the wall. */
@@ -63,6 +65,8 @@ const pt = (x: number, y: number): Point => ({ x: x as Mm, y: y as Mm });
 interface Placed {
   item: InventoryItem;
   outline: Polygon;
+  /** Fixtures placed together (racks end to end) share a group. */
+  group?: number;
 }
 
 function fromAsset(assetId: string, centre: Point, rotation: number): InventoryItem | null {
@@ -160,6 +164,8 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
   /** Carpets: the other fixtures stay off them. */
   const keepOff: Polygon[] = [];
   const carpets: InventoryItem[] = [];
+  /** Which wall each wall rack stands against. */
+  const rackWall = new Map<string, number>();
   const area = polygonArea(room.corners.map((c) => c.point)) / 1e6;
 
   /** Room for `outline`: `gapWalls` from every wall (or, with `touchOk`, flush against it). */
@@ -207,15 +213,17 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
       if (carpetOutline && !clearOf(carpetOutline, aisle / 2, 100)) continue;
       const table = fromAsset(ICONIC_TABLE, c, facing);
       if (!add(table, aisle, aisle)) continue;
-      if (brand) {
-        for (const [k, id] of [[-1, '112-18-001'], [1, '112-18-002']] as const) {
-          // Beside the table, the full aisle away from it.
-          const first = (table!.size.width + 450) / 2 + aisle;
-          for (const reach of [first, first + 200, first + 400]) {
-            const m = fromAsset(id, pt(c.x + side.x * reach * k, c.y + side.y * reach * k), facing);
-            if (add(m, aisle, aisle)) break;
-          }
-        }
+      // Two mannequins beside the table, on the carpet, standing with it.
+      for (const [k, id] of [[-1, '112-18-001'], [1, '112-18-002']] as const) {
+        const m = fromAsset(id, c, facing)!;
+        const reach = table!.size.width / 2 + m.size.width / 2 + MANNEQUIN_GAP;
+        m.position = pt(c.x + side.x * reach * k, c.y + side.y * reach * k);
+        const o = rectCorners(m.position, m.size, m.rotation);
+        const fits =
+          o.every((p) => pointInPolygon(p, inner)) &&
+          zones.every((z) => !convexOverlap(o, z)) &&
+          placed.every((x) => x.item === table || (!convexOverlap(o, x.outline) && outlineGap(o, x.outline).distance >= aisle));
+        if (fits) placed.push({ item: m, outline: o });
       }
       if (carpet && carpetOutline) {
         carpets.push(carpet);
@@ -281,6 +289,7 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
             placed.every((o) => !convexOverlap(outline, o.outline) && outlineGap(outline, o.outline).distance >= aisle);
           if (ok) {
             placed.push({ item, outline });
+            rackWall.set(item.id, i);
             // The wall the entrance looks at, for the logo.
             const mid = item.position;
             const ahead = door ? (mid.x - door.center.x) * door.nx + (mid.y - door.center.y) * door.ny : 0;
@@ -296,9 +305,29 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
   // 4. The floor: racks (and, in a brand shop, podiums) in a grid, every one
   //    the aisle apart — no more racks than the shop's size calls for, spread
   //    out over the floor.
-  const cycle = brand ? ['105-06-014', '105-09-001'] : ['105-06-001', '105-06-011', '105-06-001', '105-06-013'];
-  const cellW = Math.max(...cycle.map((id) => findAsset(id)!.size.width)) + gap;
-  const cellD = Math.max(...cycle.map((id) => findAsset(id)!.size.depth)) + gap;
+  // Volume shops pair their racks end to end (touching, the aisle around
+  // the pair); brand shops keep them single.
+  const cycle: string[][] = brand
+    ? [['105-06-014'], ['105-09-001']]
+    : [['105-06-001', '105-06-011'], ['105-06-001', '105-06-013']];
+  const runOf = (ids: string[]) => ids.reduce((sum, id) => sum + findAsset(id)!.size.width, 0);
+  const cellW = Math.max(...cycle.map(runOf)) + gap;
+  const cellD = Math.max(...cycle.flat().map((id) => findAsset(id)!.size.depth)) + gap;
+  const axis = alongX ? { x: 1, y: 0 } : { x: 0, y: 1 };
+  /** A group side by side along the row, centred on `c`; all of it or nothing. */
+  const addGroup = (ids: string[], c: Point, group: number) => {
+    const total = runOf(ids);
+    let at = -total / 2;
+    const items = ids.map((id) => {
+      const w = findAsset(id)!.size.width;
+      const item = fromAsset(id, pt(c.x + axis.x * (at + w / 2), c.y + axis.y * (at + w / 2)), rotation)!;
+      at += w;
+      return { item, outline: rectCorners(item.position, item.size, item.rotation), group };
+    });
+    if (!items.every((x) => clearOf(x.outline, gap, aisle))) return false;
+    placed.push(...items);
+    return true;
+  };
   // Try a few grid offsets and keep the one that fits the most.
   let best: Placed[] = [];
   const before = placed.length;
@@ -309,8 +338,7 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
       const [u0, u1, v0, v1] = alongX ? [box.minX, box.maxX, box.minY, box.maxY] : [box.minY, box.maxY, box.minX, box.maxX];
       for (let v = v0 + cellD * (0.5 + fv); v < v1; v += cellD) {
         for (let u = u0 + cellW * (0.5 + fu); u < u1; u += cellW) {
-          const c = alongX ? pt(u, v) : pt(v, u);
-          if (add(fromAsset(cycle[k % cycle.length]!, c, rotation), gap, aisle)) k++;
+          if (addGroup(cycle[k % cycle.length]!, alongX ? pt(u, v) : pt(v, u), k)) k++;
         }
       }
       if (placed.length - before > best.length) best = placed.slice(before);
@@ -318,24 +346,46 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
   }
   placed.length = before;
   const isRack = (p: Placed) => !!p.item.assetRef?.startsWith('105-06-');
-  const racks = best.filter(isRack);
+  const rackGroups = [...new Set(best.filter(isRack).map((p) => p.group))];
   const others = best.filter((p) => !isRack(p)).slice(0, brand ? Math.max(1, Math.floor(area / 40)) : 0);
   const rackCap = Math.max(brand ? 1 : 2, Math.floor(area / (brand ? RACK_AREA_BRAND : RACK_AREA_VOLUME)));
+  const perGroup = brand ? 1 : 2;
+  const groupCap = Math.max(1, Math.floor(rackCap / perGroup));
   // Evenly through the grid, so the floor is used from front to back.
-  const keep = racks.length <= rackCap ? racks : Array.from({ length: rackCap }, (_, i) => racks[Math.floor(((i + 0.5) * racks.length) / rackCap)]!);
+  const keepGroups = new Set(
+    rackGroups.length <= groupCap
+      ? rackGroups
+      : Array.from({ length: groupCap }, (_, i) => rackGroups[Math.floor(((i + 0.5) * rackGroups.length) / groupCap)]!),
+  );
+  const keep = best.filter((p) => isRack(p) && keepGroups.has(p.group));
   for (const r of keep) {
     if (brand) r.item.accessories = [{ id: newId('acc'), assetRef: RACK_SIGN }];
   }
   placed.push(...keep, ...others);
 
-  // 5. Brand: the logo on the wall the entrance looks at, above its rack.
+  // 5. Brand: the logo on the wall the entrance looks at, centred over the
+  //    leftmost wall unit on that wall (as seen from inside the shop).
   const far = farWall as { index: number; along: number } | null;
   if (brand && far) {
     const logo = findAsset('105-13-001');
     const w = wallFrame(room, far.index);
     if (logo && w && wallHeightOf(room, far.index) >= (logo.minWallHeight ?? 0)) {
+      let leftmost: { along: number; left: number } | null = null;
+      for (const p of placed) {
+        if (!p.item.modules || rackWall.get(p.item.id) !== far.index) continue;
+        const r = p.item.rotation;
+        // The rack's local +x is to the right of someone facing it.
+        const rx = { x: Math.cos(r), y: Math.sin(r) };
+        for (const slot of rackSlots(p.item.modules)) {
+          const cx = p.item.position.x + rx.x * slot.x - rx.y * slot.y;
+          const cy = p.item.position.y + rx.y * slot.x + rx.x * slot.y;
+          const left = cx * rx.x + cy * rx.y;
+          if (!leftmost || left < leftmost.left) leftmost = { along: (cx - w.a.x) * w.ux + (cy - w.a.y) * w.uy, left };
+        }
+      }
+      const along = leftmost?.along ?? far.along;
       const off = room.wallThickness / 2 + logo.size.depth / 2;
-      const item = fromAsset(logo.id, pt(w.a.x + w.ux * far.along + w.nx * off, w.a.y + w.uy * far.along + w.ny * off), Math.atan2(-w.nx, w.ny));
+      const item = fromAsset(logo.id, pt(w.a.x + w.ux * along + w.nx * off, w.a.y + w.uy * along + w.ny * off), Math.atan2(-w.nx, w.ny));
       if (item) placed.push({ item, outline: rectCorners(item.position, item.size, item.rotation) });
     }
   }

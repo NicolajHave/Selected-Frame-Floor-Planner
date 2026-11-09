@@ -6,6 +6,7 @@ import type { Opening, RoomPolygon } from '@/model/objects';
 import type { Mm } from '@/model/units';
 import { rectCorners } from '@/geometry/transform';
 import { outlineGap } from '@/geometry/footprint';
+import { rackSlots } from '@/lib/racks';
 
 function room(w: number, d: number, openings: Opening[] = []): RoomPolygon {
   return {
@@ -40,7 +41,9 @@ for (const style of ['volume', 'brand'] as const) {
       for (let j = i + 1; j < floor.length; j++) {
         const a = rectCorners(floor[i]!.position, floor[i]!.size, floor[i]!.rotation);
         const b = rectCorners(floor[j]!.position, floor[j]!.size, floor[j]!.rotation);
-        expect(outlineGap(a, b).distance).toBeGreaterThanOrEqual(899);
+        // Either the full aisle apart, or standing together (touching, ≤ 100 mm: racks in pairs, mannequins by the table).
+        const d = outlineGap(a, b).distance;
+        expect(d >= 899 || d <= 100, `${floor[i]!.name} – ${floor[j]!.name}: ${d}`).toBe(true);
       }
     }
     expect(r.inventory.some((i) => i.modules?.length)).toBe(true);
@@ -122,4 +125,53 @@ test('no wall racks against a transparent (glass) wall', () => {
   // And no logo on it.
   const brand = proposeLayout(project(glass), { style: 'brand', aisle: 900, wallRacks: true }).inventory;
   expect(brand.filter((i) => i.assetRef === '105-13-001' && i.position.y < 1000)).toEqual([]);
+});
+
+test('two mannequins stand beside the Iconic Table, on the carpet, in either style', () => {
+  for (const style of ['brand', 'volume'] as const) {
+    const inv = proposeLayout(shop, { style, aisle: 900, wallRacks: true }).inventory;
+    const carpet = inv.find((i) => i.assetRef === '105-19-001')!;
+    const table = inv.find((i) => i.assetRef === '105-17-007')!;
+    const c = rectCorners(carpet.position, carpet.size, carpet.rotation);
+    const mannequins = inv.filter((i) => i.assetRef?.startsWith('112-18'));
+    expect(mannequins).toHaveLength(2);
+    for (const m of mannequins) {
+      // Wholly on the carpet, right by the table.
+      for (const p of rectCorners(m.position, m.size, m.rotation)) {
+        expect(p.x).toBeGreaterThanOrEqual(Math.min(...c.map((q) => q.x)) - 1);
+        expect(p.x).toBeLessThanOrEqual(Math.max(...c.map((q) => q.x)) + 1);
+        expect(p.y).toBeGreaterThanOrEqual(Math.min(...c.map((q) => q.y)) - 1);
+        expect(p.y).toBeLessThanOrEqual(Math.max(...c.map((q) => q.y)) + 1);
+      }
+      const gap = outlineGap(rectCorners(m.position, m.size, m.rotation), rectCorners(table.position, table.size, table.rotation)).distance;
+      expect(gap).toBeLessThanOrEqual(100);
+    }
+  }
+});
+
+test('the logo hangs centred over the leftmost wall unit on its wall', () => {
+  const inv = proposeLayout(shop, { style: 'brand', aisle: 900, wallRacks: true }).inventory;
+  const logo = inv.find((i) => i.assetRef === '105-13-001')!;
+  // The door is in the bottom wall, so the logo is on the top wall (y ≈ 0), facing down into the shop.
+  expect(logo.position.y).toBeLessThan(200);
+  const racks = inv.filter((i) => i.modules?.length && i.position.y < 1000);
+  // Seen from inside facing the top wall, left is +x … check against the rack geometry: the leftmost unit's centre.
+  const units = racks.flatMap((r) => rackSlots(r.modules!).map((s) => {
+    const rx = { x: Math.cos(r.rotation), y: Math.sin(r.rotation) };
+    return { x: r.position.x + rx.x * s.x - rx.y * s.y, left: (r.position.x + rx.x * s.x - rx.y * s.y) * rx.x };
+  }));
+  const leftmost = units.sort((a, b) => a.left - b.left)[0]!;
+  expect(logo.position.x).toBeCloseTo(leftmost.x, 3);
+});
+
+test('volume racks stand in pairs, end to end, with the aisle around each pair', () => {
+  const inv = proposeLayout(shop, { style: 'volume', aisle: 900, wallRacks: true }).inventory;
+  const racks = inv.filter((i) => i.assetRef?.startsWith('105-06-'));
+  expect(racks.length).toBeGreaterThanOrEqual(2);
+  for (const r of racks) {
+    const o = rectCorners(r.position, r.size, r.rotation);
+    const touching = racks.filter((x) => x !== r && outlineGap(o, rectCorners(x.position, x.size, x.rotation)).distance <= 1);
+    expect(touching).toHaveLength(1);
+  }
+  expect(layoutIssues({ ...shop, inventory: inv }, 900)).toEqual([]);
 });
