@@ -112,6 +112,14 @@ URL. No environment variables are needed.
    current one or an empty one. Tabs (Layout A, B, …) switch between
    them; the room, walls, doors, pillars, electrical points and notes are
    shared. The active tab's menu renames, duplicates or deletes a layout.
+   **Automatic proposal…** (same menu) lays the shop out for you as a new
+   layout tab: **Brand shop** (a welcome table with mannequins facing the
+   entrance, fewer fixtures with wider aisles, signs on the racks, the
+   logo opposite the entrance) or **Volume shop** (wall racks along every
+   free wall and rows of floor racks). Every fixture keeps at least the
+   minimum aisle (900 mm by default) to the next one and to the walls,
+   doorways stay clear, and the result passes the layout check; then
+   adjust it like any other layout.
    **Compare** puts them side by side: fixtures, price, €/m², hanger
    capacity, shelf metres, layout problems and the budget. View-only
    links can switch between the layouts too; the PDF names the layout.

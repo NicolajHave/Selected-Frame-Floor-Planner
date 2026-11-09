@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 import { usePlannerStore } from '@/store/plannerStore';
 import { MAX_VARIANTS, variantList } from '@/lib/variants';
 import { CompareVariantsDialog } from './CompareVariantsDialog';
+import { AutoLayoutDialog } from './AutoLayoutDialog';
 
 /**
  * Layout variants above the plan: one tab per layout (A, B, …) sharing the
@@ -19,6 +20,7 @@ export function VariantBar() {
   const [menu, setMenu] = useState<'add' | 'tab' | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [comparing, setComparing] = useState(false);
+  const [proposing, setProposing] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -99,6 +101,14 @@ export function VariantBar() {
         <Menu>
           <MenuItem onClick={() => add('copy')}>Copy of this layout</MenuItem>
           <MenuItem onClick={() => add('empty')}>Empty layout (just the room)</MenuItem>
+          <MenuItem
+            onClick={() => {
+              setMenu(null);
+              setProposing(true);
+            }}
+          >
+            Automatic proposal…
+          </MenuItem>
         </Menu>
       )}
       {menu === 'tab' && (
@@ -125,6 +135,7 @@ export function VariantBar() {
         </Menu>
       )}
       {comparing && <CompareVariantsDialog onClose={() => setComparing(false)} />}
+      {proposing && <AutoLayoutDialog onClose={() => setProposing(false)} />}
     </div>
   );
 }
