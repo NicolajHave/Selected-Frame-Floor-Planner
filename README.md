@@ -76,7 +76,11 @@ URL. No environment variables are needed.
    2.4 m and need walls of at least 2.6 m. Dragged fixtures snap to the
    ones around them: edges and centres line up, and they stop exactly
    the minimum aisle (900 mm) from a neighbour beside them — orange
-   lines show what they snapped to (`Alt` places freely).
+   lines show what they snapped to. Dragged or placed close to a wall
+   (or partly into it), a free-standing fixture stands flush against the
+   wall's inside face — in a corner against both walls — so it never pokes
+   through and the layout check has nothing to say; drag it further out
+   to leave the wall. `Alt` places freely.
 8. **Several at once**: shift-click fixtures, pillars or notes, or
    shift-drag a box on the floor (`⌘A` selects all). Drag one to move
    them all; the panel lines them up (left, centre, right, top, middle,
@@ -112,6 +116,14 @@ URL. No environment variables are needed.
    current one or an empty one. Tabs (Layout A, B, …) switch between
    them; the room, walls, doors, pillars, electrical points and notes are
    shared. The active tab's menu renames, duplicates or deletes a layout.
+   **Automatic proposal…** (same menu) lays the shop out for you as a new
+   layout tab: **Brand shop** (a welcome table with mannequins facing the
+   entrance, fewer fixtures with wider aisles, signs on the racks, the
+   logo opposite the entrance) or **Volume shop** (wall racks along every
+   free wall and rows of floor racks). Every fixture keeps at least the
+   minimum aisle (900 mm by default) to the next one and to the walls,
+   doorways stay clear, and the result passes the layout check; then
+   adjust it like any other layout.
    **Compare** puts them side by side: fixtures, price, €/m², hanger
    capacity, shelf metres, layout problems and the budget. View-only
    links can switch between the layouts too; the PDF names the layout.

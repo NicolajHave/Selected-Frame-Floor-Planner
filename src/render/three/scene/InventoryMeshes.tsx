@@ -100,7 +100,8 @@ function AccessoryModels({ item, interactive }: { item: InventoryItem; interacti
   return (
     <>
       {placed.map((p) => (
-        <group key={p.accessory.id} position={[p.x * MM, p.z * MM, p.y * MM]}>
+        // Plan +y is scene +z, so a turn on the plan is the opposite turn about scene y.
+        <group key={p.accessory.id} position={[p.x * MM, p.z * MM, p.y * MM]} rotation={[0, -p.rot, 0]}>
           {interactive ? (
             <Suspense fallback={null}>
               <GlbModel url={p.asset.glbUrl} />

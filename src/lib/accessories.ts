@@ -107,7 +107,12 @@ export interface AccessoryPlacement {
   x: number;
   y: number;
   z: number;
+  /** Turn about the vertical axis, radians, in the fixture's frame (0 = as modelled). */
+  rot: number;
 }
+
+/** The acrylic sign stands across the rack, not along it: a quarter turn from the model. */
+const RACK_SIGN_TURN = Math.PI / 2;
 
 const onHost = (a: Accessory, host: AccessoryHost) => (a.module ?? undefined) === host.module;
 
@@ -146,10 +151,10 @@ export function placeAccessories(
     for (const a of mine) {
       const asset = findAsset(a.assetRef);
       if (!asset || !RULES[a.assetRef]?.hosts.includes(hostId)) continue;
-      let p: { x: number; y: number; z: number } | null = null;
+      let p: { x: number; y: number; z: number; rot?: number } | null = null;
       if (a.assetRef === RACK_SIGN) {
         const post = RACK_POSTS[hostId]!;
-        p = { x: post.x, y: 0, z: post.top - RACK_SIGN_PIN };
+        p = { x: post.x, y: 0, z: post.top - RACK_SIGN_PIN, rot: RACK_SIGN_TURN };
       } else if (a.assetRef === LEATHER_TRAY) {
         // Over the table's foot, where the top is thickest.
         p = { x: 65, y: 76, z: 650 };
@@ -164,7 +169,7 @@ export function placeAccessories(
         const x = rows[shelf]?.get(a.id);
         if (x !== undefined) p = { x, y: SHELF_Y, z: SHELF_TOPS[shelf]! };
       }
-      if (p) out.push({ accessory: a, asset, x: p.x + host.x, y: p.y + host.y, z: p.z });
+      if (p) out.push({ accessory: a, asset, x: p.x + host.x, y: p.y + host.y, z: p.z, rot: p.rot ?? 0 });
     }
   }
   return out;
