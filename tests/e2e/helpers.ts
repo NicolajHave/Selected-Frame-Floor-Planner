@@ -15,7 +15,11 @@ export async function openFresh(page: Page) {
   // registered after this take precedence.
   await page.route(/supabase\.co/, (route) => route.abort());
   await page.goto('/');
-  await page.evaluate(() => localStorage.clear());
+  await page.evaluate(() => {
+    localStorage.clear();
+    // The library starts folded; tests work with every group open.
+    localStorage.setItem('sf-planner:library-open', JSON.stringify({ all: true, ids: [] }));
+  });
   await page.reload();
   await expect(page.getByRole('button', { name: 'Draw area' })).toBeVisible();
 }

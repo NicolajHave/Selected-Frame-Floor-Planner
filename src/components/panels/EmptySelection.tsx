@@ -64,6 +64,7 @@ export function EmptySelection() {
           <Key k="123 + Enter">While drawing: exact wall length</Key>
           <Key k="⇧ + click">Select several</Key>
           <Key k="⇧ + drag">Select everything in a box</Key>
+          <Key k="⇧ + corner">Drag a corner: scale the whole room in proportion</Key>
           <Key k="⌘A">Select all fixtures, pillars and notes</Key>
           <Key k="L">Lock / unlock selected fixtures</Key>
           <Key k="⌘D">Duplicate selected</Key>

@@ -32,6 +32,7 @@ import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, pushToWalls, snapToWall } from '@/geometry/wallSnap';
 import { rectCorners } from '@/geometry/transform';
+import { scaleRoomByCorner as scaleRoom } from '@/geometry/corners';
 import { boxOf, snapToObjects, squareAngle, type SnapGuide } from '@/geometry/objectSnap';
 import { DEFAULT_MIN_AISLE, innerOutline } from '@/lib/layout';
 import { setWallLength as resizeWall } from '@/geometry/walls';
@@ -271,6 +272,8 @@ interface PlannerState {
   /** Replace the room with a closed rectangle spanning two opposite corners. */
   addRectRoom: (a: Point, b: Point) => void;
   moveCorner: (cornerId: string, p: Point) => void;
+  /** Shift-drag of a corner: the whole room scales evenly from `base` (the room when the drag began). */
+  scaleRoomByCorner: (base: RoomPolygon, cornerId: string, p: Point) => void;
   insertCorner: (afterCornerId: string, p: Point) => void;
   deleteCorner: (cornerId: string) => void;
   updateRoomMeta: (patch: Partial<Pick<RoomPolygon, 'wallThickness' | 'wallHeight'>>) => void;
@@ -1417,6 +1420,14 @@ export const usePlannerStore = create<PlannerState>()(
             record(s);
             const snapped = maybeSnap(s.view, p);
             c.point = { x: snapped.x as Mm, y: snapped.y as Mm };
+            touch(s.project);
+          }),
+
+        scaleRoomByCorner: (base, cornerId, p) =>
+          set((s) => {
+            if (!s.project.room || layoutBlocked(s)) return;
+            record(s);
+            s.project.room = scaleRoom(base, cornerId, p);
             touch(s.project);
           }),
 

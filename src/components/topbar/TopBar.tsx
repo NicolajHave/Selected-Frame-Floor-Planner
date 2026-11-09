@@ -209,6 +209,15 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
             >
               Measure
             </Button>
+            <Button
+              variant="ghost"
+              active={tool === 'add-note'}
+              onClick={() => setTool(tool === 'add-note' ? 'select' : 'add-note')}
+              title="Place Note"
+              aria-label="+ Note"
+            >
+              + Note
+            </Button>
           </div>
 
           {divider}

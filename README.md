@@ -172,6 +172,13 @@ URL. No environment variables are needed.
     the same page/crop or CAD dialog as a file from disk. Only the person
     who uploaded a drawing can delete it.
 
+The library on the left starts folded: click a heading (Doors & windows,
+Electrical, Racks, …) to unfold it; the planner remembers which are open.
+Notes are placed with **+ Note** in the top bar. Hold **Shift** while
+dragging a room corner to scale the whole room in proportion (the
+opposite corner stays put; doors and windows keep their place along
+their walls).
+
 The plan autosaves in the browser. **File → Save file copy / Open file**
 round-trip a file; **File → Export data** writes the plan plus derived
 metrics for other tools.
