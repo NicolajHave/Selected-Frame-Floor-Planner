@@ -30,10 +30,10 @@ import { proposeLayout as makeProposal, type AutoLayoutOptions } from '@/lib/aut
 import { clipCount, makeClip, placeClip, readClip, writeClip } from '@/lib/clipboard';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
-import { normalizeAngle, snapToWall } from '@/geometry/wallSnap';
+import { normalizeAngle, pushToWalls, snapToWall } from '@/geometry/wallSnap';
 import { rectCorners } from '@/geometry/transform';
 import { boxOf, snapToObjects, squareAngle, type SnapGuide } from '@/geometry/objectSnap';
-import { DEFAULT_MIN_AISLE } from '@/lib/layout';
+import { DEFAULT_MIN_AISLE, innerOutline } from '@/lib/layout';
 import { setWallLength as resizeWall } from '@/geometry/walls';
 import { wallHeightNear } from '@/geometry/wallStyle';
 import {
@@ -1570,6 +1570,10 @@ export const usePlannerStore = create<PlannerState>()(
                 item.position = hit.position;
                 item.rotation = hit.rotation;
               }
+            } else if (opts?.wallSnap !== false && s.project.room?.closed) {
+              // Free-standing: placed close to a wall, it stands flush against it.
+              const inner = innerOutline(s.project.room);
+              if (inner) item.position = pushToWalls(inner, item.position, item.size, item.rotation, 12 / s.view.zoom).position;
             }
             s.project.inventory.push(item);
             s.notice = asset?.minWallHeight
@@ -1632,8 +1636,22 @@ export const usePlannerStore = create<PlannerState>()(
               const r = snapToObjects(p, box, others, 10 / s.view.zoom, s.project.minAisle ?? DEFAULT_MIN_AISLE);
               it.position = r.position;
               guides = r.guides;
+              // Near a wall (or pushed into it): flush against it, never through it.
+              const inner = s.project.room?.closed ? innerOutline(s.project.room) : null;
+              if (inner && opts?.wallSnap !== false) {
+                const w = pushToWalls(inner, it.position, it.size, it.rotation, 12 / s.view.zoom);
+                if (w.position.x !== it.position.x || w.position.y !== it.position.y) {
+                  it.position = w.position;
+                  // Keep only the alignments that still hold exactly.
+                  guides = snapToObjects(w.position, boxOf(rectCorners(w.position, it.size, it.rotation)), others, 0.5, s.project.minAisle ?? DEFAULT_MIN_AISLE).guides;
+                }
+              }
             } else {
               it.position = { x: p.x, y: p.y };
+              const inner = s.project.room?.closed ? innerOutline(s.project.room) : null;
+              if (inner && opts?.wallSnap !== false && opts?.objectSnap !== false) {
+                it.position = pushToWalls(inner, it.position, it.size, it.rotation, 12 / s.view.zoom).position;
+              }
             }
             if (guides.length || s.snapGuides.length) s.snapGuides = guides;
             touch(s.project);

@@ -76,7 +76,11 @@ URL. No environment variables are needed.
    2.4 m and need walls of at least 2.6 m. Dragged fixtures snap to the
    ones around them: edges and centres line up, and they stop exactly
    the minimum aisle (900 mm) from a neighbour beside them — orange
-   lines show what they snapped to (`Alt` places freely).
+   lines show what they snapped to. Dragged or placed close to a wall
+   (or partly into it), a free-standing fixture stands flush against the
+   wall's inside face — in a corner against both walls — so it never pokes
+   through and the layout check has nothing to say; drag it further out
+   to leave the wall. `Alt` places freely.
 8. **Several at once**: shift-click fixtures, pillars or notes, or
    shift-drag a box on the floor (`⌘A` selects all). Drag one to move
    them all; the panel lines them up (left, centre, right, top, middle,

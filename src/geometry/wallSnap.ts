@@ -70,3 +70,71 @@ export function normalizeAngle(r: number): Radians {
   const full = Math.PI * 2;
   return (((r % full) + full) % full) as Radians;
 }
+
+export interface WallPush {
+  /** Where the item's centre goes. */
+  position: Point;
+  /** The inner wall faces it now stands against (indices into the outline's edges). */
+  faces: number[];
+}
+
+/**
+ * Pulls a free-standing item flush against the inside of a wall it is
+ * near (within `reach` mm) or pushed into, without turning it — so it can
+ * stand against the wall without poking through it. In a corner it ends
+ * up against both walls. Further out than `reach`, it is left alone.
+ * `inner` is the room's inner outline (wall faces).
+ */
+export function pushToWalls(
+  inner: readonly Point[],
+  centre: Point,
+  size: { width: number; depth: number },
+  rotation: number,
+  reach: number,
+): WallPush {
+  const n = inner.length;
+  if (n < 3) return { position: centre, faces: [] };
+  const sign = signedArea([...inner]) >= 0 ? 1 : -1;
+  let c = { x: centre.x as number, y: centre.y as number };
+  const faces: number[] = [];
+  const corners = () => {
+    const hw = size.width / 2;
+    const hd = size.depth / 2;
+    const cos = Math.cos(rotation);
+    const sin = Math.sin(rotation);
+    return [[-hw, -hd], [hw, -hd], [hw, hd], [-hw, hd]].map(([x, y]) => ({ x: c.x + x! * cos - y! * sin, y: c.y + x! * sin + y! * cos }));
+  };
+  // Two rounds: the second catches the other wall in a corner.
+  for (let round = 0; round < 2; round++) {
+    let best: { i: number; shift: number; nx: number; ny: number } | null = null;
+    const pts = corners();
+    for (let i = 0; i < n; i++) {
+      if (faces.includes(i)) continue;
+      const a = inner[i]!;
+      const b = inner[(i + 1) % n]!;
+      const len = Math.hypot(b.x - a.x, b.y - a.y);
+      if (len < 1) continue;
+      const ux = (b.x - a.x) / len;
+      const uy = (b.y - a.y) / len;
+      // Inward normal of this face.
+      const nx = -uy * sign;
+      const ny = ux * sign;
+      // Only walls the item is actually beside (its span overlaps the face).
+      const along = pts.map((p) => (p.x - a.x) * ux + (p.y - a.y) * uy);
+      if (Math.max(...along) <= 1 || Math.min(...along) >= len - 1) continue;
+      // Distance of the item's nearest corner in front of the face (negative: through it).
+      const front = Math.min(...pts.map((p) => (p.x - a.x) * nx + (p.y - a.y) * ny));
+      const depth = Math.max(...pts.map((p) => (p.x - a.x) * nx + (p.y - a.y) * ny)) - front;
+      if (front > reach || front < -depth) continue;
+      if (Math.abs(front) < 0.01) {
+        faces.push(i);
+        continue;
+      }
+      if (!best || Math.abs(front) < Math.abs(best.shift)) best = { i, shift: -front, nx, ny };
+    }
+    if (!best) break;
+    c = { x: c.x + best.nx * best.shift, y: c.y + best.ny * best.shift };
+    faces.push(best.i);
+  }
+  return { position: { x: c.x as Mm, y: c.y as Mm }, faces };
+}
