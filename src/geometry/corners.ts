@@ -1,4 +1,6 @@
-import type { Corner } from '@/model/geometry';
+import type { Corner, Point } from '@/model/geometry';
+import type { RoomPolygon } from '@/model/objects';
+import type { Mm } from '@/model/units';
 
 /**
  * Interior angle at each corner, in degrees, in corner order. Only
@@ -33,4 +35,39 @@ export function cornerAngles(corners: Corner[], closed: boolean): number[] {
     angles[i] = (Math.acos(cos) * 180) / Math.PI;
   }
   return angles;
+}
+
+/**
+ * The room scaled evenly — every wall in proportion — so that corner
+ * `cornerId` follows `p`, about the corner farthest from it, which stays
+ * put. Doors and windows keep their place along their walls (in
+ * proportion) and their own size. `room` is the room as it was when the
+ * drag started.
+ */
+export function scaleRoomByCorner(room: RoomPolygon, cornerId: string, p: Point): RoomPolygon {
+  const moving = room.corners.find((c) => c.id === cornerId);
+  if (!moving || room.corners.length < 2) return room;
+  let anchor = room.corners[0]!.point;
+  let far = -1;
+  for (const c of room.corners) {
+    const d = Math.hypot(c.point.x - moving.point.x, c.point.y - moving.point.y);
+    if (d > far) {
+      far = d;
+      anchor = c.point;
+    }
+  }
+  const dx = moving.point.x - anchor.x;
+  const dy = moving.point.y - anchor.y;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1) return room;
+  // How far along the anchor → corner diagonal the pointer is.
+  const k = Math.max(0.1, ((p.x - anchor.x) * dx + (p.y - anchor.y) * dy) / len2);
+  return {
+    ...room,
+    corners: room.corners.map((c) => ({
+      ...c,
+      point: { x: (anchor.x + (c.point.x - anchor.x) * k) as Mm, y: (anchor.y + (c.point.y - anchor.y) * k) as Mm },
+    })),
+    openings: room.openings.map((o) => ({ ...o, offset: (o.offset * k) as Mm })),
+  };
 }

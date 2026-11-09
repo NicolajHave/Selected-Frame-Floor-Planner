@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { clsx } from 'clsx';
 import { ASSET_CATALOG, ASSET_CATEGORIES, type AssetEntry } from '@/lib/assetCatalog';
 import { isAccessory } from '@/lib/accessories';
@@ -22,6 +22,8 @@ export function AssetLibrary() {
   const pendingRack = usePlannerStore((s) => s.pendingRack);
   const pendingElectrical = usePlannerStore((s) => s.pendingElectrical);
   const pickElectrical = usePlannerStore((s) => s.pickElectrical);
+
+  const { open, toggle } = useOpenGroups();
 
   const armed =
     (tool === 'add-inventory' && (pendingAssetRef !== null || pendingRack !== null)) ||
@@ -49,11 +51,8 @@ export function AssetLibrary() {
         )}
       </div>
 
-      <div className="flex flex-col overflow-y-auto p-3 pb-6">
-        <section className="pb-3">
-          <h4 className="px-1 pb-2 pt-1 text-[10px] font-medium uppercase tracking-widest2 text-ink-500">
-            Wall racks
-          </h4>
+      <div className="flex flex-col gap-1 overflow-y-auto p-3 pb-6">
+        <Group id="wall-racks" title="Wall racks" open={open} toggle={toggle}>
           <button
             onClick={() => openRackBuilder()}
             className="flex w-full flex-col gap-0.5 rounded-[2px] border border-wall-200 bg-wall-50 p-2 text-left hover:border-ink-500 hover:bg-wall-100"
@@ -63,12 +62,9 @@ export function AssetLibrary() {
               Put wall units together side by side, then place them on the plan as one piece.
             </span>
           </button>
-        </section>
+        </Group>
 
-        <section>
-          <h4 className="px-1 pb-2 pt-1 text-[10px] font-medium uppercase tracking-widest2 text-ink-500">
-            Doors &amp; windows
-          </h4>
+        <Group id="openings" title="Doors & windows" count={OPENING_TYPES.length} open={open} toggle={toggle}>
           {layoutLocked && (
             <p className="px-1 pb-2 text-[11px] leading-snug text-ink-500">
               The floor layout is locked. Unlock it in the top bar to add or move doors and windows.
@@ -85,12 +81,9 @@ export function AssetLibrary() {
               />
             ))}
           </div>
-        </section>
+        </Group>
 
-        <section className="pt-4">
-          <h4 className="px-1 pb-2 text-[10px] font-medium uppercase tracking-widest2 text-ink-500">
-            Electrical &amp; notes
-          </h4>
+        <Group id="electrical" title="Electrical" count={ELECTRICAL_TYPES.length} open={open} toggle={toggle}>
           <div className="grid grid-cols-2 gap-2">
             {ELECTRICAL_TYPES.map((t) => (
               <button
@@ -120,34 +113,15 @@ export function AssetLibrary() {
                 </span>
               </button>
             ))}
-            <button
-              onClick={() => setTool('add-note')}
-              title="Place Note"
-              className={clsx(
-                'flex items-center gap-2 rounded-[2px] border bg-wall-50 px-2 py-1.5 text-left transition-colors',
-                tool === 'add-note' ? 'border-ink-900 bg-wall-100' : 'border-wall-200 hover:border-ink-500 hover:bg-wall-100',
-              )}
-            >
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[2px] border border-ink-500 bg-white text-[11px] text-ink-700">
-                ¶
-              </span>
-              <span className="flex flex-col">
-                <span className="text-[11px] font-medium text-ink-900">Note</span>
-                <span className="font-mono text-[9px] text-ink-500">text + arrow</span>
-              </span>
-            </button>
           </div>
-        </section>
+        </Group>
 
         {ASSET_CATEGORIES.map((category) => {
           // Accessories are added from the fixture they belong to, not placed alone.
           const entries = ASSET_CATALOG.filter((a) => a.category === category && !isAccessory(a.id));
           if (entries.length === 0) return null;
           return (
-            <section key={category}>
-              <h4 className="px-1 pb-2 pt-4 text-[10px] font-medium uppercase tracking-widest2 text-ink-500 first:pt-1">
-                {category}
-              </h4>
+            <Group key={category} id={`cat:${category}`} title={category} count={entries.length} open={open} toggle={toggle}>
               <div className="flex flex-col gap-2">
                 {entries.map((asset) => (
                   <AssetCard
@@ -158,11 +132,84 @@ export function AssetLibrary() {
                   />
                 ))}
               </div>
-            </section>
+            </Group>
           );
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * Which library groups are unfolded: none at first, then remembered in this
+ * browser. `all` flips the meaning of `ids` (all open except those).
+ */
+const OPEN_KEY = 'sf-planner:library-open';
+
+interface OpenGroups {
+  all: boolean;
+  ids: Set<string>;
+}
+
+function useOpenGroups() {
+  const [state, setState] = useState<OpenGroups>({ all: false, ids: new Set() });
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(OPEN_KEY);
+      if (raw) {
+        const v = JSON.parse(raw) as { all?: boolean; ids?: string[] };
+        setState({ all: !!v.all, ids: new Set(v.ids ?? []) });
+      }
+    } catch {
+      /* nothing remembered */
+    }
+  }, []);
+  const isOpen = (id: string) => (state.all ? !state.ids.has(id) : state.ids.has(id));
+  const toggle = (id: string) =>
+    setState((prev) => {
+      const ids = new Set(prev.ids);
+      if (ids.has(id)) ids.delete(id);
+      else ids.add(id);
+      try {
+        localStorage.setItem(OPEN_KEY, JSON.stringify({ all: prev.all, ids: [...ids] }));
+      } catch {
+        /* private mode: just not remembered */
+      }
+      return { all: prev.all, ids };
+    });
+  return { open: isOpen, toggle };
+}
+
+/** A library group: its heading folds it open and shut. */
+function Group({
+  id,
+  title,
+  count,
+  open,
+  toggle,
+  children,
+}: {
+  id: string;
+  title: string;
+  count?: number;
+  open: (id: string) => boolean;
+  toggle: (id: string) => void;
+  children: ReactNode;
+}) {
+  const isOpen = open(id);
+  return (
+    <section>
+      <button
+        onClick={() => toggle(id)}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-2 rounded-[2px] px-1 py-2 text-left hover:bg-wall-100"
+      >
+        <span aria-hidden className={clsx('inline-block w-2 text-[9px] text-ink-500 transition-transform', isOpen && 'rotate-90')}>▶</span>
+        <span className="flex-1 text-[10px] font-medium uppercase tracking-widest2 text-ink-700">{title}</span>
+        {count !== undefined && <span className="font-mono text-[10px] text-ink-500">{count}</span>}
+      </button>
+      {isOpen && <div className="pb-3 pt-1">{children}</div>}
+    </section>
   );
 }
 

@@ -18,6 +18,7 @@ import { GuideMarks, IssueMarks } from './LayoutMarks';
 import { SnapMarks } from './SnapMarks';
 import { planPointer } from './pointer';
 import { planHit } from '@/lib/planHit';
+import type { RoomPolygon } from '@/model/objects';
 import { useContextMenu } from '@/components/editor/PlanContextMenu';
 import { MeasureMarks } from './MeasureMarks';
 import { measurePoint, measureTargets } from '@/geometry/measureSnap';
@@ -140,7 +141,7 @@ export function Canvas() {
   // ---- pointer logic ----
   type DragKind =
     | { type: 'pan'; startX: number; startY: number; startPanX: number; startPanY: number; right?: boolean }
-    | { type: 'corner'; cornerId: string }
+    | { type: 'corner'; cornerId: string; base: RoomPolygon | null }
     | { type: 'pillar'; id: string; offset: Point }
     | { type: 'inventory'; id: string; offset: Point }
     | { type: 'rotate'; kind: 'pillar' | 'inventory'; id: string; cx: number; cy: number }
@@ -272,7 +273,9 @@ export function Canvas() {
       if (d.type === 'pan') {
         setPan(d.startPanX + (e.clientX - d.startX), d.startPanY + (e.clientY - d.startY));
       } else if (d.type === 'corner') {
-        moveCorner(d.cornerId, world);
+        // Shift: the whole room scales with the corner, in proportion.
+        if (e.shiftKey && d.base?.closed) usePlannerStore.getState().scaleRoomByCorner(d.base, d.cornerId, world);
+        else moveCorner(d.cornerId, world);
       } else if (d.type === 'pillar') {
         updatePillar(d.id, {
           position: { x: (world.x - d.offset.x) as Mm, y: (world.y - d.offset.y) as Mm },
@@ -455,7 +458,7 @@ export function Canvas() {
     setSelection({ kind: 'corner', id: cornerId });
     if (pressLocked({ kind: 'corner', id: cornerId }, e)) return;
     beginGesture();
-    drag.current = { type: 'corner', cornerId };
+    drag.current = { type: 'corner', cornerId, base: room ? (JSON.parse(JSON.stringify(room)) as RoomPolygon) : null };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
   };
 
