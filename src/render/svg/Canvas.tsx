@@ -17,6 +17,8 @@ import { ElectricalMarks, PlanNotes } from './Electrical';
 import { GuideMarks, IssueMarks } from './LayoutMarks';
 import { SnapMarks } from './SnapMarks';
 import { planPointer } from './pointer';
+import { planHit } from '@/lib/planHit';
+import { useContextMenu } from '@/components/editor/PlanContextMenu';
 import { MeasureMarks } from './MeasureMarks';
 import { measurePoint, measureTargets } from '@/geometry/measureSnap';
 import { clearanceGuides } from '@/lib/layout';
@@ -137,7 +139,7 @@ export function Canvas() {
 
   // ---- pointer logic ----
   type DragKind =
-    | { type: 'pan'; startX: number; startY: number; startPanX: number; startPanY: number }
+    | { type: 'pan'; startX: number; startY: number; startPanX: number; startPanY: number; right?: boolean }
     | { type: 'corner'; cornerId: string }
     | { type: 'pillar'; id: string; offset: Point }
     | { type: 'inventory'; id: string; offset: Point }
@@ -318,6 +320,7 @@ export function Canvas() {
       const wasEditing = d && d.type !== 'pan' && d.type !== 'marquee' && d.type !== 'locked' && d.type !== 'rect';
       drag.current = null;
       usePlannerStore.getState().clearSnapGuides();
+      if (d?.type === 'pan' && d.right && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 4) openContextMenu(e);
       if (d?.type === 'rect') {
         const rect = getRect();
         if (rect) usePlannerStore.getState().addRectRoom(d.start, eventToWorld(view, rect, e.clientX, e.clientY));
@@ -502,8 +505,28 @@ export function Canvas() {
     if (!pan) return;
     e.preventDefault();
     e.stopPropagation();
-    drag.current = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: view.pan.x, startPanY: view.pan.y };
+    drag.current = { type: 'pan', startX: e.clientX, startY: e.clientY, startPanX: view.pan.x, startPanY: view.pan.y, right: e.button === 2 };
     (svgRef.current as Element).setPointerCapture(e.pointerId);
+  };
+
+  /** A right-click that didn't pan: cancel the tool in hand, or open the menu for what's under the pointer. */
+  const openContextMenu = (e: React.PointerEvent<SVGSVGElement>) => {
+    const s = usePlannerStore.getState();
+    if (s.tool !== 'select') {
+      s.setTool('select');
+      return;
+    }
+    const rect = getRect();
+    if (!rect) return;
+    const world = eventToWorld(view, rect, e.clientX, e.clientY);
+    const under = document.elementsFromPoint(e.clientX, e.clientY);
+    const attr = (name: string) => under.map((el) => el.closest(`[${name}]`)?.getAttribute(name)).find(Boolean) ?? undefined;
+    const hit = planHit(s.project, world, 8 / view.zoom, { note: attr('data-note'), opening: attr('data-opening') });
+    if (hit.kind === 'inventory' || hit.kind === 'pillar' || hit.kind === 'note') {
+      const inSelection = selectedMembers(s).some((m) => m.kind === hit.kind && m.id === hit.id);
+      if (!inSelection) s.setSelection({ kind: hit.kind, id: hit.id });
+    }
+    useContextMenu.getState().show(e.clientX - rect.left, e.clientY - rect.top, world, hit);
   };
 
   const startMarquee = (world: Point, pointerId: number) => {

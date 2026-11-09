@@ -84,6 +84,12 @@ URL. No environment variables are needed.
    `⌘C` / `Ctrl+C` copies the selection (with accessories) and `⌘V` /
    `Ctrl+V` pastes it under the pointer — in the same plan, another
    layout or another plan in this browser.
+   **Right-click** (without dragging — a right-drag still pans) opens a
+   menu for what is under the pointer: a fixture or the selected group
+   (duplicate, copy, rotate, lock, delete), a door or window, a wall (add
+   a door, double door, window or opening right there, add a corner, wall
+   properties) or the floor (paste here, add a note or pillar, measure
+   from here, select all). With a tool in hand, right-click puts it down.
 9. **Distances and layout check**: the selected object shows its
    distance to the nearest wall or object in each direction. The panel
    (nothing selected) lists overlaps, objects in walls, blocked doors and
