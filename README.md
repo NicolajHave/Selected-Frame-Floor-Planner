@@ -120,7 +120,11 @@ URL. No environment variables are needed.
    layout tab: **Brand shop** (a welcome table with mannequins facing the
    entrance, fewer fixtures with wider aisles, signs on the racks, the
    logo opposite the entrance) or **Volume shop** (wall racks along every
-   free wall and rows of floor racks). Every fixture keeps at least the
+   free wall and rows of floor racks). From 30 m² every proposal has an
+   entrance / impact zone — the Iconic Table (only ever one) on a carpet
+   facing the entrance — and a Volume Table (two from 60 m²); the number
+   of floor racks follows the shop's size, and no wall racks go against
+   transparent walls. Every fixture keeps at least the
    minimum aisle (900 mm by default) to the next one and to the walls,
    doorways stay clear, and the result passes the layout check; then
    adjust it like any other layout.
