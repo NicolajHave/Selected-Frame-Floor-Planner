@@ -122,7 +122,10 @@ URL. No environment variables are needed.
    logo opposite the entrance) or **Volume shop** (wall racks along every
    free wall and rows of floor racks). From 30 m² every proposal has an
    entrance / impact zone — the Iconic Table (only ever one) on a carpet
-   facing the entrance — and a Volume Table (two from 60 m²); the number
+   facing the entrance with a mannequin either side of it on the carpet —
+   and a Volume Table (two from 60 m²); the logo hangs centred over the
+   leftmost wall unit of the wall facing the entrance; volume shops pair
+   their floor racks end to end with the aisle around the pair; the number
    of floor racks follows the shop's size, and no wall racks go against
    transparent walls. Every fixture keeps at least the
    minimum aisle (900 mm by default) to the next one and to the walls,
