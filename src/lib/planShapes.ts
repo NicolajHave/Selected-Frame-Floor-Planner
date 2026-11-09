@@ -39,7 +39,10 @@ export function itemPlanShape(
   const extra: Pt[][] = [];
   for (const p of placeAccessories(item)) {
     const s = planShape(p.asset.id);
-    if (s) extra.push(...s.fill.map((r) => r.map(([x, y]) => [x + p.x, y + p.y] as Pt)));
+    if (!s) continue;
+    const c = Math.cos(p.rot);
+    const n = Math.sin(p.rot);
+    extra.push(...s.fill.map((r) => r.map(([x, y]) => [x * c - y * n + p.x, x * n + y * c + p.y] as Pt)));
   }
   return { ...base, extra };
 }
