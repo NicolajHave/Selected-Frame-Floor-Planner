@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { proposeLayout } from '@/lib/autoLayout';
+import { entrance, proposeLayout } from '@/lib/autoLayout';
 import { layoutIssues } from '@/lib/layout';
 import type { Project } from '@/model/project';
 import type { Opening, RoomPolygon } from '@/model/objects';
@@ -110,8 +110,9 @@ test('floor racks are held to the size of the shop', () => {
   const v = proposeLayout(shop, { style: 'volume', aisle: 900, wallRacks: true }).inventory;
   const b = proposeLayout(shop, { style: 'brand', aisle: 900, wallRacks: true }).inventory;
   const racks = (inv: { assetRef?: string }[]) => inv.filter((i) => i.assetRef?.startsWith('105-06-')).length;
-  expect(racks(v)).toBeLessThanOrEqual(Math.floor(108 / 12));
-  expect(racks(b)).toBeLessThanOrEqual(Math.floor(108 / 25));
+  expect(racks(v)).toBeLessThanOrEqual(Math.floor(108 / 10));
+  expect(racks(b)).toBeLessThanOrEqual(Math.floor(108 / 18));
+  expect(racks(b)).toBeGreaterThanOrEqual(4);
   expect(racks(b)).toBeLessThan(racks(v));
 });
 
@@ -164,16 +165,111 @@ test('the logo hangs centred over the leftmost wall unit on its wall', () => {
   expect(logo.position.x).toBeCloseTo(leftmost.x, 3);
 });
 
-test('volume racks stand in pairs, end to end, with the aisle around each pair', () => {
+test('volume racks stand in pairs, end to end, with the aisle around each pair; single racks fill what is left', () => {
   const inv = proposeLayout(shop, { style: 'volume', aisle: 900, wallRacks: true }).inventory;
   const racks = inv.filter((i) => i.assetRef?.startsWith('105-06-'));
-  expect(racks.length).toBeGreaterThanOrEqual(2);
+  let paired = 0;
   for (const r of racks) {
     const o = rectCorners(r.position, r.size, r.rotation);
     const touching = racks.filter((x) => x !== r && outlineGap(o, rectCorners(x.position, x.size, x.rotation)).distance <= 1);
-    expect(touching).toHaveLength(1);
+    expect(touching.length).toBeLessThanOrEqual(1);
+    paired += touching.length;
   }
+  expect(paired).toBeGreaterThanOrEqual(4);
+  expect(racks.length).toBeGreaterThan(paired);
   expect(layoutIssues({ ...shop, inventory: inv }, 900)).toEqual([]);
+});
+
+// A 55 m² shop drawn at an angle: glass front on the right, a double door to
+// the stock room on the left, a single door and a window at the top.
+function angledShop(): Project {
+  const corners = [[0, 0], [4052, 891], [9168, 2400], [5978, 7602], [-1250, 7400]];
+  const opening = (id: string, kind: Opening['kind'], wall: string, offset: number, width: number): Opening => ({
+    id, kind, wallStartCornerId: wall, offset: offset as Mm, width: width as Mm, height: 2100 as Mm,
+    sillHeight: (kind === 'window' ? 900 : 0) as Mm, hinge: 'start', swing: 'out',
+  });
+  return project({
+    id: 'r', closed: true, wallThickness: 120 as Mm, wallHeight: 2800 as Mm,
+    corners: corners.map(([x, y], i) => ({ id: `c${i}`, point: { x: x as Mm, y: y as Mm } })),
+    openings: [opening('win', 'window', 'c0', 2350, 1800), opening('d1', 'door', 'c1', 2660, 900), opening('dd', 'double-door', 'c4', 5350, 1700)],
+    walls: { c2: { transparent: true } },
+  });
+}
+
+test('the entrance: a glass wall before any door, double doors and passages before single doors', () => {
+  // Glass front without a door in it: the middle of the glass, facing in.
+  const angled = angledShop().room!;
+  const front = entrance(angled)!;
+  expect(front.center.x).toBeCloseTo((9168 + 5978) / 2, 0);
+  expect(front.center.y).toBeCloseTo((2400 + 7602) / 2, 0);
+  expect(front.nx).toBeLessThan(0); // into the shop, to the left
+
+  // A door in the glass is the entrance, even with a wider door elsewhere.
+  const withDoor = room(12000, 9000, [
+    { ...door('c0', 3000, 1000), id: 'in-glass', kind: 'door' },
+    { ...door('c2', 6000, 2400), id: 'stock' },
+  ]);
+  withDoor.walls = { c0: { transparent: true } };
+  expect(entrance(withDoor)!.center).toEqual({ x: 3000, y: 0 });
+
+  // No glass: the double door wins over a wider single door.
+  const doors = room(12000, 9000, [
+    { ...door('c0', 3000, 1300), id: 'single', kind: 'door' },
+    { ...door('c2', 6000, 1200), id: 'double' },
+  ]);
+  expect(entrance(doors)!.center).toEqual({ x: 6000, y: 9000 });
+  // Only single doors: the widest.
+  expect(entrance(room(12000, 9000, [{ ...door('c0', 3000, 900), kind: 'door' }]))!.center).toEqual({ x: 3000, y: 0 });
+  expect(entrance(room(12000, 9000))).toBeNull();
+});
+
+test('a shop at an angle: the impact zone is at the glass front, with both mannequins and floor racks', () => {
+  const shop55 = angledShop();
+  for (const style of ['brand', 'volume'] as const) {
+    const inv = proposeLayout(shop55, { style, aisle: 900, wallRacks: true }).inventory;
+    expect(layoutIssues({ ...shop55, inventory: inv }, 900)).toEqual([]);
+    expect(inv.filter((i) => i.assetRef?.startsWith('105-06-')).length).toBeGreaterThanOrEqual(2);
+    expect(inv.filter((i) => i.assetRef?.startsWith('112-18'))).toHaveLength(2);
+    expect(inv.filter((i) => i.assetRef === '105-17-001')).toHaveLength(1);
+    // The Iconic Table is nearer the glass front than the stock-room double door.
+    const table = inv.find((i) => i.assetRef === '105-17-007')!;
+    const toGlass = Math.hypot(table.position.x - 7573, table.position.y - 5001);
+    const toStockDoor = Math.hypot(table.position.x + 367, table.position.y - 2125);
+    expect(toGlass).toBeLessThan(toStockDoor);
+    // No wall rack on the glass.
+    expect(inv.filter((i) => i.modules && i.position.x > 6500 && i.position.y > 3500)).toEqual([]);
+  }
+});
+
+test('the logo prefers a wall rack of two or more units, centred over its leftmost unit', () => {
+  // Facing the entrance (top wall) only single units fit between the windows; the side walls take longer racks.
+  const window = (id: string, offset: number): Opening => ({ ...door('c0', offset, 1500), id, kind: 'window', sillHeight: 900 as Mm });
+  const r = room(9000, 8000, [door('c2', 4500), window('w1', 2700), window('w2', 6300)]);
+  const inv = proposeLayout(project(r), { style: 'brand', aisle: 900, wallRacks: true }).inventory;
+  const top = inv.filter((i) => i.modules && i.position.y < 1000);
+  expect(top.length).toBeGreaterThan(0);
+  expect(top.every((i) => i.modules!.length === 1)).toBe(true);
+  const logo = inv.find((i) => i.assetRef?.startsWith('105-13'))!;
+  const under = inv
+    .filter((i) => i.modules)
+    .sort((a, b) => Math.hypot(a.position.x - logo.position.x, a.position.y - logo.position.y) - Math.hypot(b.position.x - logo.position.x, b.position.y - logo.position.y))[0]!;
+  expect(under.modules!.length).toBeGreaterThanOrEqual(2);
+  // Centred over that rack's leftmost unit, as seen from inside the shop.
+  const rx = { x: Math.cos(under.rotation), y: Math.sin(under.rotation) };
+  const centres = rackSlots(under.modules!).map((s) => ({
+    x: under.position.x + rx.x * s.x - rx.y * s.y,
+    y: under.position.y + rx.y * s.x + rx.x * s.y,
+  }));
+  const leftmost = centres.sort((a, b) => a.x * rx.x + a.y * rx.y - (b.x * rx.x + b.y * rx.y))[0]!;
+  const alongWall = Math.abs((logo.position.x - leftmost.x) * rx.x + (logo.position.y - leftmost.y) * rx.y);
+  expect(alongWall).toBeLessThan(1);
+
+  // With only single units anywhere, it hangs over a single unit.
+  const tight = room(4200, 4200, [door('c2', 2100, 1200)]);
+  const small = proposeLayout(project(tight), { style: 'brand', aisle: 900, wallRacks: true }).inventory;
+  if (small.some((i) => i.modules) && small.every((i) => !i.modules || i.modules.length === 1)) {
+    expect(small.some((i) => i.assetRef?.startsWith('105-13'))).toBe(true);
+  }
 });
 
 test('a logo in every proposal with a solid wall: LED from 30 m², stainless steel below', () => {

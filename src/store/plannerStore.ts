@@ -1206,16 +1206,21 @@ export const usePlannerStore = create<PlannerState>()(
               s.notice = { id: ++noticeSeq, tone: 'warning', message: result.problem };
               return;
             }
-            if ((s.project.variants?.length ?? 0) >= variants.MAX_VARIANTS) {
+            // An empty layout is filled where it is; otherwise the proposal
+            // gets its own tab and the layout on screen stays as it was.
+            const inPlace = current.inventory.length === 0;
+            if (!inPlace && (s.project.variants?.length ?? 0) >= variants.MAX_VARIANTS) {
               s.notice = info(`Up to ${variants.MAX_VARIANTS} layouts per plan. Delete one to make room for the proposal.`);
               return;
             }
             record(s);
             const base = opts.style === 'brand' ? 'Proposal – brand shop' : 'Proposal – volume shop';
-            const taken = new Set((s.project.variants ?? []).map((v) => v.name));
             let name = base;
-            for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
-            variants.addVariant(s.project as Project, 'empty', name);
+            if (!inPlace) {
+              const taken = new Set((s.project.variants ?? []).map((v) => v.name));
+              for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
+              variants.addVariant(s.project as Project, 'empty', name);
+            }
             s.project.inventory = result.inventory;
             s.selection = null;
             s.multi = [];
@@ -1223,7 +1228,7 @@ export const usePlannerStore = create<PlannerState>()(
             const floor = result.inventory.filter((i) => !i.modules).length;
             const racks = result.inventory.length - floor;
             s.notice = info(
-              `${name}: ${floor} fixtures${racks ? ` and ${racks} wall rack${racks === 1 ? '' : 's'}` : ''}, at least ${Math.round(opts.aisle)} mm apart. Your own layout is unchanged in its tab.`,
+              `${name}: ${floor} fixtures${racks ? ` and ${racks} wall rack${racks === 1 ? '' : 's'}` : ''}, at least ${Math.round(opts.aisle)} mm apart.${inPlace ? ' Adjust it like any other layout.' : ' Your own layout is unchanged in its tab.'}`,
             );
             touch(s.project);
           }),

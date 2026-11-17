@@ -22,6 +22,9 @@ export function VariantBar() {
   const [comparing, setComparing] = useState(false);
   const [proposing, setProposing] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
+  // Offered up front while the shop is empty; once there are fixtures it
+  // steps aside (it is still under "+", as a new layout).
+  const canPropose = !readOnly && !!project.room?.closed && project.inventory.length === 0;
 
   useEffect(() => {
     if (!menu) return;
@@ -95,6 +98,18 @@ export function VariantBar() {
             Compare
           </Chip>
         </>
+      )}
+      {canPropose && (
+        <Chip
+          active
+          onClick={() => {
+            setMenu(null);
+            setProposing(true);
+          }}
+          title="Let the planner place fixtures in the empty room: a brand shop or a volume shop, with your minimum aisle"
+        >
+          Automatic proposal
+        </Chip>
       )}
 
       {menu === 'add' && (
