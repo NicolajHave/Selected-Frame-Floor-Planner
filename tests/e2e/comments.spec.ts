@@ -71,7 +71,7 @@ test('comments need a cloud plan; colleagues pin, post and resolve them', async 
 test('someone with a view-only link comments under their name', async ({ page, context }) => {
   const plan = { schemaVersion: 1, id: 'p', name: 'Store 12', createdAt: '', updatedAt: '', units: 'mm', room: null, pillars: [], inventory: [] };
   const id = fake.seed(ME, 'Store 12', plan);
-  fake.links.set('tokcomments', { project_id: id, created_at: new Date().toISOString(), created_by_email: ME, revoked: false });
+  fake.links.set('tokcomments', { project_id: id, created_at: new Date().toISOString(), created_by_email: ME, revoked: false, expires_at: new Date(Date.now() + 864e5).toISOString() });
   fake.comments.push({
     id: 'c-old', project_id: id, author_name: ME, author_email: ME, via_link: false, body: 'Here is the first layout',
     x: null, y: null, variant_id: null, created_at: new Date(Date.now() - 60_000).toISOString(), resolved_at: null, resolved_by_email: null,

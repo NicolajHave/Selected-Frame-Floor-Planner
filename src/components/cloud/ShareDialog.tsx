@@ -8,6 +8,9 @@ import { Dialog, ErrorText, inputClass } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { RoleBadge, when } from './ProjectsDialog';
 
+/** "17 Dec" — the day a link stops working. */
+const day = (iso: string) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+
 type MemberRole = 'editor' | 'viewer';
 
 export function ShareDialog({ onClose }: { onClose: () => void }) {
@@ -145,16 +148,25 @@ export function ShareDialog({ onClose }: { onClose: () => void }) {
               </Button>
             </div>
             <p className="text-[11px] leading-relaxed text-ink-500">
-              Anyone with a link can view this plan without signing in — e.g. the store or the installer. Revoke
-              it when they no longer need it.
+              Anyone with a link can view this plan without signing in — e.g. the store or the installer. A link
+              works for 30 days; renew it to give it 30 more, or revoke it when they no longer need it.
             </p>
             {links && links.length > 0 && (
               <ul className="flex flex-col divide-y divide-wall-200" data-testid="share-links">
                 {links.map((l) => (
                   <li key={l.token} className="flex items-center gap-2 py-2">
                     <span className="flex-1 truncate font-mono text-[11px] text-ink-700" title={shareUrl(l.token)}>
-                      …{l.token.slice(-8)} · {when(l.created_at)}
+                      …{l.token.slice(-8)} · {l.expires_at ? `expires ${day(l.expires_at)}` : when(l.created_at)}
                     </span>
+                    {l.expires_at && (
+                      <Button
+                        variant="ghost"
+                        title="Give this link 30 more days from today"
+                        onClick={() => act(() => cloud.renewLink(l.token))}
+                      >
+                        Renew
+                      </Button>
+                    )}
                     <Button variant="ghost" onClick={() => copy(l.token)}>
                       {copied === l.token ? 'Copied' : 'Copy link'}
                     </Button>
