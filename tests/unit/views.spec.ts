@@ -49,7 +49,7 @@ const project: Project = {
   pillars: [],
   inventory: [
     item('logo', '105-13-001', 5000, 70, [1200, 20, 225]), // hangs from 2.4 m
-    item('shelves', '105-99-004', 2000, 320, [1496, 517, 2288]),
+    item('shelves', '105-99-004', 2000, 320, [1506, 517, 2288]),
     item('rack', '105-06-001', 5000, 3500, [1310, 500, 1758]), // middle of the room
   ],
 };

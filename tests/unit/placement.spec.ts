@@ -6,6 +6,7 @@ import { itemMount, rackContents, rackSize, rackSlots, rackSummary } from '@/lib
 import type { ElectricalPoint, InventoryItem, Opening, RoomPolygon } from '@/model/objects';
 import { electricalAnchor, reanchorElectrical, wallAnchorAt } from '@/geometry/electrical';
 import type { Mm, Radians } from '@/model/units';
+import { migrate } from '@/lib/schema';
 
 const P = (x: number, y: number) => ({ x: x as Mm, y: y as Mm });
 
@@ -88,12 +89,17 @@ test.describe('wall settings', () => {
 });
 
 test.describe('wall racks', () => {
-  const modules = ['105-99-003', '105-99-004', '105-99-010']; // 1496×434, 1496×517, 810×517
+  const modules = ['105-99-003', '105-99-004', '105-99-010']; // 1506×434, 1506×517, 810×517
 
-  test('units line up left to right with their backs together', () => {
-    expect(rackSize(modules)).toEqual({ width: 3802, depth: 517, height: 2288 });
+  test('units line up left to right with their backs together, sharing the uprights between them', () => {
+    // 1506 + 1506 + 810, less the 95 mm pair of uprights at each of the two joins.
+    expect(rackSize(modules)).toEqual({ width: 3632, depth: 517, height: 2288 });
     const slots = rackSlots(modules);
-    expect(slots.map((s) => s.x)).toEqual([-1153, 343, 1496]);
+    // 1411 mm from one 1400 unit to the next; neighbours overlap by the shared uprights.
+    expect(slots.map((s) => s.x)).toEqual([-1063, 348, 1411]);
+    expect(rackSize(['105-99-004'])).toMatchObject({ width: 1506 });
+    expect(rackSize(['105-99-004', '105-99-004'])).toMatchObject({ width: 2917 });
+    expect(rackSize(['105-99-010', '105-99-010'])).toMatchObject({ width: 1525 });
     // The shallower sidehang sits back against the wall.
     expect(slots.map((s) => s.y)).toEqual([-41.5, 0, 0]);
     expect(rackSummary(modules)).toMatchObject({ units: 3, hangers: 35 });
@@ -146,3 +152,24 @@ test.describe('electrical points', () => {
     expect(moved).toMatchObject({ wallStartCornerId: 'k0', offset: 6000 });
   });
 });
+
+test('plans saved before racks shared their uprights get the new rack widths when opened', () => {
+  const modules = ['105-99-004', '105-99-004', '105-99-010'];
+  const old = {
+    id: 'rack', type: 'inventory', name: 'Wall rack (3 units)', category: 'Wall rack', modules,
+    position: { x: 5000, y: 300 }, size: { width: 3802, depth: 517, height: 2288 }, rotation: 0,
+  };
+  const single = { ...old, id: 'unit', modules: undefined, assetRef: '105-99-004', size: { width: 1496, depth: 517, height: 2288 } };
+  const p = migrate({
+    schemaVersion: 1, id: 'p', name: 'Shop', createdAt: '', updatedAt: '', units: 'mm', room: null, pillars: [],
+    inventory: [old, single],
+    variants: [{ id: 'v', name: 'B', inventory: [old] }],
+  });
+  // The rack keeps its centre and takes the width its units now add up to.
+  expect(p.inventory[0]!.size.width).toBe(1506 + 1506 + 810 - 2 * 95);
+  expect(p.inventory[0]!.position).toEqual({ x: 5000, y: 300 });
+  expect(p.variants![0]!.inventory![0]!.size.width).toBe(3632);
+  // A single unit is left as it was saved.
+  expect(p.inventory[1]!.size.width).toBe(1496);
+});
+

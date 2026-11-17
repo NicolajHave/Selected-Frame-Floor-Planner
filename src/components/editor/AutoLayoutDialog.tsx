@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { clsx } from 'clsx';
 import { usePlannerStore } from '@/store/plannerStore';
 import { DEFAULT_MIN_AISLE } from '@/lib/layout';
-import type { ShopStyle } from '@/lib/autoLayout';
+import { entrance, type ShopStyle } from '@/lib/autoLayout';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 
@@ -26,6 +26,7 @@ export function AutoLayoutDialog({ onClose }: { onClose: () => void }) {
   const minAisle = usePlannerStore((s) => s.project.minAisle ?? DEFAULT_MIN_AISLE);
   const hasRoom = usePlannerStore((s) => !!s.project.room?.closed);
   const empty = usePlannerStore((s) => s.project.inventory.length === 0);
+  const hasEntrance = usePlannerStore((s) => !!s.project.room?.closed && !!entrance(s.project.room));
   const [style, setStyle] = useState<ShopStyle>('brand');
   const [aisle, setAisle] = useState(String(minAisle));
   const [wallRacks, setWallRacks] = useState(true);
@@ -90,6 +91,12 @@ export function AutoLayoutDialog({ onClose }: { onClose: () => void }) {
         </div>
         {!valid && <p className="text-[11px] text-red-700">Give an aisle between 600 and 3000 mm.</p>}
         {!hasRoom && <p className="text-[11px] text-red-700">Draw and close the room first.</p>}
+        {hasRoom && !hasEntrance && (
+          <p className="text-[11px] leading-relaxed text-amber-700" data-testid="no-entrance">
+            This room has no entrance yet, so the proposal comes without the entrance zone (Iconic Table, carpet and
+            mannequins). Mark the shop front as a glass wall in its wall properties, or add a door, and try again.
+          </p>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>

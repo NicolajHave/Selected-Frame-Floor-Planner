@@ -6,4 +6,5 @@ ID = '105-06-011'
 
 
 def build():
-    jeans_rack([(-220, 180), (180, 600)], posts=[-220, 180])
+    # Both shelf sections from the thick sign post (the left end) inwards, as in the catalog.
+    jeans_rack([(-600, -180), (-180, 220)], posts=[-180, 220])

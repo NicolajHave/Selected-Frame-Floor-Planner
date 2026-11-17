@@ -4,7 +4,9 @@ drawings (105-99-005-C, -007-B, -009-A, -010-A): every unit is the same
 frame, whatever its depth. Each side is a pair of 40 mm uprights (95 mm
 over both) standing 345–388 mm from the wall on arms at the top and the
 bottom; top and bottom beams, any cross beams and the slotted sidehang bar
-all run straight between the uprights, in their plane. Only the contents
+all run straight between the uprights, in their plane. A 1400 unit is
+1506 mm over its uprights (1316 clear), a 700 unit 810 (620 clear); in a
+run, neighbours share the pair of uprights between them. Only the contents
 reach further forward: shelves (117–517 mm from the wall), the mirror box,
 the screen, the jeans unit. 2288 mm high; the wall is at +Y (the back of
 the catalog footprint) and the room side faces -Y.
@@ -24,6 +26,10 @@ SHELF_FROM, SHELF_TO = 117, 517   # shelves, mm from the wall
 SHELF_T = 19
 SHELF_TOPS = (484, 844, 1204, 1564)
 HANG_Z = 1865     # the slotted sidehang bar
+# Two levels of sidehang (catalog renders; no drawing): the upper garments
+# hang right under the top beam, the lower bar is at mid height.
+TOP_HANG_Z = H - 9 - 40 - 20
+MID_HANG_Z = 1140
 
 
 class Unit:
@@ -128,14 +134,18 @@ class Unit:
             self.bolts_z.append(top - SHELF_T - 20)
         return self
 
-    def mirror_box(self, width=300, depth=104, height=1772):
-        """Steel box with a full-height mirror on its front, at the left uprights, 330–434 mm from the wall."""
-        x0 = self.left
+    def mirror_box(self, width=300, depth=100, height=1772, inset=65.4):
+        """
+        Steel box with a full-height mirror on its front (105-99-007-B):
+        300 × 100 × 1772, 65.4 mm in from the left uprights and 334–434 mm
+        from the wall. The sidehang bar passes over it, the full width.
+        """
+        x0 = self.left + inset
         z0 = 87
-        y_front = self.from_wall(330 + depth)
+        y_front = self.from_wall(434)
         box('mirror.box', (width, depth, height), (x0 + width / 2, y_front + depth / 2, z0 + height / 2), mat='steel', bevel=1)
         box('mirror.glass', (width - 30, 2, height - 60), (x0 + width / 2, y_front - 1, z0 + height / 2), mat='mirror', bevel=0)
-        return x0 + width
+        return self
 
     def jeans_unit(self, width=872, depth=400, height=1774):
         """The 3 mm stainless jeans unit: two columns of pigeonholes either side of a light panel."""
@@ -163,10 +173,13 @@ class Unit:
                 box(f'jeans.shelf{k}.{j}', (b - a, depth - t, t), ((a + b) / 2, yc - t / 2, z), bevel=0.4)
         return x0
 
-    def screen(self, width=968, depth=55, height=1690):
-        """A digital screen in a steel housing in front of the uprights (390–445 mm from the wall), 318–2008 mm up."""
+    def screen(self, width=968, depth=100, height=1690):
+        """
+        A digital screen in a steel housing, 100 mm deep (price list): from
+        the back of the uprights to 445 mm from the wall, 318–2008 mm up.
+        """
         z0 = 318
-        y_front = self.from_wall(390 + depth)
+        y_front = self.from_wall(POST_BACK + depth)
         box('screen.housing', (width, depth, height), (0, y_front + depth / 2, z0 + height / 2), mat='steel_dark', bevel=1.5)
         box('screen.glass', (width - 24, 2, height - 24), (0, y_front - 1, z0 + height / 2), mat='screen', bevel=0)
         self.beam(425)

@@ -62,6 +62,8 @@ test('an empty shop offers the proposal up front; it fills the shop and then ste
   await button.click();
   const dialog = page.getByRole('dialog', { name: 'Automatic layout' });
   await expect(dialog).not.toContainText('as a new layout tab');
+  // A room without a glass front or a door: the proposal says what it will miss.
+  await expect(dialog.getByTestId('no-entrance')).toContainText('no entrance yet');
   await dialog.getByRole('button', { name: 'Make proposal' }).click();
 
   // The empty layout itself is filled: no extra tab, and the button is gone.

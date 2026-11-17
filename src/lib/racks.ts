@@ -21,11 +21,19 @@ export function rackAssets(modules: readonly string[]): AssetEntry[] {
   return modules.map((id) => findAsset(id)).filter((a): a is AssetEntry => !!a);
 }
 
-/** Combined footprint: widths add up; depth and height are the largest unit's. */
+/**
+ * A wall unit's pair of uprights at each end is 95 mm across. Standing
+ * alone a unit has a pair at both ends; in a rack, neighbours share the
+ * pair between them (the "centre" column), so every unit after the first
+ * adds its width less one pair: 1411 mm for a 1400 unit, 715 for a 700.
+ */
+export const SHARED_POST = 95;
+
+/** Combined footprint: widths add up less the shared uprights; depth and height are the largest unit's. */
 export function rackSize(modules: readonly string[]): Size3D {
   const assets = rackAssets(modules);
   return {
-    width: mm(assets.reduce((sum, a) => sum + a.size.width, 0)),
+    width: mm(assets.reduce((sum, a) => sum + a.size.width, 0) - SHARED_POST * Math.max(0, assets.length - 1)),
     depth: mm(Math.max(0, ...assets.map((a) => a.size.depth))),
     height: mm(Math.max(0, ...assets.map((a) => a.size.height))),
   };
@@ -39,14 +47,15 @@ export interface RackSlot {
   y: number;
 }
 
-/** Where each unit sits inside the rack. */
+/** Where each unit sits inside the rack; neighbours overlap by the uprights they share. */
 export function rackSlots(modules: readonly string[]): RackSlot[] {
   const assets = rackAssets(modules);
   const size = rackSize(modules);
   let left = -size.width / 2;
   return assets.map((asset) => {
     const slot = { asset, x: left + asset.size.width / 2, y: -size.depth / 2 + asset.size.depth / 2 };
-    left += asset.size.width;
+    // The next unit starts on this one's right-hand uprights.
+    left += asset.size.width - SHARED_POST;
     return slot;
   });
 }
