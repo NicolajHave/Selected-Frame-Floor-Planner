@@ -142,6 +142,49 @@ test('invite a colleague and share a view-only link', async ({ page, context }) 
   await expect(visitor.getByRole('alert').filter({ hasText: 'revoked' })).toContainText('revoked or does not exist');
 });
 
+test('a view-only link works for 30 days; renewing gives it 30 more, and every PDF renews its link', async ({ page, context }) => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const daysLeft = (token: string) => (Date.parse(fake.links.get(token)!.expires_at) - Date.now()) / DAY;
+  await drawRoom(page);
+  await signIn(page, ME);
+  const cloudDialog = await openCloudDialog(page);
+  await cloudDialog.getByRole('button', { name: 'Save to cloud' }).click();
+  await expect(cloudDialog).toContainText('syncs automatically');
+  await page.keyboard.press('Escape');
+
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  const share = page.getByRole('dialog', { name: /Share/ });
+  await share.getByRole('button', { name: 'Create link' }).click();
+  await expect(share.getByTestId('share-links')).toContainText('expires');
+  const [token] = [...fake.links.keys()];
+  expect(daysLeft(token!)).toBeGreaterThan(29.9);
+
+  // Two days before it runs out, Renew gives it a new month.
+  fake.links.get(token!)!.expires_at = new Date(Date.now() + 2 * DAY).toISOString();
+  await share.getByRole('button', { name: 'Renew' }).click();
+  await expect.poll(() => daysLeft(token!)).toBeGreaterThan(29.9);
+  await page.keyboard.press('Escape');
+
+  // A PDF carries the same link and gives it 30 days from the export.
+  fake.links.get(token!)!.expires_at = new Date(Date.now() + 2 * DAY).toISOString();
+  const pages = await pdfText((await exportPdf(page, { views: false })).file);
+  expect(pages[0]!.replace(/\s/g, '')).toContain(`/?share=${token}&view=3d`);
+  expect(fake.links.size).toBe(1);
+  expect(daysLeft(token!)).toBeGreaterThan(29.9);
+
+  // Past its date the link says so, and it is gone from the list.
+  fake.links.get(token!)!.expires_at = new Date(Date.now() - DAY).toISOString();
+  const visitor = await context.newPage();
+  await visitor.route(/supabase\.co/, (r) => r.abort());
+  await fake.install(visitor);
+  await visitor.goto(`/?share=${token}`);
+  await expect(visitor.getByRole('alert').filter({ hasText: 'expired' })).toContainText('This view-only link has expired');
+  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  await expect(share.getByRole('button', { name: 'Create link' })).toBeVisible();
+  await expect(share.getByTestId('share-links')).toHaveCount(0);
+});
+
 test('a conflicting save offers to load the other version', async ({ page }) => {
   const room = await drawRoom(page);
   await signIn(page, ME);

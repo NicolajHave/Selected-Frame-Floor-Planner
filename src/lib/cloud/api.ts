@@ -36,6 +36,8 @@ export interface ShareLink {
   token: string;
   created_at: string;
   created_by_email: string;
+  /** When the link stops working (30 days after it was made or renewed). */
+  expires_at?: string;
 }
 
 export interface CloudVersion {
@@ -53,6 +55,8 @@ export interface CloudVersionData extends CloudVersion {
 }
 
 export interface SharedProject {
+  /** Set instead of the plan when the link is past its 30 days. */
+  expired?: boolean;
   name: string;
   data: Project;
   updated_at: string;
@@ -90,6 +94,8 @@ export const cloud = {
   listLinks: (id: string) => call<ShareLink[]>('fp_list_links', { p_id: id }),
   createLink: (id: string) => call<string>('fp_create_link', { p_id: id }),
   revokeLink: (token: string) => call<void>('fp_revoke_link', { p_token: token }),
+  /** Gives the link 30 more days from now; returns the new expiry. */
+  renewLink: (token: string) => call<string>('fp_renew_link', { p_token: token }),
   getShared: (token: string) => call<SharedProject | null>('fp_get_shared_project', { p_token: token }),
 };
 

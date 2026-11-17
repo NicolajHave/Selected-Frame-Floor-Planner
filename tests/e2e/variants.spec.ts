@@ -83,7 +83,7 @@ test('someone with a view-only link can look at every layout', async ({ page }) 
     activeVariantId: 'va',
   };
   const id = fake.seed('owner@bestseller.com', 'Store 12', plan);
-  fake.links.set('tokvariants', { project_id: id, created_at: new Date().toISOString(), created_by_email: 'owner@bestseller.com', revoked: false });
+  fake.links.set('tokvariants', { project_id: id, created_at: new Date().toISOString(), created_by_email: 'owner@bestseller.com', revoked: false, expires_at: new Date(Date.now() + 864e5).toISOString() });
   await page.goto('/?share=tokvariants');
   await expect(tab(page, 'Brand shop')).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('button', { name: 'Add a layout' })).toHaveCount(0);

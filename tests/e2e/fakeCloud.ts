@@ -61,6 +61,9 @@ function emailFromAuth(header: string | undefined): string | null {
   }
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const in30Days = () => new Date(Date.now() + 30 * DAY_MS).toISOString();
+
 class RpcError extends Error {
   constructor(message: string, public code = 'P0001') {
     super(message);
@@ -70,7 +73,8 @@ class RpcError extends Error {
 export class FakeCloud {
   projects = new Map<string, Project>();
   members = new Map<string, Map<string, 'editor' | 'viewer'>>();
-  links = new Map<string, { project_id: string; created_at: string; created_by_email: string; revoked: boolean }>();
+  /** View-only links; `expires_at` is 30 days after the link was made or renewed. */
+  links = new Map<string, { project_id: string; created_at: string; created_by_email: string; revoked: boolean; expires_at: string }>();
   versions = new Map<string, Version[]>();
   /** The fp-drawings bucket: object name → bytes and who uploaded them. */
   files = new Map<string, { bytes: Buffer; owner: string; contentType: string }>();
@@ -133,9 +137,13 @@ export class FakeCloud {
       .map(({ data: _d, ...rest }) => rest);
   }
 
+  private expired(l: { expires_at: string }): boolean {
+    return Date.parse(l.expires_at) <= Date.now();
+  }
+
   private linkProject(token: string): string {
     const l = this.links.get(token);
-    if (!l || l.revoked) throw new RpcError('This link no longer works.', 'P0002');
+    if (!l || l.revoked || this.expired(l)) throw new RpcError('This link no longer works.', 'P0002');
     return l.project_id;
   }
 
@@ -324,14 +332,23 @@ export class FakeCloud {
       case 'fp_list_links': {
         this.require(email, args.p_id, ['owner', 'editor']);
         return [...this.links]
-          .filter(([, l]) => l.project_id === args.p_id && !l.revoked)
-          .map(([token, l]) => ({ token, created_at: l.created_at, created_by_email: l.created_by_email }));
+          .filter(([, l]) => l.project_id === args.p_id && !l.revoked && !this.expired(l))
+          .map(([token, l]) => ({ token, created_at: l.created_at, created_by_email: l.created_by_email, expires_at: l.expires_at }));
       }
       case 'fp_create_link': {
         this.require(email, args.p_id, ['owner', 'editor']);
         const token = `tok${++this.seq}xxxxxxxxxxxxxxxxxxxx`;
-        this.links.set(token, { project_id: args.p_id, created_at: new Date().toISOString(), created_by_email: email!, revoked: false });
+        this.links.set(token, {
+          project_id: args.p_id, created_at: new Date().toISOString(), created_by_email: email!, revoked: false, expires_at: in30Days(),
+        });
         return token;
+      }
+      case 'fp_renew_link': {
+        const l = this.links.get(args.p_token);
+        if (!l || l.revoked) throw new RpcError('Link not found.', 'P0002');
+        this.require(email, l.project_id, ['owner', 'editor']);
+        l.expires_at = in30Days();
+        return l.expires_at;
       }
       case 'fp_revoke_link': {
         const l = this.links.get(args.p_token);
@@ -343,6 +360,7 @@ export class FakeCloud {
       case 'fp_get_shared_project': {
         const l = this.links.get(args.p_token);
         if (!l || l.revoked) return null;
+        if (this.expired(l)) return { expired: true };
         const p = this.projects.get(l.project_id);
         return p ? { name: p.name, data: p.data, updated_at: p.updated_at, owner_email: p.owner_email } : null;
       }

@@ -29,8 +29,10 @@ export function liveLinkAvailability(signedIn: boolean): { ok: true } | { ok: fa
 /**
  * The plan's live 3D link: the shared view's own link, or the cloud plan's
  * existing view-only link (the oldest, so every PDF of a shop carries the
- * same one), created on first use. Unsaved edits are saved first so the
- * link shows what the PDF shows.
+ * same one), created on first use. Links expire after 30 days, so each
+ * export gives the link 30 days from now: a PDF's link works for a month
+ * from the day the PDF was made. Unsaved edits are saved first so the link
+ * shows what the PDF shows.
  */
 export async function getLiveLink(): Promise<string> {
   const s = usePlannerStore.getState();
@@ -50,5 +52,8 @@ export async function getLiveLink(): Promise<string> {
   }
   const links = await cloud.listLinks(link.projectId);
   const oldest = [...links].sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
-  return liveUrl(oldest?.token ?? (await cloud.createLink(link.projectId)));
+  if (!oldest) return liveUrl(await cloud.createLink(link.projectId));
+  // Best effort: without the renewal the link still works until its own date.
+  await cloud.renewLink(oldest.token).catch(() => undefined);
+  return liveUrl(oldest.token);
 }

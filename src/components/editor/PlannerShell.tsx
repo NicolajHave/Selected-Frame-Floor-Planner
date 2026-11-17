@@ -59,7 +59,9 @@ export function PlannerShell() {
     cloud
       .getShared(token)
       .then((p) => {
-        if (p) {
+        if (p?.expired) {
+          setShareError('This view-only link has expired. Ask the person who sent it for a new one.');
+        } else if (p) {
           usePlannerStore.getState().openShared(p);
           // Links from the PDF open straight in 3D.
           if (new URLSearchParams(window.location.search).get('view') === '3d') {
