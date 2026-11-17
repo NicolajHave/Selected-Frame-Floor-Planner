@@ -26,7 +26,7 @@ test('right-click a fixture: duplicate, rotate, lock and delete', async ({ page 
   expect((await saved(page)).inventory).toHaveLength(2);
 
   await rightClick(page, rack.position.x, rack.position.y);
-  await menu(page).getByRole('menuitem', { name: /Lock in place/ }).click();
+  await menu(page).getByRole('menuitem', { name: /Lock fixture/ }).click();
   expect((await saved(page)).inventory[0].locked).toBe(true);
 
   await rightClick(page, rack.position.x, rack.position.y);

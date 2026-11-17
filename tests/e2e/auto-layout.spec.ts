@@ -51,3 +51,27 @@ test('an aisle outside 600–3000 mm is refused', async ({ page }) => {
   await expect(dialog.getByRole('button', { name: 'Make proposal' })).toBeDisabled();
   await expect(dialog).toContainText('between 600 and 3000 mm');
 });
+
+test('an empty shop offers the proposal up front; it fills the shop and then steps aside', async ({ page }) => {
+  await openFresh(page);
+  // Not before there is a room.
+  await expect(page.getByRole('button', { name: 'Automatic proposal', exact: true })).toHaveCount(0);
+  await drawRoom(page, 300, 200);
+
+  const button = page.getByRole('button', { name: 'Automatic proposal', exact: true });
+  await button.click();
+  const dialog = page.getByRole('dialog', { name: 'Automatic layout' });
+  await expect(dialog).not.toContainText('as a new layout tab');
+  await dialog.getByRole('button', { name: 'Make proposal' }).click();
+
+  // The empty layout itself is filled: no extra tab, and the button is gone.
+  await expect(page.getByText(/Adjust it like any other layout/)).toBeVisible();
+  const p = await saved(page);
+  expect(p.inventory.length).toBeGreaterThan(5);
+  expect(p.variants ?? []).toHaveLength(0);
+  await expect(button).toHaveCount(0);
+
+  // Undo empties the shop again and brings the button back; so does deleting everything.
+  await page.keyboard.press('Control+z');
+  await expect(button).toBeVisible();
+});

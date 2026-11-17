@@ -8,6 +8,7 @@ import { auth } from '@/lib/cloud/api';
 import { saveNow } from '@/lib/cloud/sync';
 import type { CloudUser } from '@/lib/cloud/useCloudUser';
 import { Button } from '../ui/Button';
+import { Menu, MenuItem, MenuSeparator } from '../ui/Menu';
 import { SignInDialog } from './SignInDialog';
 import { ProjectsDialog } from './ProjectsDialog';
 import { ShareDialog } from './ShareDialog';
@@ -38,7 +39,7 @@ export function CloudStatus({ user, ready }: { user: CloudUser | null; ready: bo
       data-testid="cloud-status"
       title="Cloud sync"
       className={clsx(
-        'whitespace-nowrap text-[11px]',
+        'block truncate text-[11px]',
         tone === 'muted' && 'text-ink-500',
         tone === 'ok' && 'text-sage-500',
         tone === 'warn' && 'text-amber-700',
@@ -55,14 +56,42 @@ export function CloudStatus({ user, ready }: { user: CloudUser | null; ready: bo
   );
 }
 
-/** Cloud plans, sharing and the account menu, for the right end of the top bar. */
-export function CloudActions({ user, ready }: { user: CloudUser | null; ready: boolean }) {
+/**
+ * Cloud plans, sharing and the account menu, for the right end of the top
+ * bar. `compact` folds them into one menu when the bar is short of room.
+ */
+export function CloudActions({ user, ready, compact }: { user: CloudUser | null; ready: boolean; compact?: boolean }) {
   const link = usePlannerStore((s) => s.cloud);
   const shared = usePlannerStore((s) => s.shared);
   const [dialog, setDialog] = useState<'sign-in' | 'projects' | 'share' | 'versions' | null>(null);
   const [menu, setMenu] = useState(false);
 
   if (!CLOUD_ENABLED || shared || !ready) return null;
+
+  const dialogs = (
+    <>
+      {dialog === 'sign-in' && <SignInDialog onClose={() => setDialog(null)} />}
+      {dialog === 'projects' && user && <ProjectsDialog user={user} onClose={() => setDialog(null)} />}
+      {dialog === 'share' && <ShareDialog onClose={() => setDialog(null)} />}
+      {dialog === 'versions' && user && <VersionsDialog email={user.email} onClose={() => setDialog(null)} />}
+    </>
+  );
+
+  if (compact && user) {
+    return (
+      <div className="flex items-center" data-testid="cloud-bar">
+        <Menu label="Cloud" align="right" buttonClassName="!px-2">
+          <MenuItem onClick={() => setDialog('projects')}>Cloud plans</MenuItem>
+          {link && <MenuItem onClick={() => setDialog('versions')}>Versions</MenuItem>}
+          {link && <MenuItem onClick={() => setDialog('share')}>Share</MenuItem>}
+          <MenuSeparator />
+          <p className="max-w-[220px] truncate px-3 py-1 text-[11px] text-ink-500">{user.email}</p>
+          <MenuItem onClick={() => void auth.signOut()}>Sign out</MenuItem>
+        </Menu>
+        {dialogs}
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center gap-1" data-testid="cloud-bar">
@@ -112,10 +141,7 @@ export function CloudActions({ user, ready }: { user: CloudUser | null; ready: b
         </Button>
       )}
 
-      {dialog === 'sign-in' && <SignInDialog onClose={() => setDialog(null)} />}
-      {dialog === 'projects' && user && <ProjectsDialog user={user} onClose={() => setDialog(null)} />}
-      {dialog === 'share' && <ShareDialog onClose={() => setDialog(null)} />}
-      {dialog === 'versions' && user && <VersionsDialog email={user.email} onClose={() => setDialog(null)} />}
+      {dialogs}
     </div>
   );
 }

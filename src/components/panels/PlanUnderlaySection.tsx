@@ -185,10 +185,10 @@ export function PlanUnderlaySection() {
             aria-pressed={pinned}
             className="justify-center"
             onClick={() => setPinned(!pinned)}
-            title={pinned ? 'Unlock to move, rescale or replace the plan' : 'Lock the plan where it is: it can’t be grabbed or moved by accident'}
+            title={pinned ? 'Unlock to move, rescale or replace the drawing' : 'Lock the drawing where it is: it can’t be grabbed or moved by accident'}
           >
             <LockIcon locked={pinned} />
-            {pinned ? 'Plan locked' : 'Lock plan in place'}
+            {pinned ? 'Drawing locked' : 'Lock drawing'}
           </Button>
 
           <div className="grid grid-cols-2 gap-2">
@@ -238,7 +238,7 @@ export function PlanUnderlaySection() {
               onClick={startWallTrace}
               title={
                 layoutLocked
-                  ? 'The floor layout is locked'
+                  ? 'The room is locked'
                   : underlay.calibrated
                     ? 'Click inside a room on the plan: its walls are drafted for you to check'
                     : 'Set the scale first'

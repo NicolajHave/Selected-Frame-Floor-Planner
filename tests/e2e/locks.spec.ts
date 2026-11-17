@@ -21,9 +21,9 @@ test('lock the floor layout: walls, doors and windows stay put, fixtures still m
   const rack = await place(page, 'Floor Rack 1400', room.minX + 4000, room.minY + 3000);
   await page.keyboard.press('Escape');
 
-  const lock = page.getByRole('button', { name: 'Lock layout' });
+  const lock = page.getByRole('button', { name: 'Lock room' });
   await lock.click();
-  await expect(page.getByRole('button', { name: 'Layout locked' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Room locked' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Draw area' })).toBeDisabled();
   await expect(page.getByTitle('Place Window', { exact: true })).toBeDisabled();
   expect((await saved(page)).layoutLocked).toBe(true);
@@ -32,7 +32,7 @@ test('lock the floor layout: walls, doors and windows stay put, fixtures still m
   const before = await saved(page);
   const corner = before.room.corners[0].point;
   await drag(page, corner, { x: corner.x - 800, y: corner.y - 600 });
-  await expect(page.getByText(/floor layout is locked/i).first()).toBeVisible();
+  await expect(page.getByText(/room is locked/i).first()).toBeVisible();
   // Nor can the door be slid along its wall.
   const door = before.room.openings[0];
   await drag(page, { x: room.minX + door.offset, y: room.minY }, { x: room.minX + door.offset + 1500, y: room.minY });
@@ -48,7 +48,7 @@ test('lock the floor layout: walls, doors and windows stay put, fixtures still m
   expect(moved.position.x - rack.position.x).toBeCloseTo(1000, -1);
 
   // Unlocked again, the corner drags.
-  await page.getByRole('button', { name: 'Layout locked' }).click();
+  await page.getByRole('button', { name: 'Room locked' }).click();
   await drag(page, corner, { x: corner.x - 800, y: corner.y - 600 });
   expect((await saved(page)).room.corners[0].point).not.toEqual(corner);
   expect(errors, 'console errors').toEqual([]);
@@ -63,7 +63,7 @@ test('lock single fixtures in place; a group move leaves them where they are', a
 
   // b is selected after placing: L locks it.
   await page.keyboard.press('l');
-  await expect(page.getByRole('button', { name: /Locked in place/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Fixture locked/ })).toBeVisible();
   await expect(page.getByTestId('lock-badge')).toHaveCount(1);
   expect((await saved(page)).inventory[1].locked).toBe(true);
 
@@ -75,7 +75,7 @@ test('lock single fixtures in place; a group move leaves them where they are', a
   expect(inv).toHaveLength(2);
   expect(inv[1].position).toEqual(b.position);
   expect(inv[1].rotation).toBe(b.rotation);
-  await expect(page.getByText(/is locked in place/).first()).toBeVisible();
+  await expect(page.getByText(/is locked\. Unlock the fixture/).first()).toBeVisible();
   await expect(page.getByLabel('X')).toBeDisabled();
 
   // Select both and drag: only the unlocked one moves.

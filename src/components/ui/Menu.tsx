@@ -5,7 +5,18 @@ import { clsx } from 'clsx';
 import { Button } from './Button';
 
 /** A top-bar button that opens a small dropdown of actions. */
-export function Menu({ label, children, align = 'left' }: { label: string; children: ReactNode; align?: 'left' | 'right' }) {
+export function Menu({
+  label,
+  children,
+  align = 'left',
+  buttonClassName,
+}: {
+  label: string;
+  children: ReactNode;
+  align?: 'left' | 'right';
+  /** Extra classes for the button, e.g. tighter padding in a crowded bar. */
+  buttonClassName?: string;
+}) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement | null>(null);
 
@@ -24,7 +35,14 @@ export function Menu({ label, children, align = 'left' }: { label: string; child
 
   return (
     <div ref={root} className="relative">
-      <Button variant="ghost" aria-haspopup="menu" aria-expanded={open} active={open} onClick={() => setOpen((o) => !o)}>
+      <Button
+        variant="ghost"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        active={open}
+        className={buttonClassName}
+        onClick={() => setOpen((o) => !o)}
+      >
         {label}
         <span aria-hidden className="text-[9px] opacity-60">▾</span>
       </Button>
