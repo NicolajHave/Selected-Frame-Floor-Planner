@@ -6,6 +6,6 @@ ID = '105-99-007'
 
 
 def build():
-    u = Unit(1496, 434).frame()
-    edge = u.mirror_box()
-    u.hang_rail(x0=edge).bolts()
+    # Per 105-99-007-B: the mirror box stands 65.4 mm in from the left
+    # uprights and the sidehang bar runs the full 1316 mm above it.
+    Unit(1506, 434).frame().mirror_box().hang_rail().bolts()

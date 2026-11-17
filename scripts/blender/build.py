@@ -4,6 +4,8 @@ Builds Blender catalog models into the planner's GLB files.
     python scripts/blender/build.py [module ...] [--blend] [--preview DIR] [--thumbs] [--plan]
 
 Needs Blender as a Python module (`pip install bpy==4.5.14`, Python 3.11).
+Afterwards run `npm run models:compress`: it packs the new GLBs (about a
+fifth of the size, looking the same) the way the planner expects them.
 Each module defines ID and build(). Output: public/assets/3d/<ID>.glb, and
 with --blend also assets/blender/<ID>.blend for hand editing in Blender,
 with --thumbs the library picture public/assets/thumbs/<ID>.png, and with

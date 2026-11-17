@@ -27,7 +27,7 @@ function item(assetRef: string | undefined, accessories: Accessory[] = [], modul
     modules,
     accessories,
     position: { x: 0 as Mm, y: 0 as Mm },
-    size: asset ? { ...asset.size } : { width: 2992 as Mm, depth: 517 as Mm, height: 2288 as Mm },
+    size: asset ? { ...asset.size } : { width: 2917 as Mm, depth: 517 as Mm, height: 2288 as Mm },
     rotation: 0 as Radians,
   };
 }
@@ -70,8 +70,8 @@ test('signs on tables and in front of mannequins', () => {
     [450, 816],
   ]);
   const [price] = placeAccessories(item('112-18-001', [{ id: 'a', assetRef: PRICE_SIGN }]));
-  // Front edge of the mannequin (200) + 40 mm + half the sign's depth.
-  expect(price!.y).toBeCloseTo(200 + 40 + 120.5);
+  // Front edge of the mannequin (150) + 40 mm + half the sign's depth.
+  expect(price!.y).toBeCloseTo(150 + 40 + 120.5);
   expect(price!.z).toBe(0);
 });
 
@@ -102,7 +102,7 @@ test('wall rack units take their own accessories', () => {
   const hosts = accessoryHosts(rack);
   expect(hosts.map((h) => h.module)).toEqual([1, 2]);
   const [p] = placeAccessories(rack);
-  // Unit 2 is centred 1496 / 2 + 1496 / 2 - 2992 / 2 + … : just check it is on that unit.
+  // Just check it is on that unit (753 mm either side of its centre).
   expect(p!.x).toBeGreaterThan(hosts[0]!.x - 748);
   expect(p!.x).toBeLessThan(hosts[0]!.x + 748);
 });

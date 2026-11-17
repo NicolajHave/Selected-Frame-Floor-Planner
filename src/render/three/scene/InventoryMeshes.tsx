@@ -4,6 +4,7 @@ import { Suspense, useMemo } from 'react';
 import * as THREE from 'three';
 import { useLoader } from '@react-three/fiber';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import type { InventoryItem } from '@/model/objects';
 import { findAsset } from '@/lib/assetCatalog';
 import { usePlannerStore } from '@/store/plannerStore';
@@ -115,9 +116,14 @@ function AccessoryModels({ item, interactive }: { item: InventoryItem; interacti
   );
 }
 
+/** The models are meshopt-packed (scripts/compress-models.mjs); the loader unpacks them. */
+const withMeshopt = (loader: GLTFLoader) => {
+  loader.setMeshoptDecoder(MeshoptDecoder);
+};
+
 /** Generated catalog model. Fiber caches the load per URL; clone per instance. */
 function GlbModel({ url }: { url: string }) {
-  const gltf = useLoader(GLTFLoader, url);
+  const gltf = useLoader(GLTFLoader, url, withMeshopt);
   const scene = useMemo(() => {
     const clone = gltf.scene.clone(true);
     clone.traverse((o) => {

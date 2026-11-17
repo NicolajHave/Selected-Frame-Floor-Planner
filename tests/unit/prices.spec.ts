@@ -30,14 +30,14 @@ test('every price points at a catalog item', () => {
 });
 
 test('wall units side by side share columns; separate ones each have two', () => {
-  // Two 1496 mm units touching (different depths, backs in line), then one on its own.
-  const inv = [unit('a', '105-99-004', 0), unit('b', '105-99-003', 1496), unit('c', '105-99-010', 5000)];
+  // Two 1506 mm units touching (different depths, backs in line), then one on its own.
+  const inv = [unit('a', '105-99-004', 0), unit('b', '105-99-003', 1506), unit('c', '105-99-010', 5000)];
   const runs = wallRuns(inv);
   expect(runs.map((r) => r.units).sort()).toEqual([1, 2]);
   expect(columnCounts(runs)).toEqual({ left: 2, mid: 1, right: 2 });
 
   // Facing the other way (another wall) never joins.
-  expect(wallRuns([unit('a', '105-99-004', 0), unit('b', '105-99-004', 1496, 0, Math.PI)])).toHaveLength(2);
+  expect(wallRuns([unit('a', '105-99-004', 0), unit('b', '105-99-004', 1506, 0, Math.PI)])).toHaveLength(2);
 });
 
 test('a wall rack of n units needs n + 1 columns; prices add up', () => {

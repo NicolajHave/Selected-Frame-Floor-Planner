@@ -14,7 +14,7 @@ test('build a wall rack, place it on a wall as one piece, then edit it', async (
   await builder.getByTitle('Add Wall Unit 1400 - Shelves').click();
   await builder.getByTitle('Add Wall Unit 700 - Shelf').click();
   await expect(builder.getByTestId('rack-run').locator('li')).toHaveCount(3);
-  await expect(builder.getByTestId('rack-summary')).toContainText('3,80 m');
+  await expect(builder.getByTestId('rack-summary')).toContainText('3,63 m');
   await expect(builder.getByTestId('rack-summary')).toContainText('35');
   // Swap the last two.
   await builder.getByRole('button', { name: 'Move unit 3 left' }).click();
@@ -30,7 +30,7 @@ test('build a wall rack, place it on a wall as one piece, then edit it', async (
     name: 'Denim wall',
     category: 'Wall rack',
     modules: ['105-99-003', '105-99-010', '105-99-004'],
-    size: { width: 3802, depth: 517, height: 2288 },
+    size: { width: 3632, depth: 517, height: 2288 },
     rotation: 0,
   });
   expect(rack.position.y - rack.size.depth / 2).toBe(room.minY + 60); // back on the wall's inside face
@@ -56,7 +56,7 @@ test('build a wall rack, place it on a wall as one piece, then edit it', async (
   await editor.getByRole('button', { name: 'Save rack' }).click();
   [rack] = (await saved(page)).inventory;
   expect(rack.modules).toEqual(['105-99-003', '105-99-010']);
-  expect(rack.size).toEqual({ width: 2306, depth: 517, height: 2288 });
+  expect(rack.size).toEqual({ width: 2221, depth: 517, height: 2288 });
   expect(rack.position.y - rack.size.depth / 2).toBe(room.minY + 60);
 
   await page.keyboard.press('Control+z');

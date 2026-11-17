@@ -1,4 +1,6 @@
 import type { Project } from '@/model/project';
+import type { InventoryItem } from '@/model/objects';
+import { rackSize } from './racks';
 
 export const CURRENT_SCHEMA = 1 as const;
 
@@ -25,6 +27,15 @@ export function migrate(payload: unknown): Project {
     throw new Error('Invalid project file: missing inventory[].');
   }
   const project = candidate as Project;
+  // A wall rack's footprint follows from its units. Racks saved before the
+  // units shared their centre uprights (and before the 1400 units were
+  // 1506 mm) are brought up to date around their own centre.
+  const refresh = (items: InventoryItem[]) =>
+    items.map((it) => (it.modules?.length ? { ...it, size: rackSize(it.modules) } : it));
+  project.inventory = refresh(project.inventory);
+  if (Array.isArray(project.variants)) {
+    project.variants = project.variants.map((v) => (Array.isArray(v.inventory) ? { ...v, inventory: refresh(v.inventory) } : v));
+  }
   // Rooms saved before doors and openings existed have no openings array.
   if (project.room && !Array.isArray(project.room.openings)) {
     project.room = { ...project.room, openings: [] };

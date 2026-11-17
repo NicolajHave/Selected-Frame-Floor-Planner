@@ -137,20 +137,35 @@ def table_sign():
 
 
 def floor_price_sign():
-    """105-18-001: 2 mm stainless, a sloped A5 face rising to 51 mm at the back, 180 × 241."""
+    """105-18-001: 2 mm stainless, a sloped A5 face rising to 51.2 mm at the back, 180 × 241."""
     rise = 51.2
     run = 241
-    slope = math.atan2(rise - 2, run - 20)
-    # Front flange on the floor.
-    box('flange', (180, 20, 2), (0, -run / 2 + 10, 1), bevel=0.3)
-    # Sloped face from the flange up to the back.
-    length = math.hypot(run - 20, rise - 2)
-    face = box('face', (180, length, 2), (0, 10, rise / 2), bevel=0.3)
-    face.rotation_euler = (slope, 0, 0)
+    t = 2
+    # Front flange on the floor, then the face from its back edge up to the
+    # top back corner: the face's upper surface ends exactly at (run, rise).
+    y0 = -run / 2 + 20
+    y1 = run / 2
+    slope = math.atan2(rise - t, y1 - y0)
+    length = math.hypot(y1 - y0, rise - t)
+    box('flange', (180, 20, t), (0, -run / 2 + 10, t / 2), bevel=0.3)
+
+    def on_face(along, above):
+        """A point `along` mm up the face from its foot and `above` mm off its upper surface."""
+        return (0,
+                y0 + math.cos(slope) * along - math.sin(slope) * above,
+                t + math.sin(slope) * along + math.cos(slope) * above)
+
+    def tilted(name, size, centre, **kw):
+        # box() bakes its place into the mesh, so build it at the origin and move the object.
+        o = box(name, size, (0, 0, 0), **kw)
+        o.rotation_euler = (slope, 0, 0)
+        o.location = tuple(c * MM for c in centre)
+        return o
+
+    tilted('face', (180, length, t), on_face(length / 2, -t / 2), bevel=0.3)
+    # Price card on the face, short of its edges.
+    tilted('card', (150, length - 40, 1), on_face(length / 2 - 4, 0.5), mat='screen', bevel=0)
     bpy.context.view_layer.update()
-    # Price card on the face.
-    card = box('card', (150, length - 40, 1), (0, 10, rise / 2 + 1.5), mat='screen', bevel=0)
-    card.rotation_euler = (slope, 0, 0)
 
 
 def rack_sign():

@@ -7,4 +7,4 @@ ID = '105-99-005'
 
 def build():
     # Per 105-99-005-C: sidehang bar at 1865, beam with light at 825, shelf at 484.
-    Unit(1496, 517).frame().hang_rail().beam(825).shelves([484]).bolts()
+    Unit(1506, 517).frame().hang_rail().beam(825).shelves([484]).bolts()
