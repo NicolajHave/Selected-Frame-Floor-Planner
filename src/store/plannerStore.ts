@@ -27,6 +27,7 @@ import { mm, rad } from '@/model/units';
 import { newId } from '@/lib/id';
 import * as variants from '@/lib/variants';
 import { proposeLayout as makeProposal, type AutoLayoutOptions } from '@/lib/autoLayout';
+import { partitionBetween } from '@/lib/partition';
 import { clipCount, makeClip, placeClip, readClip, writeClip } from '@/lib/clipboard';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
@@ -67,6 +68,8 @@ export type Tool =
   /** Drag out a rectangular room. */
   | 'draw-rect'
   | 'add-pillar'
+  /** Click where an interior wall starts, then where it ends. */
+  | 'add-partition'
   | 'add-inventory'
   | 'add-opening'
   | 'add-electrical'
@@ -167,6 +170,10 @@ interface PlannerState {
   /** The measurement in progress: `b` is null until the second click. */
   measure: { a: Point; b: Point | null } | null;
   measureClick: (p: Point) => void;
+  /** Where the interior wall being drawn starts (its first click). */
+  partitionStart: Point | null;
+  /** First click sets the start of an interior wall, the second makes it. */
+  partitionClick: (p: Point) => void;
   /** Keeps the finished measurement as a dimension line on the plan. */
   keepMeasure: () => void;
   removeDimension: (id: string) => void;
@@ -599,6 +606,7 @@ export const usePlannerStore = create<PlannerState>()(
         wallDraft: null,
         snapGuides: [],
         measure: null,
+        partitionStart: null,
         drawLength: '',
         highlightedWall: null,
         past: [],
@@ -606,7 +614,7 @@ export const usePlannerStore = create<PlannerState>()(
 
         setTool: (t) =>
           set((s) => {
-            if ((t === 'draw-room' || t === 'draw-rect' || t === 'add-pillar' || t === 'add-opening') && layoutBlocked(s)) return;
+            if ((t === 'draw-room' || t === 'draw-rect' || t === 'add-pillar' || t === 'add-partition' || t === 'add-opening') && layoutBlocked(s)) return;
             s.tool = t;
             // Tool change clears any in-progress selection that no longer applies.
             if (t !== 'select') s.selection = null;
@@ -621,6 +629,27 @@ export const usePlannerStore = create<PlannerState>()(
             if (t !== 'trace-room') s.wallDraft = null;
             if (t !== 'draw-room') s.drawLength = '';
             if (t !== 'measure') s.measure = null;
+            if (t !== 'add-partition') s.partitionStart = null;
+          }),
+
+        partitionClick: (p) =>
+          set((s) => {
+            if (layoutBlocked(s)) return;
+            const start = s.partitionStart;
+            if (!start) {
+              s.partitionStart = { x: p.x, y: p.y };
+              return;
+            }
+            const wall = partitionBetween(start, p, s.project.room?.wallHeight ?? 2700);
+            // Too short to be a wall: keep waiting for the other end.
+            if (!wall) return;
+            record(s);
+            s.project.pillars.push(wall);
+            s.partitionStart = null;
+            s.selection = { kind: 'pillar', id: wall.id };
+            s.multi = [];
+            s.tool = 'select';
+            touch(s.project);
           }),
 
         measureClick: (p) =>
@@ -1928,8 +1957,9 @@ export const usePlannerStore = create<PlannerState>()(
             if (locked) s.project.layoutLocked = true;
             else delete s.project.layoutLocked;
             // Put down anything that would change the layout.
-            if (locked && (s.tool === 'draw-room' || s.tool === 'add-pillar' || s.tool === 'add-opening')) {
+            if (locked && (s.tool === 'draw-room' || s.tool === 'add-pillar' || s.tool === 'add-partition' || s.tool === 'add-opening')) {
               s.tool = 'select';
+              s.partitionStart = null;
               s.pendingOpening = null;
               s.drawLength = '';
             }

@@ -15,7 +15,7 @@ import type { CloudUser } from '@/lib/cloud/useCloudUser';
 /**
  * How far the bar has folded to fit the window. Nothing is ever cut off:
  * 1 tightens the spacing, 2 shortens the lock and the 2D/3D switch,
- * 3 folds "+ Pillar / + Box / + Note" and the cloud buttons into menus,
+ * 3 folds "+ Pillar / + Wall / + Box / + Note" and the cloud buttons into menus,
  * 4 folds every tool into one menu and drops the plan name (it is in the
  * right panel too), 5 lets the bar wrap onto a second row.
  */
@@ -118,6 +118,17 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
       add: true,
     },
     {
+      id: 'add-partition',
+      label: '+ Wall',
+      title: layoutLocked
+        ? lockedTitle
+        : 'Interior wall: click where it starts and where it ends (Shift keeps it straight)',
+      active: tool === 'add-partition',
+      disabled: is3d || layoutLocked,
+      run: () => setTool(tool === 'add-partition' ? 'select' : 'add-partition'),
+      add: true,
+    },
+    {
       id: 'add-inventory',
       label: '+ Box',
       title: 'A generic box; catalog items are in the library',
@@ -150,7 +161,7 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
   );
   const toolItem = (t: Tool) => (
     <MenuItem key={t.id} onClick={t.run} checked={t.active} disabled={t.disabled}>
-      {t.label.replace(/^\+ /, '')}
+      {t.id === 'add-partition' ? 'Interior wall' : t.label.replace(/^\+ /, '')}
     </MenuItem>
   );
 

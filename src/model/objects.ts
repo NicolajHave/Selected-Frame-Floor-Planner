@@ -65,6 +65,12 @@ interface PlacedObjectBase {
 export interface Pillar extends PlacedObjectBase {
   type: 'pillar';
   shape: ShapeType;      // 'round' reserved for post-MVP
+  /**
+   * 'wall': an interior wall — a long, thin, free-standing piece of wall
+   * drawn between two points (lib/partition.ts). Its width is its length,
+   * its depth its thickness.
+   */
+  kind?: 'wall';
 }
 
 export interface InventoryItem extends PlacedObjectBase {

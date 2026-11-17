@@ -14,12 +14,15 @@ export function PillarProperties({ id }: { id: string }) {
   const remove = usePlannerStore((s) => s.deleteSelected);
 
   if (!pillar) return null;
+  const wall = pillar.kind === 'wall';
 
   return (
     <div className="flex h-full flex-col">
-      <Section title="Pillar">
+      <Section title={wall ? 'Interior wall' : 'Pillar'}>
         <div className="flex flex-col gap-1">
-          <p className="font-display text-[18px] italic leading-tight text-ink-900">Structural pillar</p>
+          <p className="font-display text-[18px] italic leading-tight text-ink-900">
+            {wall ? `Interior wall, ${(pillar.size.width / 1000).toFixed(2)} m` : 'Structural pillar'}
+          </p>
           <p className="text-[11px] text-ink-500 font-mono">{pillar.id}</p>
         </div>
         <ObjectIssues id={id} />
@@ -30,7 +33,7 @@ export function PillarProperties({ id }: { id: string }) {
       <Section title="Dimensions">
         <div className="grid grid-cols-2 gap-3">
           <NumberField
-            label="Width"
+            label={wall ? 'Length' : 'Width'}
             unit="mm"
             value={pillar.size.width}
             step={10}
@@ -38,7 +41,7 @@ export function PillarProperties({ id }: { id: string }) {
             onCommit={(v) => updatePillar(id, { size: { ...pillar.size, width: mm(v) } })}
           />
           <NumberField
-            label="Depth"
+            label={wall ? 'Thickness' : 'Depth'}
             unit="mm"
             value={pillar.size.depth}
             step={10}

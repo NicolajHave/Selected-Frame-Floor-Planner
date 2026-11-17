@@ -14,6 +14,7 @@ export function ToolOverlay() {
   const rack = usePlannerStore((s) => s.pendingRack);
   const pendingElectrical = usePlannerStore((s) => s.pendingElectrical);
   const calibration = usePlannerStore((s) => s.calibration);
+  const partitionStart = usePlannerStore((s) => s.partitionStart);
   const drawLength = usePlannerStore((s) => s.drawLength);
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
 
@@ -43,7 +44,11 @@ export function ToolOverlay() {
 
   let hint: string | null = null;
 
-  if (tool === 'calibrate') {
+  if (tool === 'add-partition') {
+    hint = partitionStart
+      ? 'Now click where the interior wall ends. Shift keeps it level or plumb; corners snap. Esc cancels.'
+      : 'Interior wall: click where it starts — a corner, a wall or anywhere on the floor. Esc cancels.';
+  } else if (tool === 'calibrate') {
     hint = calibration?.a
       ? 'Now click the other end of that distance.'
       : 'Set scale: click one end of a distance you know on the plan — a wall, a door or a dimension line. Esc cancels.';

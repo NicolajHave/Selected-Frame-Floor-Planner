@@ -34,6 +34,13 @@ export interface Obstacle {
   id: string;
   name: string;
   outline: Polygon;
+  /**
+   * An interior wall: part of the room rather than something standing in
+   * it. It may meet the room's walls and other interior walls, and the gap
+   * it leaves to them is a doorway, not an aisle; fixtures still have to
+   * keep clear of it.
+   */
+  partition?: boolean;
 }
 
 /** Things that stand on the floor and block movement. */
@@ -41,8 +48,9 @@ export function floorObstacles(project: Project): Obstacle[] {
   const out: Obstacle[] = project.pillars.map((p) => ({
     kind: 'pillar' as const,
     id: p.id,
-    name: 'Pillar',
+    name: p.kind === 'wall' ? 'Interior wall' : 'Pillar',
     outline: rectCorners(p.position, p.size, p.rotation),
+    ...(p.kind === 'wall' ? { partition: true } : {}),
   }));
   for (const it of project.inventory) {
     const asset = findAsset(it.assetRef);
@@ -135,6 +143,7 @@ export function layoutIssues(project: Project, minAisle = DEFAULT_MIN_AISLE): La
   // Objects in or through walls / outside the room
   if (inner) {
     for (const o of obstacles) {
+      if (o.partition) continue;
       const outside = o.outline.some(
         (p) => !pointInPolygon(p, inner) && faces.every(([a, b]) => dist(p, closestOnSegment(p, a, b)) > 2),
       );
@@ -155,6 +164,7 @@ export function layoutIssues(project: Project, minAisle = DEFAULT_MIN_AISLE): La
     for (let j = i + 1; j < obstacles.length; j++) {
       const a = obstacles[i]!;
       const b = obstacles[j]!;
+      if (a.partition && b.partition) continue;
       if (convexOverlap(a.outline, b.outline)) {
         issues.push({
           key: `overlap:${a.id}:${b.id}`,
@@ -181,6 +191,7 @@ export function layoutIssues(project: Project, minAisle = DEFAULT_MIN_AISLE): La
 
   // Narrow gaps between objects and walls (narrowest per object)
   for (const o of obstacles) {
+    if (o.partition) continue;
     if (issues.some((x) => x.kind === 'wall' && x.objectIds[0] === o.id)) continue;
     let best: Gap | null = null;
     for (const [a, b] of faces) {

@@ -38,7 +38,7 @@ function PillarMesh({ pillar: p, selected }: { pillar: Pillar; selected: boolean
     >
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>
         <boxGeometry args={[w, h, d]} />
-        <meshStandardMaterial color="#C8C3B8" roughness={0.85} metalness={0} />
+        <meshStandardMaterial color={p.kind === 'wall' ? '#F1EEE7' : '#C8C3B8'} roughness={p.kind === 'wall' ? 0.9 : 0.85} metalness={0} />
       </mesh>
       {selected && interactive && <SelectionBox w={w} h={h} d={d} />}
     </group>
