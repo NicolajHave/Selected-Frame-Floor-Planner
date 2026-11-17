@@ -6,6 +6,7 @@ import { itemMount, rackContents, rackSize, rackSlots, rackSummary } from '@/lib
 import type { ElectricalPoint, InventoryItem, Opening, RoomPolygon } from '@/model/objects';
 import { electricalAnchor, reanchorElectrical, wallAnchorAt } from '@/geometry/electrical';
 import type { Mm, Radians } from '@/model/units';
+import { migrate } from '@/lib/schema';
 
 const P = (x: number, y: number) => ({ x: x as Mm, y: y as Mm });
 
@@ -152,8 +153,7 @@ test.describe('electrical points', () => {
   });
 });
 
-test('plans saved before racks shared their uprights get the new rack widths when opened', async () => {
-  const { migrate } = await import('@/lib/schema');
+test('plans saved before racks shared their uprights get the new rack widths when opened', () => {
   const modules = ['105-99-004', '105-99-004', '105-99-010'];
   const old = {
     id: 'rack', type: 'inventory', name: 'Wall rack (3 units)', category: 'Wall rack', modules,
