@@ -120,7 +120,7 @@ function menuFor(hit: PlanHit, world: Point): Item[][] {
 
   if (hit.kind === 'inventory' || hit.kind === 'pillar' || hit.kind === 'note') {
     const many = selectedMembers(s).length > 1;
-    const what = many ? `${selectedMembers(s).length} selected` : hit.kind === 'note' ? 'note' : hit.kind === 'pillar' ? 'pillar' : 'fixture';
+    const what = many ? `${selectedMembers(s).length} selected` : hit.kind === 'note' ? 'note' : hit.kind === 'pillar' ? (s.project.pillars.find((x) => x.id === hit.id)?.kind === 'wall' ? 'interior wall' : 'pillar') : 'fixture';
     if (readOnly) return [[{ label: 'Copy', keys: 'Ctrl+C', run: () => store().copySelected() }]];
     const item = hit.kind === 'inventory' ? s.project.inventory.find((x) => x.id === hit.id) : null;
     const pillarLocked: string | false = hit.kind === 'pillar' && !many ? layoutLocked : false;
@@ -191,7 +191,17 @@ function menuFor(hit: PlanHit, world: Point): Item[][] {
   const first: Item[] = [];
   if (clip) first.push({ label: 'Paste here', keys: 'Ctrl+V', run: () => store().pasteClip(world) });
   first.push({ label: 'Add note here', run: () => store().addNoteAt(world) });
-  if (hit.kind === 'floor') first.push({ label: 'Add pillar here', run: () => store().addPillarAt(world), disabled: layoutLocked });
+  if (hit.kind === 'floor') {
+    first.push({ label: 'Add pillar here', run: () => store().addPillarAt(world), disabled: layoutLocked });
+    first.push({
+      label: 'Start interior wall here',
+      disabled: layoutLocked,
+      run: () => {
+        store().setTool('add-partition');
+        store().partitionClick(world);
+      },
+    });
+  }
   return [
     first,
     [

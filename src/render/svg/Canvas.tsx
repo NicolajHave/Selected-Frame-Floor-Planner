@@ -31,6 +31,8 @@ import { RectDraft } from './RectDraft';
 import { openingSpan, placeOpening, projectOnWall } from '@/geometry/openings';
 import { openingType } from '@/lib/openingTypes';
 import type { Point } from '@/model/geometry';
+import type { ViewState } from '@/model/project';
+import { MIN_PARTITION, PARTITION_THICKNESS } from '@/lib/partition';
 import type { Mm, Radians } from '@/model/units';
 import { mm } from '@/model/units';
 import { DEFAULT_GAP_MM, runWallTrace } from '@/lib/traceUnderlay';
@@ -87,7 +89,12 @@ export function Canvas() {
   const snapGuides = usePlannerStore((s) => s.snapGuides);
   const measure = usePlannerStore((s) => s.measure);
   const readOnlyPlan = usePlannerStore((s) => s.readOnly);
-  const measureTargetsList = useMemo(() => (tool === 'measure' ? measureTargets(project) : []), [tool, project]);
+  const partitionStart = usePlannerStore((s) => s.partitionStart);
+  // The measuring tape and the interior-wall tool both land on corners.
+  const measureTargetsList = useMemo(
+    () => (tool === 'measure' || tool === 'add-partition' ? measureTargets(project) : []),
+    [tool, project],
+  );
   const [measureStraight, setMeasureStraight] = useState(false);
   const issues = useLayoutIssues();
 
@@ -177,6 +184,11 @@ export function Canvas() {
         usePlannerStore.getState().measureClick(measurePoint(world, measureTargetsList, 10 / view.zoom, from, e.shiftKey));
         return;
       }
+      if (tool === 'add-partition') {
+        const from = usePlannerStore.getState().partitionStart;
+        usePlannerStore.getState().partitionClick(measurePoint(world, measureTargetsList, 10 / view.zoom, from, e.shiftKey));
+        return;
+      }
       if (tool === 'calibrate') {
         // Raw point: grid snapping would defeat the purpose.
         addCalibrationPoint(world);
@@ -255,7 +267,7 @@ export function Canvas() {
       const world = eventToWorld(view, rect, e.clientX, e.clientY);
       setHoverWorld(world);
       planPointer.world = world;
-      if (tool === 'measure' && e.shiftKey !== measureStraight) setMeasureStraight(e.shiftKey);
+      if ((tool === 'measure' || tool === 'add-partition') && e.shiftKey !== measureStraight) setMeasureStraight(e.shiftKey);
 
       const d = drag.current;
       if (!d) return;
@@ -433,6 +445,7 @@ export function Canvas() {
       case 'add-electrical': return 'cursor-copy';
       case 'add-note':      return 'cursor-text';
       case 'measure':       return 'cursor-crosshair';
+      case 'add-partition': return 'cursor-crosshair';
       default:              return 'cursor-grab active:cursor-grabbing';
     }
   }, [tool]);
@@ -501,6 +514,12 @@ export function Canvas() {
     // Measuring: every left click is a measuring point, whatever is under it
     // (corners and fixtures would otherwise grab it) — except a dimension's ×.
     if (!pan && tool === 'measure' && e.button === 0 && !(e.target as Element).closest?.('[data-remove-dimension]')) {
+      e.stopPropagation();
+      onCanvasPointerDown(e);
+      return;
+    }
+    // Drawing an interior wall: likewise, every left click is one of its ends.
+    if (!pan && tool === 'add-partition' && e.button === 0) {
       e.stopPropagation();
       onCanvasPointerDown(e);
       return;
@@ -843,6 +862,13 @@ export function Canvas() {
         {view.showLayoutCheck && <IssueMarks project={project} issues={issues} view={view} />}
         <GuideMarks guides={guides} view={view} />
         <SnapMarks guides={snapGuides} view={view} />
+        {tool === 'add-partition' && partitionStart && hoverWorld && (
+          <PartitionDraft
+            a={partitionStart}
+            b={measurePoint(hoverWorld, measureTargetsList, 10 / view.zoom, partitionStart, measureStraight)}
+            view={view}
+          />
+        )}
         <MeasureMarks
           dimensions={project.dimensions ?? []}
           live={
@@ -894,5 +920,35 @@ export function Canvas() {
         </g>
       )}
     </svg>
+  );
+}
+
+/** The interior wall being drawn: from its first click to the pointer, with its length. */
+function PartitionDraft({ a, b, view }: { a: Point; b: Point; view: ViewState }) {
+  const length = Math.hypot(b.x - a.x, b.y - a.y);
+  const tooShort = length < MIN_PARTITION;
+  const size = 12 / view.zoom;
+  return (
+    <g pointerEvents="none" data-testid="partition-draft">
+      <line
+        x1={a.x}
+        y1={a.y}
+        x2={b.x}
+        y2={b.y}
+        stroke={tooShort ? '#B45309' : 'var(--wall-stroke)'}
+        strokeOpacity={0.55}
+        strokeWidth={PARTITION_THICKNESS}
+      />
+      <text
+        x={(a.x + b.x) / 2}
+        y={(a.y + b.y) / 2 - PARTITION_THICKNESS / 2 - size * 0.6}
+        fontSize={size}
+        textAnchor="middle"
+        fill="var(--wall-stroke)"
+        style={{ fontVariantNumeric: 'tabular-nums' }}
+      >
+        {(length / 1000).toFixed(2)} m
+      </text>
+    </g>
   );
 }

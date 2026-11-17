@@ -34,7 +34,8 @@ export function Pillar({ pillar, view, selected, grouped, onPointerDown, onRotat
         y={y}
         width={width}
         height={depth}
-        fill="var(--pillar-fill)"
+        fill={pillar.kind === 'wall' ? 'var(--wall-stroke)' : 'var(--pillar-fill)'}
+        data-interior-wall={pillar.kind === 'wall' ? pillar.id : undefined}
         stroke={selected ? 'var(--selection)' : 'transparent'}
         strokeWidth={stroke}
       />
