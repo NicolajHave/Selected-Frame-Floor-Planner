@@ -56,7 +56,9 @@ export async function openPdf(file: File): Promise<PdfSource> {
     'pdfjs-dist/build/pdf.worker.min.js',
     import.meta.url,
   ).toString();
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
+  // isEvalSupported off: pdf.js 3 can otherwise be made to run script from a
+  // crafted font in a PDF, and drawings come from other people.
+  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
 
   const draw = async (n: number, maxSide: number, crop: Crop | null, type: 'image/jpeg' | 'image/png') => {
     const page = await doc.getPage(n);
