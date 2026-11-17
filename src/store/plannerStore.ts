@@ -423,7 +423,7 @@ function copyAccessories(list: readonly Accessory[]): Accessory[] {
   return list.map((a) => ({ ...a, id: newId('acc') }));
 }
 
-const PLAN_LOCKED_MESSAGE = 'The plan is locked. Unlock it in the Plan underlay panel to move, rescale or replace it.';
+const PLAN_LOCKED_MESSAGE = 'The drawing is locked. Unlock it in the Plan underlay panel to move, rescale or replace it.';
 
 function info(message: string): Notice {
   return { id: ++noticeSeq, tone: 'info', message };
@@ -1754,7 +1754,7 @@ export const usePlannerStore = create<PlannerState>()(
             // Pillars are part of the floor layout: they stay out while it is locked.
             const pillars = s.project.layoutLocked ? [] : placed.pillars;
             if (!placed.inventory.length && !pillars.length && !placed.notes.length) {
-              s.notice = info('The floor layout is locked, so the pillars were not pasted.');
+              s.notice = info('The room is locked, so the pillars were not pasted.');
               return;
             }
             record(s);
@@ -1771,7 +1771,7 @@ export const usePlannerStore = create<PlannerState>()(
             if (s.tool !== 'select') s.tool = 'select';
             const n = pasted.length;
             s.notice = info(
-              `Pasted ${n === 1 ? '1 item' : `${n} items`}.${pillars.length < placed.pillars.length ? ' Pillars were left out: the floor layout is locked.' : ''}`,
+              `Pasted ${n === 1 ? '1 item' : `${n} items`}.${pillars.length < placed.pillars.length ? ' Pillars were left out: the room is locked.' : ''}`,
             );
             touch(s.project);
           }),

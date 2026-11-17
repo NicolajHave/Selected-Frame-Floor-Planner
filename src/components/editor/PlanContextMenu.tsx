@@ -115,7 +115,7 @@ export function PlanContextMenu() {
 function menuFor(hit: PlanHit, world: Point): Item[][] {
   const s = usePlannerStore.getState();
   const readOnly = s.readOnly;
-  const layoutLocked: string | false = s.project.layoutLocked ? 'The floor layout is locked' : false;
+  const layoutLocked: string | false = s.project.layoutLocked ? 'The room is locked' : false;
   const store = () => usePlannerStore.getState();
 
   if (hit.kind === 'inventory' || hit.kind === 'pillar' || hit.kind === 'note') {
@@ -136,7 +136,7 @@ function menuFor(hit: PlanHit, world: Point): Item[][] {
       );
     }
     if (hit.kind === 'inventory') {
-      second.push({ label: item?.locked && !many ? 'Unlock' : 'Lock in place', keys: 'L', run: () => store().toggleLockSelected() });
+      second.push({ label: item?.locked && !many ? 'Unlock' : 'Lock fixture', keys: 'L', run: () => store().toggleLockSelected() });
     }
     const last: Item[] = [{ label: `Delete ${what}`, keys: 'Del', danger: true, run: () => store().deleteSelected(), disabled: pillarLocked }];
     return [first, second, last].filter((x) => x.length);

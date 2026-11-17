@@ -92,7 +92,7 @@ export function ToolOverlay() {
 
 function Banner({ children }: { children: React.ReactNode }) {
   return (
-    <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2">
+    <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 max-[900px]:bottom-16 max-[900px]:top-auto max-[900px]:w-[calc(100%-24px)] max-[900px]:text-center">
       <div className="pointer-events-auto rounded-[2px] border border-wall-200 bg-wall-50/95 px-3 py-1.5 text-[11px] text-ink-700 shadow-panel backdrop-blur-sm">
         {children}
       </div>

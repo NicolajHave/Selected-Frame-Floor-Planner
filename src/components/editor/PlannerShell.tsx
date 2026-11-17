@@ -11,6 +11,8 @@ import { PlanContextMenu } from './PlanContextMenu';
 import { ToolOverlay } from './ToolOverlay';
 import { NoticeToast } from './NoticeToast';
 import { useKeyboard } from '@/hooks/useKeyboard';
+import { NARROW_SCREEN, useMediaQuery } from '@/hooks/useMediaQuery';
+import { clsx } from 'clsx';
 import { usePlannerStore } from '@/store/plannerStore';
 import { AUTOSAVE_EVENT, type AutosaveStatus } from '@/lib/autosaveStorage';
 import { useLayoutIssues } from '@/store/selectors';
@@ -95,6 +97,19 @@ export function PlannerShell() {
     return () => window.removeEventListener(AUTOSAVE_EVENT, on);
   }, []);
 
+  // On phones and narrow tablets the side panels are drawers over the plan,
+  // opened from the bottom bar, so the plan or 3D view gets the whole screen.
+  const narrow = useMediaQuery(NARROW_SCREEN);
+  const [drawer, setDrawer] = useState<'library' | 'details' | null>(null);
+  useEffect(() => {
+    if (!narrow) setDrawer(null);
+  }, [narrow]);
+  // Picking something to place closes the library so the floor is free to tap.
+  const tool = usePlannerStore((s) => s.tool);
+  useEffect(() => {
+    if (tool !== 'select') setDrawer((d) => (d === 'library' ? null : d));
+  }, [tool]);
+
   const stageRef = useRef<HTMLDivElement | null>(null);
   const getViewportSize = useCallback(() => {
     const el = stageRef.current;
@@ -108,9 +123,25 @@ export function PlannerShell() {
       <TopBar getViewportSize={getViewportSize} user={user} authReady={authReady} />
       {rackBuilderOpen && !readOnly && <RackBuilder />}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        {narrow && drawer && (
+          <button
+            aria-label="Close panel"
+            className="absolute inset-0 z-30 cursor-default bg-ink-900/30"
+            onClick={() => setDrawer(null)}
+          />
+        )}
+
         {/* Asset library */}
-        <aside className="w-[240px] shrink-0 overflow-hidden border-r border-wall-200 bg-wall-50">
+        <aside
+          data-testid="library-panel"
+          className={clsx(
+            'shrink-0 overflow-hidden border-r border-wall-200 bg-wall-50',
+            narrow
+              ? clsx('absolute inset-y-0 left-0 z-40 w-[min(280px,86vw)] shadow-panel', drawer !== 'library' && 'hidden')
+              : 'w-[240px]',
+          )}
+        >
           <fieldset disabled={readOnly} className={readOnly ? 'h-full min-w-0 opacity-50' : 'h-full min-w-0'}>
             <AssetLibrary />
           </fieldset>
@@ -144,33 +175,79 @@ export function PlannerShell() {
         </div>
 
         {/* Right panel */}
-        <aside className="w-[320px] shrink-0 overflow-y-auto border-l border-wall-200 bg-wall-50">
+        <aside
+          data-testid="details-panel"
+          className={clsx(
+            'shrink-0 overflow-y-auto border-l border-wall-200 bg-wall-50',
+            narrow
+              ? clsx('absolute inset-y-0 right-0 z-40 w-[min(340px,92vw)] shadow-panel', drawer !== 'details' && 'hidden')
+              : 'w-[320px]',
+          )}
+        >
           <fieldset disabled={readOnly} className="min-w-0">
             <RightPanel />
           </fieldset>
         </aside>
       </div>
 
-      <footer className="flex h-7 shrink-0 items-center justify-between border-t border-wall-200 bg-wall-50 px-4 text-[10px] uppercase tracking-widest2 text-ink-500">
-        <span>
-          Internal · MVP
-          {restored && autosave === 'saved' && ' · Autosaved in this browser'}
-          {shareToken && ' · Shared plan, view only'}
-          {autosave === 'failed' && (
-            <span className="text-red-700"> · Autosave failed (plan too large for this browser) — use Save</span>
-          )}
-          {issueCount > 0 && (
+      {narrow ? (
+        <footer className="flex h-12 shrink-0 items-center justify-between gap-2 border-t border-wall-200 bg-wall-50 px-3">
+          {readOnly ? (
+            <span className="truncate text-[10px] uppercase tracking-widest2 text-ink-500">
+              {shareToken ? 'Shared plan · view only' : 'View only'}
+            </span>
+          ) : (
             <button
-              onClick={() => clearSelection(null)}
-              className="ml-1 uppercase tracking-widest2 text-amber-700 hover:underline"
-              title="Show the layout check"
+              onClick={() => setDrawer(drawer === 'library' ? null : 'library')}
+              aria-expanded={drawer === 'library'}
+              className={clsx(
+                'h-8 rounded-[2px] border px-3 text-[12px] font-medium',
+                drawer === 'library' ? 'border-ink-900 bg-ink-900 text-wall-50' : 'border-wall-200 bg-wall-100 text-ink-900',
+              )}
             >
-              · {issueCount} layout {issueCount === 1 ? 'issue' : 'issues'}
+              Library
             </button>
           )}
-        </span>
-        <span>{is3d ? '3D View · m · drag to move, orbit to look around' : '2D Plan · mm · 1:1 world coordinates'}</span>
-      </footer>
+          {issueCount > 0 && !readOnly && (
+            <span className="truncate text-[10px] uppercase tracking-widest2 text-amber-700">
+              {issueCount} layout {issueCount === 1 ? 'issue' : 'issues'}
+            </span>
+          )}
+          <button
+            onClick={() => setDrawer(drawer === 'details' ? null : 'details')}
+            aria-expanded={drawer === 'details'}
+            className={clsx(
+              'h-8 rounded-[2px] border px-3 text-[12px] font-medium',
+              drawer === 'details' ? 'border-ink-900 bg-ink-900 text-wall-50' : 'border-wall-200 bg-wall-100 text-ink-900',
+            )}
+          >
+            {readOnly ? 'Parts & details' : 'Details'}
+          </button>
+        </footer>
+      ) : (
+        <footer className="flex h-7 shrink-0 items-center justify-between border-t border-wall-200 bg-wall-50 px-4 text-[10px] uppercase tracking-widest2 text-ink-500">
+          <span>
+            Internal · MVP
+            {restored &&
+              autosave === 'saved' &&
+              (cloudLink && user && cloudLink.role !== 'viewer' ? ' · Saved in the cloud' : ' · Autosaved in this browser')}
+            {shareToken && ' · Shared plan, view only'}
+            {autosave === 'failed' && (
+              <span className="text-red-700"> · Autosave failed (plan too large for this browser) — use Save</span>
+            )}
+            {issueCount > 0 && (
+              <button
+                onClick={() => clearSelection(null)}
+                className="ml-1 uppercase tracking-widest2 text-amber-700 hover:underline"
+                title="Show the layout check"
+              >
+                · {issueCount} layout {issueCount === 1 ? 'issue' : 'issues'}
+              </button>
+            )}
+          </span>
+          <span>{is3d ? '3D View · m · drag to move, orbit to look around' : '2D Plan · mm · 1:1 world coordinates'}</span>
+        </footer>
+      )}
     </div>
   );
 }

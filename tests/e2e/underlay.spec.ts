@@ -187,8 +187,8 @@ test('lock the plan in place; draft the walls by clicking inside the room', asyn
   await expect(page.locator('[data-layer="underlay"] image')).toBeVisible();
 
   // Lock: no moving, rescaling, replacing or removing — opacity still works.
-  await page.getByRole('button', { name: 'Lock plan in place' }).click();
-  await expect(page.getByRole('button', { name: 'Plan locked' })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: 'Lock drawing' }).click();
+  await expect(page.getByRole('button', { name: 'Drawing locked' })).toHaveAttribute('aria-pressed', 'true');
   for (const name of ['Set scale', 'Move', 'Replace', 'Remove']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeDisabled();
   }

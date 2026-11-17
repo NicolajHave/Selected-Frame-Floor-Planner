@@ -39,7 +39,7 @@ export function InventoryProperties({ id }: { id: string }) {
           title="L"
         >
           <LockIcon locked={locked} />
-          {locked ? 'Locked in place — unlock' : 'Lock in place'}
+          {locked ? 'Fixture locked — unlock' : 'Lock fixture'}
         </Button>
         {locked && (
           <p className="mt-2 text-[11px] leading-snug text-ink-500">

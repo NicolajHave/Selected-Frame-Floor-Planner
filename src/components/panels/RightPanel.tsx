@@ -44,7 +44,7 @@ function LayoutGate({ children }: { children: React.ReactNode }) {
         <span className="mt-[1px] text-ink-900">
           <LockIcon locked />
         </span>
-        <span className="flex-1">The floor layout is locked, so this can&rsquo;t be changed.</span>
+        <span className="flex-1">The room is locked, so this can&rsquo;t be changed.</span>
         <button className="shrink-0 font-medium text-ink-900 underline" onClick={() => setLayoutLocked(false)}>
           Unlock
         </button>
