@@ -87,6 +87,10 @@ export class FakeCloud {
   assets = new Map<string, string>();
   /** false: a database from before the asset functions (the drawing then stays inside the plan). */
   assetsSupported = true;
+  /** Saved price lists, oldest first. */
+  priceLists: {
+    id: number; name: string; valid_from: string; prices: Record<string, number | null>; saved_by_email: string; saved_at: string;
+  }[] = [];
   /** Every RPC call, for assertions. */
   calls: { fn: string; email: string | null; args: Record<string, unknown> }[] = [];
   private seq = 0;
@@ -367,6 +371,29 @@ export class FakeCloud {
         if (this.expired(l)) return { expired: true };
         const p = this.projects.get(l.project_id);
         return p ? { name: p.name, data: p.data, updated_at: p.updated_at, owner_email: p.owner_email } : null;
+      }
+      case 'fp_get_price_list':
+      case 'fp_list_price_lists':
+      case 'fp_save_price_list': {
+        if (!email || !email.endsWith('@bestseller.com')) throw new RpcError('Sign in with a confirmed @bestseller.com account.', '42501');
+        if (fn === 'fp_get_price_list') return this.priceLists.at(-1) ?? null;
+        if (fn === 'fp_list_price_lists') return [...this.priceLists].reverse().slice(0, 10);
+        const name = String(args.p_name ?? '').trim();
+        if (!name || name.length > 120) throw new RpcError('Give the price list a name (up to 120 characters).', '22023');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(args.p_valid_from))) throw new RpcError('Give the day the prices are from.', '22023');
+        for (const [k, v] of Object.entries(args.p_prices ?? {})) {
+          if (!/^[A-Za-z0-9:_.-]{1,40}$/.test(k)) throw new RpcError('That is not a price list.', '22023');
+          if (v !== null && (typeof v !== 'number' || v < 0 || v > 1_000_000)) {
+            throw new RpcError('A price is a number between 0 and 1,000,000, or empty.', '22023');
+          }
+        }
+        const list = {
+          id: (this.priceLists.at(-1)?.id ?? 0) + 1, name, valid_from: args.p_valid_from, prices: args.p_prices,
+          saved_by_email: email, saved_at: new Date().toISOString(),
+        };
+        this.priceLists.push(list);
+        this.priceLists = this.priceLists.slice(-20);
+        return list;
       }
       case 'fp_has_asset':
       case 'fp_get_asset':

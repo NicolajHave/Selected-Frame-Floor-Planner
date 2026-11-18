@@ -1,5 +1,12 @@
+import { create } from 'zustand';
+
 /**
  * Sales prices per catalog item, in euro.
+ *
+ * The prices below are the built-in list. The price list in use can be
+ * replaced without a release: `setPriceList` lays a list kept in the cloud
+ * (lib/cloud/priceList.ts, edited in the planner) over them — its name and
+ * date, and a price (or "no price") for any item it mentions.
  *
  * Primary source: the &elements quote "00309 Selected SIS Frame – 1x SIS
  * price list", revision 03, 16.02.2026. It prices racks, podiums, tables,
@@ -13,16 +20,53 @@ export interface PriceEntry {
   /** SKU with revision, as in the source. */
   sku: string;
   priceEur: number;
-  /** 'quote': the &elements quote; 'system': the system price list. */
-  source: 'quote' | 'system';
+  /** 'quote': the &elements quote; 'system': the system price list; 'list': the price list kept in the cloud. */
+  source: 'quote' | 'system' | 'list';
   supplier?: string;
 }
 
+/** The built-in list's name and date. */
 export const PRICE_LIST = {
   name: '&elements quote 00309, rev. 03',
   date: '2026-02-16',
   currency: 'EUR',
 } as const;
+
+/**
+ * A price list kept in the cloud. `prices` is keyed like PRICES below, plus
+ * 'column:left' | 'column:mid' | 'column:right'; a number is the price in
+ * euro, null means "no price". Items it does not mention keep the built-in
+ * price.
+ */
+export interface PriceListData {
+  id?: number;
+  name: string;
+  /** The day the prices are from, YYYY-MM-DD. */
+  date: string;
+  prices: Record<string, number | null>;
+}
+
+interface PriceListState {
+  /** The cloud list in use, or null for the built-in one. */
+  custom: PriceListData | null;
+  /** Counts up whenever the prices change, for things that cache totals. */
+  version: number;
+}
+
+export const usePriceList = create<PriceListState>()(() => ({ custom: null, version: 0 }));
+
+/** Puts a cloud price list in use (null: back to the built-in one). */
+export function setPriceList(custom: PriceListData | null): void {
+  usePriceList.setState((s) => ({ custom, version: s.version + 1 }));
+}
+
+/** Name, date and currency of the price list in use. */
+export function activePriceList(): { name: string; date: string; currency: 'EUR'; builtIn: boolean } {
+  const custom = usePriceList.getState().custom;
+  return custom
+    ? { name: custom.name, date: custom.date, currency: 'EUR', builtIn: false }
+    : { ...PRICE_LIST, builtIn: true };
+}
 
 const ANDELEMENTS = '&elements';
 
@@ -78,14 +122,40 @@ export const PRICES: Readonly<Record<string, PriceEntry>> = {
 };
 
 /** Wall rack columns: one at each end of a run of wall units, one between neighbours. */
+const COLUMN_PRICES: Readonly<Record<string, PriceEntry>> = {
+  'column:left': system('105-99-001-01', 419),
+  'column:mid': system('105-99-001-02', 419),
+  'column:right': system('105-99-001-03', 419),
+};
+
 export const COLUMNS = {
-  left: { itemNumber: '105-99-001-01', name: 'Wall rack column – left', price: system('105-99-001-01', 419) },
-  mid: { itemNumber: '105-99-001-02', name: 'Wall rack column – middle', price: system('105-99-001-02', 419) },
-  right: { itemNumber: '105-99-001-03', name: 'Wall rack column – right', price: system('105-99-001-03', 419) },
+  left: { key: 'column:left', itemNumber: '105-99-001-01', name: 'Wall rack column – left' },
+  mid: { key: 'column:mid', itemNumber: '105-99-001-02', name: 'Wall rack column – middle' },
+  right: { key: 'column:right', itemNumber: '105-99-001-03', name: 'Wall rack column – right' },
 } as const;
 
-export function priceOf(catalogId: string | undefined): PriceEntry | undefined {
-  return catalogId ? PRICES[catalogId] : undefined;
+/** The built-in price of `key` (a catalog id or a column key), whatever list is in use. */
+export function builtInPrice(key: string): PriceEntry | undefined {
+  return PRICES[key] ?? COLUMN_PRICES[key];
+}
+
+/**
+ * The price of a catalog item (by its catalog id — not its item number,
+ * which two items can share) or of a column ('column:left' …), from the
+ * list in use. Undefined: no price.
+ */
+export function priceOf(key: string | undefined): PriceEntry | undefined {
+  if (!key) return undefined;
+  const base = builtInPrice(key);
+  const custom = usePriceList.getState().custom;
+  if (custom && Object.prototype.hasOwnProperty.call(custom.prices, key)) {
+    const value = custom.prices[key];
+    if (value === null || value === undefined) return undefined;
+    // The same price as built in keeps its source note; a changed or new one is the list's own.
+    if (base && base.priceEur === value) return base;
+    return { sku: base?.sku ?? key, priceEur: value, source: 'list', supplier: base?.supplier };
+  }
+  return base;
 }
 
 /** "1.586 €" (Danish formatting, whole euros unless there are cents). */

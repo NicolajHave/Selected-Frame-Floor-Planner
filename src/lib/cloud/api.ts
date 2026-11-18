@@ -40,6 +40,17 @@ export interface ShareLink {
   expires_at?: string;
 }
 
+/** A saved price list (see lib/cloud/priceList.ts). */
+export interface CloudPriceList {
+  id: number;
+  name: string;
+  /** The day the prices are from, YYYY-MM-DD. */
+  valid_from: string;
+  prices: Record<string, number | null>;
+  saved_by_email: string;
+  saved_at: string;
+}
+
 export interface CloudVersion {
   slot: number;
   kind: 'auto' | 'manual';
@@ -98,6 +109,12 @@ export const cloud = {
   /** Gives the link 30 more days from now; returns the new expiry. */
   renewLink: (token: string) => call<string>('fp_renew_link', { p_token: token }),
   getShared: (token: string) => call<SharedProject | null>('fp_get_shared_project', { p_token: token }),
+
+  // The price list in use, and the ones before it (see priceList.ts).
+  getPriceList: () => call<CloudPriceList | null>('fp_get_price_list'),
+  listPriceLists: () => call<CloudPriceList[]>('fp_list_price_lists'),
+  savePriceList: (name: string, validFrom: string, prices: Record<string, number | null>) =>
+    call<CloudPriceList>('fp_save_price_list', { p_name: name, p_valid_from: validFrom, p_prices: prices }),
 
   // The plan drawing, kept next to the plan rather than in it (see assetSync.ts).
   hasAsset: (id: string, asset: string) => call<boolean>('fp_has_asset', { p_id: id, p_asset: asset }),

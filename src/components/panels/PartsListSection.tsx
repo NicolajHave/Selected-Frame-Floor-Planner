@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { buildPartsList, partsListToCsv } from '@/lib/partsList';
 import { downloadText } from '@/lib/io';
-import { PRICE_LIST, eur } from '@/lib/prices';
+import { activePriceList, eur, usePriceList } from '@/lib/prices';
 import { polygonArea } from '@/geometry/polygon';
 import { Section } from '../ui/Section';
 import { Button } from '../ui/Button';
@@ -16,7 +16,11 @@ function kg(n: number): string {
 export function PartsListSection() {
   const inventory = usePlannerStore((s) => s.project.inventory);
   const projectName = usePlannerStore((s) => s.project.name);
-  const list = useMemo(() => buildPartsList(inventory), [inventory]);
+  // Recount when the price list in use changes.
+  const priceVersion = usePriceList((s) => s.version);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const list = useMemo(() => buildPartsList(inventory), [inventory, priceVersion]);
+  const priceList = activePriceList();
   const room = usePlannerStore((s) => s.project.room);
   // Prices are internal: a shared view-only link doesn't show them.
   const showPrices = usePlannerStore((s) => !s.shared);
@@ -95,7 +99,7 @@ export function PartsListSection() {
                   <Total label="Per m² floor" value={eur(Math.round((list.totalPriceEur / areaM2) * 100) / 100)} />
                 )}
                 <p className="text-[10px] leading-relaxed text-ink-500" data-testid="price-note">
-                  {PRICE_LIST.currency}, prices from the {PRICE_LIST.name} ({PRICE_LIST.date}).
+                  {priceList.currency}, prices from the {priceList.name} ({priceList.date}).
                   {list.rows.some((r) => r.priceSource === 'system') && ' † from the system price list (the quote prices wall units part by part).'}
                   {list.unitsWithoutPrice > 0 &&
                     ` ${list.unitsWithoutPrice} unit${list.unitsWithoutPrice === 1 ? ' has' : 's have'} no price and ${list.unitsWithoutPrice === 1 ? 'is' : 'are'} not in the total.`}
