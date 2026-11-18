@@ -5,6 +5,50 @@ import { useEffect, useState } from 'react';
 const AUTOSAVE_KEY = 'sf-planner:project';
 const CRASHED_KEY = 'sf-planner:project:crashed';
 
+/**
+ * The plan's drawing is kept outside the autosave, in IndexedDB (see
+ * lib/assets.ts). Read here on its own, without any of the app's code, so
+ * the backup is whole even if that code is what crashed. Never throws.
+ */
+function readDrawing(id: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    try {
+      const open = window.indexedDB.open('sf-planner-assets');
+      open.onerror = () => resolve(null);
+      open.onupgradeneeded = () => open.transaction?.abort(); // no such store here: leave it uncreated
+      open.onsuccess = () => {
+        try {
+          const req = open.result.transaction('images', 'readonly').objectStore('images').get(id);
+          req.onsuccess = () => resolve((req.result as { url?: string } | undefined)?.url ?? null);
+          req.onerror = () => resolve(null);
+        } catch {
+          resolve(null);
+        }
+      };
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
+/** The backup as text: the autosaved plan with its drawing put back in. */
+async function backupText(json: string): Promise<string> {
+  try {
+    const project = JSON.parse(json) as { underlay?: { src?: string } | null };
+    const src = project.underlay?.src;
+    if (project.underlay && typeof src === 'string' && src.startsWith('asset:')) {
+      const picture = await readDrawing(src.slice('asset:'.length));
+      if (picture) {
+        project.underlay.src = picture;
+        return JSON.stringify(project, null, 2);
+      }
+    }
+  } catch {
+    // Fall through to the plan as it was stored.
+  }
+  return json;
+}
+
 /** The autosaved plan exactly as stored, or null. Never throws. */
 function readAutosave(): { name: string; json: string } | null {
   try {
@@ -33,9 +77,9 @@ export default function PlannerError({ error, reset }: { error: Error & { digest
     setSaved(readAutosave());
   }, [error]);
 
-  const download = () => {
+  const download = async () => {
     if (!saved) return;
-    const url = URL.createObjectURL(new Blob([saved.json], { type: 'application/json' }));
+    const url = URL.createObjectURL(new Blob([await backupText(saved.json)], { type: 'application/json' }));
     const a = document.createElement('a');
     a.href = url;
     a.download = `${saved.name}.backup.sf.json`;
@@ -75,7 +119,7 @@ export default function PlannerError({ error, reset }: { error: Error & { digest
           {saved && (
             <button
               type="button"
-              onClick={download}
+              onClick={() => void download()}
               className="h-9 rounded-[2px] border border-ink-900 px-4 text-[12px] font-medium text-ink-900"
             >
               Download backup

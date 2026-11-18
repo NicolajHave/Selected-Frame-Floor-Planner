@@ -1,9 +1,19 @@
+import path from 'node:path';
+import fs from 'node:fs';
 import { test, expect } from '@playwright/test';
-import { drawRoom, openFresh } from './helpers';
+import { drawRoom, openFresh, saved } from './helpers';
+
+const PLAN_PDF = path.join(__dirname, '../fixtures/sample-plan.pdf');
 
 test('a plan that crashes the planner shows an error screen with a backup, not a blank page', async ({ page }) => {
   await openFresh(page);
   await drawRoom(page);
+  // With a drawing under the room, kept outside the plan in the browser's own store.
+  await page.getByTestId('underlay-file').setInputFiles(PLAN_PDF);
+  await page.getByRole('dialog').getByRole('button', { name: 'Use whole page' }).click();
+  await expect(page.locator('[data-layer="underlay"] image')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect.poll(async () => (await saved(page)).underlay?.src ?? '').toMatch(/^asset:/);
 
   // Break the autosaved plan the way a bad file or a bug could: a fixture without a position.
   await page.evaluate(() => {
@@ -23,6 +33,10 @@ test('a plan that crashes the planner shows an error screen with a backup, not a
   // The plan can be taken out as a file …
   const [download] = await Promise.all([page.waitForEvent('download'), screen.getByRole('button', { name: 'Download backup' }).click()]);
   expect(download.suggestedFilename()).toBe('Broken shop.backup.sf.json');
+  // The backup is whole: the drawing is in it, not just a reference to it.
+  const backup = JSON.parse(fs.readFileSync((await download.path())!, 'utf8'));
+  expect(backup.name).toBe('Broken shop');
+  expect(backup.underlay.src).toMatch(/^data:image\/jpeg;base64,/);
 
   // … and the planner opens again without it; the broken plan is kept aside.
   await screen.getByRole('button', { name: 'Start with an empty plan' }).click();
