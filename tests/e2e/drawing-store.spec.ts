@@ -79,7 +79,7 @@ test('a cloud plan stores its drawing once; saves, colleagues and view-only link
   // The drawing went up on its own, and the plan in the cloud only refers to it.
   await expect.poll(() => fake.assets.size).toBe(1);
   await expect.poll(() => stored().underlay.src).toMatch(REF);
-  const [[key, picture]] = [...fake.assets];
+  const [key, picture] = [...fake.assets][0]!;
   expect(key).toBe(`${id}:${stored().underlay.src.slice('asset:'.length)}`);
   expect(picture).toMatch(/^data:image\/jpeg;base64,/);
 
