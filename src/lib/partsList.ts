@@ -6,6 +6,8 @@ import { placeAccessories } from './accessories';
 
 export interface PartsListRow {
   itemNumber: string;
+  /** What the price list knows the item by: its catalog id, or a column key. */
+  priceKey?: string;
   name: string;
   category: string;
   quantity: number;
@@ -80,6 +82,7 @@ export function buildPartsList(inventory: InventoryItem[]): PartsList {
       asset
         ? {
             itemNumber: asset.itemNumber,
+            priceKey: asset.id,
             name: asset.name,
             category: asset.category,
             quantity: 1,
@@ -119,6 +122,7 @@ export function buildPartsList(inventory: InventoryItem[]): PartsList {
     const c = COLUMNS[side];
     byKey.set(`column:${side}`, {
       itemNumber: c.itemNumber,
+      priceKey: c.key,
       name: c.name,
       category: 'Wall Units',
       quantity: counts[side],
@@ -164,9 +168,9 @@ export function buildPartsList(inventory: InventoryItem[]): PartsList {
 }
 
 function priceFor(r: PartsListRow): PriceEntry | undefined {
-  if (!r.catalog) return undefined;
-  const column = Object.values(COLUMNS).find((c) => c.itemNumber === r.itemNumber);
-  return column ? column.price : priceOf(r.itemNumber);
+  // By catalog id: two items can share an item number (the H1700 racks), and
+  // some item numbers are written differently from their id (the mannequins).
+  return r.catalog ? priceOf(r.priceKey) : undefined;
 }
 
 /** Danish-locale number: decimal comma, no thousands separator. */
@@ -203,7 +207,7 @@ export function partsListToCsv(list: PartsList, projectName: string): string {
       num(r.unitWeightKg), num(r.totalWeightKg), num(r.hangersPerUnit), num(r.totalHangers),
       r.hsCodes.join(' / '),
       r.sku ?? r.itemNumber, money(r.unitPriceEur), money(r.totalPriceEur),
-      r.priceSource === 'quote' ? '&elements quote' : r.priceSource === 'system' ? 'System price list' : '',
+      r.priceSource === 'quote' ? '&elements quote' : r.priceSource === 'system' ? 'System price list' : r.priceSource === 'list' ? 'Price list' : '',
       r.supplier ?? '',
     ]),
     [],

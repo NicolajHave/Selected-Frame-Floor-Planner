@@ -9,6 +9,7 @@ import { Button } from '../ui/Button';
 import { Menu, MenuItem, MenuSeparator } from '../ui/Menu';
 import { CloudActions, CloudStatus } from '../cloud/CloudBar';
 import { PdfDialog } from './PdfDialog';
+import { PriceListDialog } from '../cloud/PriceListDialog';
 import { LockIcon } from '../ui/LockIcon';
 import type { CloudUser } from '@/lib/cloud/useCloudUser';
 
@@ -54,6 +55,7 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
   const fit = useFitToPlan();
 
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [pricesOpen, setPricesOpen] = useState(false);
   const { save, exportData, triggerLoad, inputRef, onFileChange } = useFileIO();
 
   const [editingName, setEditingName] = useState(false);
@@ -242,6 +244,12 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
             </>
           )}
           <MenuItem onClick={exportData}>Export data (JSON)</MenuItem>
+          {user && !sharedView && (
+            <>
+              <MenuSeparator />
+              <MenuItem onClick={() => setPricesOpen(true)}>Price list…</MenuItem>
+            </>
+          )}
         </Menu>
         <Button
           variant="ghost"
@@ -252,6 +260,7 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
           PDF
         </Button>
         {pdfOpen && <PdfDialog onClose={() => setPdfOpen(false)} signedIn={!!user} />}
+        {pricesOpen && <PriceListDialog onClose={() => setPricesOpen(false)} />}
         <input
           ref={inputRef}
           type="file"

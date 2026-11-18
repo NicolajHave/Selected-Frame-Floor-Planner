@@ -15,7 +15,7 @@ import { electricalType } from './electricalTypes';
 import { electricalAnchor } from '@/geometry/electrical';
 import { rackContents } from './racks';
 import { placedPlanShape } from './planShapes';
-import { PRICE_LIST } from './prices';
+import { activePriceList } from './prices';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { buildPartsList, type PartsList } from './partsList';
 import { DEFAULT_MIN_AISLE, innerOutline, layoutIssues } from './layout';
@@ -832,7 +832,7 @@ function drawListPages(doc: JsPdf, info: DocInfo, project: Project, parts: Parts
   if (prices) {
     font(doc, 7, 'normal', MUTED);
     doc.text(
-      `Prices in ${PRICE_LIST.currency} from the ${PRICE_LIST.name} (${PRICE_LIST.date}); † from the system price list.` +
+      `Prices in ${activePriceList().currency} from the ${activePriceList().name} (${activePriceList().date}); † from the system price list.` +
         (parts.unitsWithoutPrice ? ` ${parts.unitsWithoutPrice} unit(s) have no price and are not in the total.` : ''),
       MARGIN,
       y,
