@@ -21,7 +21,10 @@ export interface RoomPolygon {
 export interface WallStyle {
   /** This wall's height; the room's `wallHeight` when absent. */
   height?: Mm;
-  /** Glass or an open side: see-through in 3D, dashed on the plan. */
+  /**
+   * An open side of the shop: there is no wall here. Dashed on the plan,
+   * left out in 3D; customers walk in across it (the shop's entrance).
+   */
   transparent?: boolean;
 }
 

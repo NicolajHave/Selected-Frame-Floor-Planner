@@ -116,3 +116,14 @@ export function rayHit(origin: Point, dx: number, dy: number, segments: [Point, 
 export function edges(poly: Polygon): [Point, Point][] {
   return poly.map((p, i) => [p, poly[(i + 1) % poly.length]!] as [Point, Point]);
 }
+
+/** Whether the straight line from `a` to `b` passes through `poly` (convex). */
+export function segmentCrosses(a: Point, b: Point, poly: Polygon): boolean {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len < 1e-6) return pointInPolygon(a, poly);
+  // A sliver along the line: 2 mm wide, so the overlap test's tolerance does not hide it.
+  const nx = (-(b.y - a.y) / len) * 2;
+  const ny = ((b.x - a.x) / len) * 2;
+  const p = (x: number, y: number) => ({ x, y }) as Point;
+  return convexOverlap([p(a.x + nx, a.y + ny), p(b.x + nx, b.y + ny), p(b.x - nx, b.y - ny), p(a.x - nx, a.y - ny)], poly, 0.5);
+}

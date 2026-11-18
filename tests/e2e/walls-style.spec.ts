@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { drawRoom, openFresh, saved, toScreen, trackErrors } from './helpers';
 
-test('select a wall: give it its own height, make it transparent, add a window to it', async ({ page }) => {
+test('select a wall: give it its own height, make it an open side, add a window to it', async ({ page }) => {
   const errors = trackErrors(page);
   await openFresh(page);
   const room = await drawRoom(page);
@@ -17,7 +17,7 @@ test('select a wall: give it its own height, make it transparent, add a window t
   await expect(height).toHaveValue('2700');
   await height.fill('3200');
   await height.press('Enter');
-  await page.getByRole('radio', { name: 'Transparent' }).click();
+  await page.getByRole('radio', { name: 'Open' }).click();
   let p = await saved(page);
   const id = p.room.corners[1].id;
   expect(p.room.walls[id]).toEqual({ height: 3200, transparent: true });

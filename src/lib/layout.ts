@@ -5,17 +5,8 @@ import type { Mm } from '@/model/units';
 import { rectCorners } from '@/geometry/transform';
 import { signedArea } from '@/geometry/polygon';
 import { openingSpan } from '@/geometry/openings';
-import {
-  closestOnSegment,
-  convexOverlap,
-  edges,
-  outlineGap,
-  pointInPolygon,
-  rayHit,
-  segmentGap,
-  type Gap,
-  type Polygon,
-} from '@/geometry/footprint';
+import { closestOnSegment, convexOverlap, edges, outlineGap, pointInPolygon, rayHit, segmentGap, type Gap, type Polygon, segmentCrosses } from '@/geometry/footprint';
+import { wallStyle } from '@/geometry/wallStyle';
 import { findAsset } from './assetCatalog';
 
 export const DEFAULT_MIN_AISLE = 900;
@@ -160,6 +151,7 @@ export function layoutIssues(project: Project, minAisle = DEFAULT_MIN_AISLE): La
   }
 
   // Overlaps and narrow gaps between objects
+  const partitions = obstacles.filter((o) => o.partition);
   for (let i = 0; i < obstacles.length; i++) {
     for (let j = i + 1; j < obstacles.length; j++) {
       const a = obstacles[i]!;
@@ -176,7 +168,9 @@ export function layoutIssues(project: Project, minAisle = DEFAULT_MIN_AISLE): La
         continue;
       }
       const gap = outlineGap(a.outline, b.outline);
-      if (gap.distance > TOUCHING && gap.distance < minAisle) {
+      // Fixtures either side of an interior wall have the wall between them, not an aisle.
+      const walled = partitions.some((w) => w !== a && w !== b && segmentCrosses(gap.from, gap.to, w.outline));
+      if (gap.distance > TOUCHING && gap.distance < minAisle && !walled) {
         issues.push({
           key: `aisle:${a.id}:${b.id}`,
           kind: 'aisle',
@@ -189,12 +183,14 @@ export function layoutIssues(project: Project, minAisle = DEFAULT_MIN_AISLE): La
     }
   }
 
-  // Narrow gaps between objects and walls (narrowest per object)
+  // Narrow gaps between objects and walls (narrowest per object). An open
+  // side is no wall: there is nothing there to leave an aisle to.
+  const solidFaces = room ? faces.filter((_, i) => !wallStyle(room, i).transparent) : faces;
   for (const o of obstacles) {
     if (o.partition) continue;
     if (issues.some((x) => x.kind === 'wall' && x.objectIds[0] === o.id)) continue;
     let best: Gap | null = null;
-    for (const [a, b] of faces) {
+    for (const [a, b] of solidFaces) {
       const g = segmentGap(o.outline, a, b);
       if (!best || g.distance < best.distance) best = g;
     }

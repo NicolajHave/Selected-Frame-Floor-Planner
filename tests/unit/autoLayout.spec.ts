@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { entrance, proposeLayout } from '@/lib/autoLayout';
+import { entrance, entrances, proposeLayout } from '@/lib/autoLayout';
 import { layoutIssues } from '@/lib/layout';
 import type { Project } from '@/model/project';
 import type { Opening, RoomPolygon } from '@/model/objects';
-import type { Mm } from '@/model/units';
+import type { Mm, Radians } from '@/model/units';
 import { rectCorners } from '@/geometry/transform';
 import { outlineGap } from '@/geometry/footprint';
 import { rackSlots } from '@/lib/racks';
@@ -116,7 +116,7 @@ test('floor racks are held to the size of the shop', () => {
   expect(racks(b)).toBeLessThan(racks(v));
 });
 
-test('no wall racks against a transparent (glass) wall', () => {
+test('no wall racks against an open side (a wall marked open)', () => {
   const glass = room(12000, 9000, [door('c2', 6000)]);
   glass.walls = { c0: { transparent: true } }; // the top wall
   const inv = proposeLayout(project(glass), { style: 'volume', aisle: 900, wallRacks: true }).inventory;
@@ -165,22 +165,80 @@ test('the logo hangs centred over the leftmost wall unit on its wall', () => {
   expect(logo.position.x).toBeCloseTo(leftmost.x, 3);
 });
 
-test('volume racks stand in pairs, end to end, with the aisle around each pair; single racks fill what is left', () => {
+test('volume racks stand two and two, back to back, in a straight row with the aisle around each pair', () => {
   const inv = proposeLayout(shop, { style: 'volume', aisle: 900, wallRacks: true }).inventory;
   const racks = inv.filter((i) => i.assetRef?.startsWith('105-06-'));
+  expect(racks.length).toBeGreaterThanOrEqual(8);
   let paired = 0;
   for (const r of racks) {
     const o = rectCorners(r.position, r.size, r.rotation);
     const touching = racks.filter((x) => x !== r && outlineGap(o, rectCorners(x.position, x.size, x.rotation)).distance <= 1);
     expect(touching.length).toBeLessThanOrEqual(1);
-    paired += touching.length;
+    for (const t of touching) {
+      paired++;
+      // Side by side (a rack's depth between their centres), not one after the other (a rack's length).
+      expect(Math.hypot(t.position.x - r.position.x, t.position.y - r.position.y)).toBeCloseTo(500, 0);
+    }
   }
-  expect(paired).toBeGreaterThanOrEqual(4);
-  expect(racks.length).toBeGreaterThan(paired);
+  expect(paired).toBeGreaterThanOrEqual(8);
+  // In line: the racks point the same way and stand at no more than two heights on the plan.
+  const turns = new Set(racks.map((r) => Math.round(Math.abs(Math.cos(r.rotation)) * 100)));
+  expect(turns.size).toBe(1);
+  const along = (r: (typeof racks)[number]) => Math.round(r.position.x * Math.cos(r.rotation) + r.position.y * Math.sin(r.rotation));
+  expect(new Set(racks.map(along)).size).toBeLessThanOrEqual(2);
   expect(layoutIssues({ ...shop, inventory: inv }, 900)).toEqual([]);
 });
 
-// A 55 m² shop drawn at an angle: glass front on the right, a double door to
+test('Volume Tables stand free on the floor: the aisle all the way round', () => {
+  for (const style of ['brand', 'volume'] as const) {
+    const inv = proposeLayout(shop, { style, aisle: 900, wallRacks: true }).inventory;
+    const tables = inv.filter((i) => i.assetRef === '105-17-001');
+    expect(tables).toHaveLength(2);
+    const walls = [[0, 0], [12000, 0], [12000, 9000], [0, 9000]].map(([x, y]) => ({ x: x as Mm, y: y as Mm }));
+    for (const t of tables) {
+      const o = rectCorners(t.position, t.size, t.rotation);
+      for (let i = 0; i < 4; i++) expect(outlineGap(o, [walls[i]!, walls[(i + 1) % 4]!]).distance).toBeGreaterThanOrEqual(899);
+      for (const other of inv) {
+        // Carpets are walked over; logos hang on the wall.
+        if (other === t || other.assetRef?.startsWith('105-13') || other.assetRef?.startsWith('105-19')) continue;
+        const gap = outlineGap(o, rectCorners(other.position, other.size, other.rotation)).distance;
+        expect(gap, `${other.name}: ${gap}`).toBeGreaterThanOrEqual(899);
+      }
+    }
+  }
+});
+
+test('the entrance zone moves along an open side, or to the next way in, when something is in the way', () => {
+  // An open side at the top with an interior wall right across where the zone would go; a double door at the bottom.
+  const r = room(12000, 9000, [door('c2', 6000)]);
+  r.walls = { c0: { transparent: true } };
+  const blocked: Project = { ...project(r), pillars: [{
+    id: 'wall', type: 'pillar', kind: 'wall', shape: 'rect', position: { x: 6000 as Mm, y: 2300 as Mm },
+    size: { width: 11000 as Mm, depth: 100 as Mm, height: 2800 as Mm }, rotation: 0 as Radians,
+  }] };
+  expect(entrances(r).map((e) => e.center.y)).toEqual([0, 9000]);
+  const inv = proposeLayout(blocked, { style: 'brand', aisle: 900, wallRacks: true }).inventory;
+  const table = inv.find((i) => i.assetRef === '105-17-007')!;
+  expect(table.position.y).toBeGreaterThan(4500); // by the door, not behind the wall
+  expect(inv.filter((i) => i.assetRef?.startsWith('112-18'))).toHaveLength(2);
+  expect(inv.filter((i) => i.assetRef === '105-19-001')).toHaveLength(1);
+
+  // A post in the middle of the open side: the zone slides along the side past it.
+  const post: Project = { ...project(r), pillars: [{
+    id: 'post', type: 'pillar', shape: 'rect', position: { x: 6000 as Mm, y: 1800 as Mm },
+    size: { width: 400 as Mm, depth: 400 as Mm, height: 2800 as Mm }, rotation: 0 as Radians,
+  }] };
+  const withPost = proposeLayout(post, { style: 'brand', aisle: 900, wallRacks: true }).inventory;
+  const slid = withPost.find((i) => i.assetRef === '105-17-007')!;
+  expect(slid.position.y).toBeLessThan(4500); // still at the open side
+  expect(slid.position.x).not.toBe(6000); // but not straight behind the post
+  const postOutline = rectCorners(post.pillars[0]!.position, post.pillars[0]!.size, post.pillars[0]!.rotation);
+  expect(outlineGap(rectCorners(slid.position, slid.size, slid.rotation), postOutline).distance).toBeGreaterThanOrEqual(899);
+  expect(withPost.filter((i) => i.assetRef?.startsWith('112-18'))).toHaveLength(2);
+  expect(layoutIssues({ ...post, inventory: withPost }, 900)).toEqual([]);
+});
+
+// A 55 m² shop drawn at an angle: open side on the right, a double door to
 // the stock room on the left, a single door and a window at the top.
 function angledShop(): Project {
   const corners = [[0, 0], [4052, 891], [9168, 2400], [5978, 7602], [-1250, 7400]];
@@ -196,15 +254,15 @@ function angledShop(): Project {
   });
 }
 
-test('the entrance: a glass wall before any door, double doors and passages before single doors', () => {
-  // Glass front without a door in it: the middle of the glass, facing in.
+test('the entrance: an open side before any door, double doors and passages before single doors', () => {
+  // An open side without a door in it: its middle, facing in.
   const angled = angledShop().room!;
   const front = entrance(angled)!;
   expect(front.center.x).toBeCloseTo((9168 + 5978) / 2, 0);
   expect(front.center.y).toBeCloseTo((2400 + 7602) / 2, 0);
   expect(front.nx).toBeLessThan(0); // into the shop, to the left
 
-  // A door in the glass is the entrance, even with a wider door elsewhere.
+  // A door drawn in the open side is the entrance, even with a wider door elsewhere.
   const withDoor = room(12000, 9000, [
     { ...door('c0', 3000, 1000), id: 'in-glass', kind: 'door' },
     { ...door('c2', 6000, 2400), id: 'stock' },
@@ -212,7 +270,7 @@ test('the entrance: a glass wall before any door, double doors and passages befo
   withDoor.walls = { c0: { transparent: true } };
   expect(entrance(withDoor)!.center).toEqual({ x: 3000, y: 0 });
 
-  // No glass: the double door wins over a wider single door.
+  // No open side: the double door wins over a wider single door.
   const doors = room(12000, 9000, [
     { ...door('c0', 3000, 1300), id: 'single', kind: 'door' },
     { ...door('c2', 6000, 1200), id: 'double' },
@@ -223,7 +281,7 @@ test('the entrance: a glass wall before any door, double doors and passages befo
   expect(entrance(room(12000, 9000))).toBeNull();
 });
 
-test('a shop at an angle: the impact zone is at the glass front, with both mannequins and floor racks', () => {
+test('a shop at an angle: the impact zone is at the open side, with both mannequins and floor racks', () => {
   const shop55 = angledShop();
   for (const style of ['brand', 'volume'] as const) {
     const inv = proposeLayout(shop55, { style, aisle: 900, wallRacks: true }).inventory;
@@ -231,12 +289,12 @@ test('a shop at an angle: the impact zone is at the glass front, with both manne
     expect(inv.filter((i) => i.assetRef?.startsWith('105-06-')).length).toBeGreaterThanOrEqual(2);
     expect(inv.filter((i) => i.assetRef?.startsWith('112-18'))).toHaveLength(2);
     expect(inv.filter((i) => i.assetRef === '105-17-001')).toHaveLength(1);
-    // The Iconic Table is nearer the glass front than the stock-room double door.
+    // The Iconic Table is nearer the open side than the stock-room double door.
     const table = inv.find((i) => i.assetRef === '105-17-007')!;
     const toGlass = Math.hypot(table.position.x - 7573, table.position.y - 5001);
     const toStockDoor = Math.hypot(table.position.x + 367, table.position.y - 2125);
     expect(toGlass).toBeLessThan(toStockDoor);
-    // No wall rack on the glass.
+    // No wall rack on the open side.
     expect(inv.filter((i) => i.modules && i.position.x > 6500 && i.position.y > 3500)).toEqual([]);
   }
 });
