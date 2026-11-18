@@ -246,7 +246,7 @@ export function PlanUnderlaySection() {
               onClick={startWallTrace}
               title={
                 layoutLocked
-                  ? 'The room is locked'
+                  ? 'The floor plan is locked'
                   : underlay.calibrated
                     ? 'Click inside a room on the plan: its walls are drafted for you to check'
                     : 'Set the scale first'

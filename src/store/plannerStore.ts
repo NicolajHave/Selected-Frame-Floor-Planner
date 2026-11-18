@@ -29,6 +29,7 @@ import * as variants from '@/lib/variants';
 import { proposeLayout as makeProposal, type AutoLayoutOptions } from '@/lib/autoLayout';
 import { partitionBetween } from '@/lib/partition';
 import { autosaveProject, internImage, onAssetDurable } from '@/lib/assets';
+import { trail } from '@/lib/monitor';
 import { clipCount, makeClip, placeClip, readClip, writeClip } from '@/lib/clipboard';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
@@ -528,6 +529,24 @@ function detach(s: Draft<PlannerState>): void {
 /** Project as it stood when the current gesture began; null outside a gesture. */
 let gestureStart: Project | null = null;
 
+/**
+ * Every action leaves its name — never what it was given — on the trail an
+ * error report takes along (lib/monitor), so a report can say what was
+ * being done when something failed.
+ */
+function withTrail<T extends object>(state: T): T {
+  const out = { ...state } as Record<string, unknown>;
+  for (const [name, value] of Object.entries(out)) {
+    if (typeof value !== 'function') continue;
+    const action = value as (...args: unknown[]) => unknown;
+    out[name] = (...args: unknown[]) => {
+      trail(name);
+      return action(...args);
+    };
+  }
+  return out as T;
+}
+
 export const usePlannerStore = create<PlannerState>()(
   persist(
     immer((setState, get) => {
@@ -585,7 +604,7 @@ export const usePlannerStore = create<PlannerState>()(
         return free;
       };
 
-      return {
+      return withTrail<PlannerState>({
         project: makeProject(),
         view: { ...DEFAULT_VIEW },
         tool: 'select',
@@ -1791,7 +1810,7 @@ export const usePlannerStore = create<PlannerState>()(
             // Pillars are part of the floor layout: they stay out while it is locked.
             const pillars = s.project.layoutLocked ? [] : placed.pillars;
             if (!placed.inventory.length && !pillars.length && !placed.notes.length) {
-              s.notice = info('The room is locked, so the pillars were not pasted.');
+              s.notice = info('The floor plan is locked, so the pillars were not pasted.');
               return;
             }
             record(s);
@@ -1808,7 +1827,7 @@ export const usePlannerStore = create<PlannerState>()(
             if (s.tool !== 'select') s.tool = 'select';
             const n = pasted.length;
             s.notice = info(
-              `Pasted ${n === 1 ? '1 item' : `${n} items`}.${pillars.length < placed.pillars.length ? ' Pillars were left out: the room is locked.' : ''}`,
+              `Pasted ${n === 1 ? '1 item' : `${n} items`}.${pillars.length < placed.pillars.length ? ' Pillars were left out: the floor plan is locked.' : ''}`,
             );
             touch(s.project);
           }),
@@ -2224,7 +2243,7 @@ export const usePlannerStore = create<PlannerState>()(
             s.readOnly = true;
             s.shared = { name: sp.name, ownerEmail: sp.owner_email, updatedAt: sp.updated_at };
           }),
-      };
+      });
     }),
     {
       // Autosave: the project and which cloud project it belongs to go to

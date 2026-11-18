@@ -71,10 +71,21 @@ function readAutosave(): { name: string; json: string } | null {
  */
 export default function PlannerError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   const [saved, setSaved] = useState<{ name: string; json: string } | null>(null);
+  const [reported, setReported] = useState(false);
 
   useEffect(() => {
     console.error(error);
     setSaved(readAutosave());
+    // Tell the people who look after the planner. Loaded here and not at the
+    // top, so this screen still shows if that code is part of what broke.
+    let gone = false;
+    import('@/lib/monitor')
+      .then((m) => m.reportError('screen', error))
+      .then((sent) => !gone && setReported(sent))
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
   }, [error]);
 
   const download = async () => {
@@ -136,7 +147,12 @@ export default function PlannerError({ error, reset }: { error: Error & { digest
             </button>
           )}
         </div>
-        <p className="mt-6 break-words font-mono text-[10px] leading-relaxed text-ink-500">
+        {reported && (
+          <p role="status" className="mt-6 text-[11px] leading-relaxed text-ink-500">
+            The error has been reported, without your plan, so it can be fixed.
+          </p>
+        )}
+        <p className={`${reported ? 'mt-2' : 'mt-6'} break-words font-mono text-[10px] leading-relaxed text-ink-500`}>
           {error.message || 'Unknown error'}
           {error.digest ? ` · ${error.digest}` : ''}
         </p>

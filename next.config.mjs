@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  env: {
+    // Which build this is (the commit), so an error report can say where it happened.
+    NEXT_PUBLIC_APP_VERSION: (process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || 'dev').slice(0, 7),
+  },
   async headers() {
     return [
       {

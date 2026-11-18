@@ -13,7 +13,7 @@ export function isLocked(project: Pick<Project, 'layoutLocked' | 'inventory'>, s
 }
 
 export const LAYOUT_LOCKED_MESSAGE =
-  'The room is locked: walls, doors, windows and pillars stay as they are. Unlock it in the top bar to change them.';
+  'The floor plan is locked: walls, doors, windows and pillars stay as they are. Unlock it in the top bar to change them.';
 
 export const itemLockedMessage = (name: string) =>
   `${name} is locked. Unlock the fixture in its panel (or press L) to move it.`;

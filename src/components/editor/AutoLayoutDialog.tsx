@@ -48,7 +48,8 @@ export function AutoLayoutDialog({ onClose }: { onClose: () => void }) {
           Places fixtures in the room for you{empty ? '' : ', as a new layout tab — your own layout stays as it is'}. Doorways
           stay clear and every fixture keeps at least the minimum aisle to the next one and to the walls. The entrance is
           the shop's open side if it has one, otherwise its widest double door. The logo hangs over a wall rack (Corona
-          Light from 30 m², stainless steel below). Then adjust it like any other.
+          Light from 30 m², stainless steel below). The wall racks are hanging, with one shelf unit in the shop — a second
+          beside it over 80 m² or on a wall with more than 8.4 m free. Then adjust it like any other.
         </p>
 
         <fieldset className="grid grid-cols-2 gap-2">

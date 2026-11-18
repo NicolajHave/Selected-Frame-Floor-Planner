@@ -44,7 +44,7 @@ test('the top bar folds into menus on smaller screens; nothing is cut off', asyn
   await expect(page.locator('header')).toHaveAttribute('data-fold', /[1-3]/);
   await barFits(page);
   await expect(page.getByRole('button', { name: '3D View' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Lock room' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Lock floor plan' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Draw area' })).toBeVisible();
 
   // Narrower: "+ Pillar / + Box / + Note" and the cloud buttons become menus.

@@ -67,7 +67,7 @@ export function AssetLibrary() {
         <Group id="openings" title="Doors & windows" count={OPENING_TYPES.length} open={open} toggle={toggle}>
           {layoutLocked && (
             <p className="px-1 pb-2 text-[11px] leading-snug text-ink-500">
-              The room is locked. Unlock it in the top bar to add or move doors and windows.
+              The floor plan is locked. Unlock it in the top bar to add or move doors and windows.
             </p>
           )}
           <div className="grid grid-cols-2 gap-2">
