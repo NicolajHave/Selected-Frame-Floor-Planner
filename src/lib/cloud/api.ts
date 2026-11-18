@@ -51,6 +51,26 @@ export interface CloudPriceList {
   saved_at: string;
 }
 
+/** One kind of error from the error log (see lib/monitor.ts): every report of it, counted. */
+export interface CloudError {
+  id: number;
+  /** 'error' | 'promise' | 'screen' | 'save' */
+  kind: string;
+  message: string;
+  stack: string;
+  /** The build of the planner it happened in. */
+  version: string;
+  /** How it came about the last time: view, size of the plan, browser, the last things done. */
+  context: Record<string, unknown>;
+  hits: number;
+  /** How many signed-in people it happened to. */
+  people: number;
+  /** How many of the hits came from someone not signed in. */
+  anonymous_hits: number;
+  first_seen: string;
+  last_seen: string;
+}
+
 export interface CloudVersion {
   slot: number;
   kind: 'auto' | 'manual';
@@ -115,6 +135,11 @@ export const cloud = {
   listPriceLists: () => call<CloudPriceList[]>('fp_list_price_lists'),
   savePriceList: (name: string, validFrom: string, prices: Record<string, number | null>) =>
     call<CloudPriceList>('fp_save_price_list', { p_name: name, p_valid_from: validFrom, p_prices: prices }),
+
+  // The error log (reports are sent by lib/monitor.ts, on its own).
+  listErrors: () => call<CloudError[]>('fp_list_errors'),
+  /** Clears one error from the log, or all of them without an id. */
+  clearErrors: (id?: number) => call<void>('fp_clear_errors', { p_id: id ?? null }),
 
   // The plan drawing, kept next to the plan rather than in it (see assetSync.ts).
   hasAsset: (id: string, asset: string) => call<boolean>('fp_has_asset', { p_id: id, p_asset: asset }),

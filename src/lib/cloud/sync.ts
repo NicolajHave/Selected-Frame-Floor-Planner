@@ -5,6 +5,7 @@ import { usePlannerStore } from '@/store/plannerStore';
 import { cloud } from './api';
 import { cloudProject } from './assetSync';
 import { inlineProject, isAssetRef } from '@/lib/assets';
+import { reportError } from '@/lib/monitor';
 import type { CloudUser } from './useCloudUser';
 import type { Project } from '@/model/project';
 
@@ -29,6 +30,11 @@ export async function saveNow(): Promise<void> {
     else store().setCloudConflict({ version: r.version, updatedAt: r.updated_at, updatedByEmail: r.updated_by_email });
   } catch (e) {
     store().setCloudStatus('error', message(e));
+    // Someone's work is not being saved: worth knowing about. Not a refusal
+    // (no access any more, the plan is gone): that is the rules at work. Nor
+    // a dropped connection; the monitor leaves those out itself.
+    const code = (e as { code?: unknown } | null)?.code;
+    if (code !== '42501' && code !== 'P0002') void reportError('save', e);
   }
 }
 

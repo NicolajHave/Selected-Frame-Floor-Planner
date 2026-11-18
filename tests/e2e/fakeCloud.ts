@@ -91,6 +91,13 @@ export class FakeCloud {
   priceLists: {
     id: number; name: string; valid_from: string; prices: Record<string, number | null>; saved_by_email: string; saved_at: string;
   }[] = [];
+  /** false: a database from before the error log (reports go nowhere, the log says it is not there). */
+  errorsSupported = true;
+  /** The error log: one entry for each kind of error, counted (as fp_client_errors). */
+  errors: {
+    id: number; key: string; kind: string; message: string; stack: string; version: string; context: Record<string, unknown>;
+    hits: number; users: string[]; anonymous_hits: number; first_seen: string; last_seen: string;
+  }[] = [];
   /** Every RPC call, for assertions. */
   calls: { fn: string; email: string | null; args: Record<string, unknown> }[] = [];
   private seq = 0;
@@ -371,6 +378,46 @@ export class FakeCloud {
         if (this.expired(l)) return { expired: true };
         const p = this.projects.get(l.project_id);
         return p ? { name: p.name, data: p.data, updated_at: p.updated_at, owner_email: p.owner_email } : null;
+      }
+      case 'fp_report_error': {
+        if (!this.errorsSupported) throw new RpcError(`Could not find the function public.${fn} in the schema cache`, 'PGRST202');
+        // Anyone may report; nothing comes back.
+        const kind = String(args.p_kind ?? '');
+        if (!/^[a-z]{1,20}$/.test(kind)) return null;
+        const message = (String(args.p_message ?? '').trim() || 'Unknown error').slice(0, 500);
+        const version = String(args.p_version ?? '').slice(0, 40);
+        const key = [version, kind, message.replace(/\d{3,}/g, '#'), String(args.p_top ?? '').slice(0, 300)].join('|');
+        const now = new Date(Date.now() + ++this.seq).toISOString();
+        const context = args.p_context && typeof args.p_context === 'object' ? (args.p_context as Record<string, unknown>) : {};
+        const stack = String(args.p_stack ?? '').slice(0, 6000);
+        const known = this.errors.find((e) => e.key === key);
+        if (known) {
+          known.hits++;
+          known.last_seen = now;
+          known.stack = stack;
+          known.context = context;
+          if (!email) known.anonymous_hits++;
+          else if (!known.users.includes(email)) known.users.push(email);
+        } else {
+          this.errors.push({
+            id: ++this.seq, key, kind, message, stack, version, context,
+            hits: 1, users: email ? [email] : [], anonymous_hits: email ? 0 : 1, first_seen: now, last_seen: now,
+          });
+        }
+        return null;
+      }
+      case 'fp_list_errors':
+      case 'fp_clear_errors': {
+        if (!this.errorsSupported) throw new RpcError(`Could not find the function public.${fn} in the schema cache`, 'PGRST202');
+        if (!email || !email.endsWith('@bestseller.com')) throw new RpcError('Sign in with a confirmed @bestseller.com account.', '42501');
+        if (fn === 'fp_clear_errors') {
+          this.errors = this.errors.filter((e) => args.p_id !== null && args.p_id !== undefined && e.id !== args.p_id);
+          return null;
+        }
+        return [...this.errors]
+          .sort((a, b) => b.last_seen.localeCompare(a.last_seen))
+          .slice(0, 100)
+          .map(({ key: _k, users, ...rest }) => ({ ...rest, people: users.length }));
       }
       case 'fp_get_price_list':
       case 'fp_list_price_lists':

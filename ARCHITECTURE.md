@@ -413,6 +413,21 @@ first. A shared view uses its own token. The URL adds `&view=3d`, which
 the shared view honours. Revoking the link in Share turns off the QR
 codes in PDFs already sent.
 
+**Error monitoring** (`lib/monitor.ts`, `*_fp_client_errors.sql`): errors
+nothing caught, unhandled promises, the error screen (`app/error.tsx`) and
+failed cloud saves are sent to `fp_report_error`, which anyone may call.
+Reports of the same error in the same build are one counted row with the
+latest example; the table holds 300 rows and takes 300 reports an hour.
+A report has the message and stack (scrubbed of addresses, link queries,
+tokens and ids), the build (`NEXT_PUBLIC_APP_VERSION`, the commit), and
+how it came about: view, tool, sizes of the plan, browser, and the trail —
+the names of the last store actions (`withTrail` in the store), never
+their arguments. Never the plan. The module uses neither the store nor
+the Supabase client, so it works when those are what failed. Reports are
+off on localhost unless `localStorage['sf-planner:monitor'] = 'on'`.
+Signed-in users read and clear the log under File → Error log…
+(`ErrorLogDialog`, `lib/errorLog.ts`).
+
 **Tests** use `tests/e2e/fakeCloud.ts`, an in-memory stand-in for the auth
 endpoints and the `fp_*` functions with the same rules, wired in with
 `page.route`. `openFresh()` blocks all real Supabase traffic, so tests

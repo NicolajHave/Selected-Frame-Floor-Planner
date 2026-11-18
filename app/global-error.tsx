@@ -1,7 +1,13 @@
 'use client';
 
+import { useEffect } from 'react';
+
 /** Last resort when even the page frame fails: plain HTML, no app code. */
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  useEffect(() => {
+    // Reported like any other error; loaded here so this page needs nothing to show.
+    import('@/lib/monitor').then((m) => m.reportError('screen', error)).catch(() => {});
+  }, [error]);
   return (
     <html lang="en">
       <body style={{ fontFamily: 'system-ui, sans-serif', padding: 32, color: '#1c1c1a', background: '#f7f6f2' }}>

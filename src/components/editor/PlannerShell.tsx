@@ -22,10 +22,31 @@ import { useCloudUser } from '@/lib/cloud/useCloudUser';
 import { useCloudSync } from '@/lib/cloud/sync';
 import { useUnderlayAsset } from '@/lib/cloud/assetSync';
 import { usePriceListSync } from '@/lib/cloud/priceList';
+import { installMonitor, setMonitorContext } from '@/lib/monitor';
 import { CloudBanners } from '../cloud/CloudBanners';
 import { RackBuilder } from '../racks/RackBuilder';
 import { CommentPins, CommentsButton, CommentsPanel, useCommentsSync } from '../comments/Comments';
 import type { CommentTarget } from '@/lib/cloud/comments';
+
+// Error monitoring, from the first moment: errors nothing catches are
+// reported with where the planner stood — never the plan itself.
+installMonitor();
+setMonitorContext(() => {
+  const s = usePlannerStore.getState();
+  const p = s.project;
+  return {
+    view: s.view.viewMode,
+    tool: s.tool,
+    selected: s.selection?.kind ?? null,
+    walls: p.room?.corners.length ?? 0,
+    openings: p.room?.openings.length ?? 0,
+    pillars: p.pillars.length,
+    fixtures: p.inventory.length,
+    drawing: !!p.underlay,
+    cloudPlan: !!s.cloud,
+    viewOnly: s.readOnly,
+  };
+});
 
 // WebGL only exists in the browser; keep three out of the server bundle.
 const ThreeCanvas = dynamic(
