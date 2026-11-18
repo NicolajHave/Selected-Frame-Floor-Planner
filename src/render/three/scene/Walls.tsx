@@ -20,8 +20,6 @@ interface Piece {
   y1: number;
   /** A window pane. */
   glass?: boolean;
-  /** Part of a see-through wall. */
-  clear?: boolean;
 }
 
 /** Where a wall is and which way is outside, in scene metres, for the cutaway. */
@@ -36,7 +34,8 @@ interface WallSide {
  * Each wall is built from boxes around its openings: full-height pieces
  * between openings, a lintel above each, a sill below windows and a pane
  * of glass in windows. Wall ends overlap by half a thickness so corners
- * read as solid.
+ * read as solid. An open side (a wall marked open) is no wall and is left
+ * out altogether.
  *
  * Cutaway: a wall whose outside faces the camera is hidden, so the shop
  * can be seen into from any angle (like a doll's house). From inside the
@@ -53,9 +52,9 @@ export function Walls({ room }: { room: RoomPolygon }) {
 
     for (let i = 0; i < n; i++) {
       const w = wallFrame(room, i);
-      if (!w) continue;
+      // An open side: nothing stands there.
+      if (!w || wallStyle(room, i).transparent) continue;
       const H = wallHeightOf(room, i);
-      const clear = !!wallStyle(room, i).transparent;
       const rotY = -Math.atan2(w.uy, w.ux);
       const push = (key: string, from: number, to: number, y0: number, y1: number, glass = false) => {
         if (to - from < 1 || y1 - y0 < 1) return;
@@ -70,7 +69,6 @@ export function Walls({ room }: { room: RoomPolygon }) {
           y0: y0 * MM,
           y1: y1 * MM,
           glass,
-          clear: clear && !glass,
         });
       };
 
@@ -129,21 +127,12 @@ export function Walls({ room }: { room: RoomPolygon }) {
               key={p.key}
               position={[p.cx, (p.y0 + p.y1) / 2, p.cz]}
               rotation={[0, p.rotY, 0]}
-              castShadow={!p.glass && !p.clear}
-              receiveShadow={!p.clear}
+              castShadow={!p.glass}
+              receiveShadow
             >
-              <boxGeometry args={[p.length, p.y1 - p.y0, p.glass || p.clear ? thickness * 0.15 : thickness]} />
+              <boxGeometry args={[p.length, p.y1 - p.y0, p.glass ? thickness * 0.15 : thickness]} />
               {p.glass ? (
                 <meshStandardMaterial color="#CFE3EA" transparent opacity={0.35} roughness={0.05} />
-              ) : p.clear ? (
-                <meshStandardMaterial
-                  color="#D7E6EC"
-                  transparent
-                  opacity={0.16}
-                  roughness={0.05}
-                  metalness={0}
-                  depthWrite={false}
-                />
               ) : (
                 <meshStandardMaterial color="#F1EEE7" roughness={0.9} metalness={0} />
               )}

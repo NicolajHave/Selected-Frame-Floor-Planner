@@ -47,7 +47,7 @@ export function AutoLayoutDialog({ onClose }: { onClose: () => void }) {
         <p className="text-[12px] leading-relaxed text-ink-700">
           Places fixtures in the room for you{empty ? '' : ', as a new layout tab — your own layout stays as it is'}. Doorways
           stay clear and every fixture keeps at least the minimum aisle to the next one and to the walls. The entrance is
-          the glass front if the shop has one, otherwise its widest double door. The logo hangs over a wall rack (LED from
+          the shop's open side if it has one, otherwise its widest double door. The logo hangs over a wall rack (LED from
           30 m², stainless steel below). Then adjust it like any other.
         </p>
 
@@ -94,7 +94,7 @@ export function AutoLayoutDialog({ onClose }: { onClose: () => void }) {
         {hasRoom && !hasEntrance && (
           <p className="text-[11px] leading-relaxed text-amber-700" data-testid="no-entrance">
             This room has no entrance yet, so the proposal comes without the entrance zone (Iconic Table, carpet and
-            mannequins). Mark the shop front as a glass wall in its wall properties, or add a door, and try again.
+            mannequins). Mark the side customers walk in from as Open in its wall properties, or add a door, and try again.
           </p>
         )}
 

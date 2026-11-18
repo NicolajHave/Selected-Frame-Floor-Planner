@@ -37,7 +37,7 @@ export function WallProperties({ cornerId }: { cornerId: string }) {
         <div className="flex flex-col gap-1">
           <p className="font-display text-[18px] italic leading-tight text-ink-900">Wall {index + 1}</p>
           <p className="text-[11px] text-ink-500">
-            {style.transparent ? 'Transparent' : 'Solid'} · {m(w.length)} × {m(height)} m
+            {style.transparent ? `Open side · ${m(w.length)} m` : `Solid · ${m(w.length)} × ${m(height)} m`}
           </p>
         </div>
       </Section>
@@ -83,13 +83,13 @@ export function WallProperties({ cornerId }: { cornerId: string }) {
           value={style.transparent ? 'transparent' : 'solid'}
           options={[
             { value: 'solid', label: 'Solid' },
-            { value: 'transparent', label: 'Transparent' },
+            { value: 'transparent', label: 'Open' },
           ]}
           onChange={(v) => updateWall(index, { transparent: v === 'transparent' })}
         />
         <p className="text-[11px] leading-relaxed text-ink-500">
-          Transparent: glass or an open side. It is see-through in 3D and dashed on the plan, so the shop
-          can be seen from that side.
+          Open: there is no wall here — an open side of the shop, where customers walk in. It is dashed
+          on the plan and left out in 3D; nothing is placed against it.
         </p>
       </Section>
 

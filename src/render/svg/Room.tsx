@@ -125,7 +125,7 @@ export function Room({
             stroke={selectedKind === 'wall' && selectedId === e.fromId ? 'var(--selection)' : 'var(--wall-stroke)'}
             strokeWidth={stroke}
             strokeLinecap="square"
-            // See-through walls (glass or an open side) are dashed.
+            // Open sides (no wall there) are dashed.
             strokeDasharray={e.transparent ? `${pxStroke(view, 7)} ${pxStroke(view, 5)}` : undefined}
             strokeOpacity={e.transparent ? 0.6 : 1}
             pointerEvents="none"
