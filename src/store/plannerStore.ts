@@ -28,6 +28,7 @@ import { newId } from '@/lib/id';
 import * as variants from '@/lib/variants';
 import { proposeLayout as makeProposal, type AutoLayoutOptions } from '@/lib/autoLayout';
 import { partitionBetween } from '@/lib/partition';
+import { autosaveProject, internImage, onAssetDurable } from '@/lib/assets';
 import { clipCount, makeClip, placeClip, readClip, writeClip } from '@/lib/clipboard';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
@@ -967,7 +968,8 @@ export const usePlannerStore = create<PlannerState>()(
               return;
             }
             record(s);
-            s.project.underlay = u;
+            // The picture goes to the asset store; the plan keeps a reference to it.
+            s.project.underlay = u ? { ...u, src: internImage(u.src) } : u;
             touch(s.project);
           }),
 
@@ -983,6 +985,7 @@ export const usePlannerStore = create<PlannerState>()(
             }
             record(s);
             Object.assign(u, patch);
+            if (patch.src) u.src = internImage(patch.src);
             if (patch.position) u.position = { ...patch.position };
             touch(s.project);
           }),
@@ -2229,7 +2232,9 @@ export const usePlannerStore = create<PlannerState>()(
       name: 'sf-planner:project',
       version: 1,
       storage: batchedLocalStorage(),
-      partialize: (s) => ({ project: s.project, cloud: s.cloud }),
+      // The drawing is not in the plan (lib/assets), so the autosave stays
+      // small — except until it is safely in IndexedDB, when it rides along.
+      partialize: (s) => ({ project: autosaveProject(s.project), cloud: s.cloud }),
       // Hydrate after mount (PlannerShell) so the prerendered HTML and the
       // first client render agree.
       skipHydration: true,
@@ -2248,6 +2253,9 @@ export const usePlannerStore = create<PlannerState>()(
     },
   ),
 );
+
+// Once the drawing has reached IndexedDB, write the autosave again without it.
+onAssetDurable(() => usePlannerStore.setState({}));
 
 // Any edit to a plan that is linked to the cloud marks it as unsaved there.
 // Switching to another plan (link changes along with the project) doesn't.

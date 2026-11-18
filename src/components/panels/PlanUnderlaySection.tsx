@@ -10,6 +10,7 @@ import type { Mm } from '@/model/units';
 import { Section } from '../ui/Section';
 import { Button } from '../ui/Button';
 import { LockIcon } from '../ui/LockIcon';
+import { useAssetState } from '@/lib/assets';
 import { DriveDialog } from '../cloud/DriveDialog';
 import { CLOUD_ENABLED } from '@/lib/cloud/config';
 import { useCloudUser } from '@/lib/cloud/useCloudUser';
@@ -19,6 +20,7 @@ const FILL = 0.8;
 
 export function PlanUnderlaySection() {
   const underlay = usePlannerStore((s) => s.project.underlay);
+  const drawingState = useAssetState(underlay?.src);
   const setUnderlay = usePlannerStore((s) => s.setUnderlay);
   const updateUnderlay = usePlannerStore((s) => s.updateUnderlay);
   const startCalibration = usePlannerStore((s) => s.startCalibration);
@@ -165,6 +167,12 @@ export function PlanUnderlaySection() {
               {underlay.pageCount && underlay.pageCount > 1 && ` · page ${underlay.page ?? 1} of ${underlay.pageCount}`}
               {underlay.cropped && (underlay.fromCad ? ' · part of the drawing' : ' · part of the page')}
             </span>
+            {drawingState === 'missing' && (
+              <span className="text-[11px] leading-snug text-amber-700" data-testid="underlay-missing">
+                The drawing itself is not on this device. Open the plan from the cloud while signed in, or replace
+                the drawing.
+              </span>
+            )}
           </div>
 
           <label className="flex flex-col gap-1">

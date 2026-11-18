@@ -38,7 +38,9 @@ test('import a PDF plan and calibrate its scale from a known dimension', async (
 
   const u0 = (await saved(page)).underlay;
   expect(u0.fileName).toBe('sample-plan.pdf');
-  expect(u0.src.startsWith('data:image/jpeg')).toBe(true);
+  // The picture itself is kept outside the plan; the plan refers to it.
+  await expect.poll(async () => (await saved(page)).underlay.src).toMatch(/^asset:a[0-9a-f]{28}$/);
+  await expect(page.locator('[data-layer="underlay"] image')).toHaveAttribute('href', /^data:image\/jpeg/);
   expect(u0.aspect).toBeCloseTo(PAGE_H_PT / PAGE_W_PT, 2);
   expect(u0.calibrated).toBe(false);
 

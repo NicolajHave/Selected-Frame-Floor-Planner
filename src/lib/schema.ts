@@ -1,6 +1,7 @@
 import type { Project } from '@/model/project';
 import type { InventoryItem } from '@/model/objects';
 import { rackSize } from './racks';
+import { externalizeProject } from './assets';
 
 export const CURRENT_SCHEMA = 1 as const;
 
@@ -40,5 +41,7 @@ export function migrate(payload: unknown): Project {
   if (project.room && !Array.isArray(project.room.openings)) {
     project.room = { ...project.room, openings: [] };
   }
-  return project;
+  // The drawing is kept outside the plan (lib/assets): one saved inline,
+  // as plans used to be, is taken into the store and replaced by a reference.
+  return externalizeProject(project);
 }

@@ -66,7 +66,8 @@ export interface SharedProject {
 /** Calls one of the fp_* database functions; errors become readable Errors. */
 async function call<T>(fn: string, args: Record<string, unknown> = {}): Promise<T> {
   const { data, error } = await (await supabase()).rpc(fn, args);
-  if (error) throw new Error(error.message || 'The cloud request failed.');
+  // The code tells a missing function (an older database) from a refusal.
+  if (error) throw Object.assign(new Error(error.message || 'The cloud request failed.'), { code: error.code });
   return data as T;
 }
 
@@ -97,6 +98,13 @@ export const cloud = {
   /** Gives the link 30 more days from now; returns the new expiry. */
   renewLink: (token: string) => call<string>('fp_renew_link', { p_token: token }),
   getShared: (token: string) => call<SharedProject | null>('fp_get_shared_project', { p_token: token }),
+
+  // The plan drawing, kept next to the plan rather than in it (see assetSync.ts).
+  hasAsset: (id: string, asset: string) => call<boolean>('fp_has_asset', { p_id: id, p_asset: asset }),
+  putAsset: (id: string, asset: string, data: string) => call<void>('fp_put_asset', { p_id: id, p_asset: asset, p_data: data }),
+  getAsset: (id: string, asset: string) => call<string | null>('fp_get_asset', { p_id: id, p_asset: asset }),
+  getSharedAsset: (token: string, asset: string) =>
+    call<string | null>('fp_get_shared_asset', { p_token: token, p_asset: asset }),
 };
 
 export function isAllowedEmail(email: string): boolean {

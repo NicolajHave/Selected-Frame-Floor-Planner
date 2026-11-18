@@ -7,6 +7,7 @@ import { wallLengths } from '@/geometry/walls';
 import { cornerAngles } from '@/geometry/corners';
 import { polygonArea } from '@/geometry/polygon';
 import type { ExportPayload, Project } from '@/model/project';
+import { inlineProject } from '@/lib/assets';
 
 /**
  * Save = native project JSON for round-tripping (the Project shape).
@@ -21,12 +22,13 @@ export function useFileIO() {
   const filenameBase = (project.name || 'plan').trim().replace(/\s+/g, '-').toLowerCase();
 
   const save = useCallback(() => {
-    downloadJson(`${filenameBase}.sf`, project);
+    // A file stands on its own: the drawing goes into it.
+    downloadJson(`${filenameBase}.sf`, inlineProject(project));
   }, [project, filenameBase]);
 
   const exportData = useCallback(() => {
     const payload: ExportPayload = {
-      project,
+      project: inlineProject(project),
       derived: project.room
         ? {
             wallLengths: wallLengths(project.room.corners, project.room.closed),
