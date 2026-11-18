@@ -134,3 +134,24 @@ test('clearanceGuides measure to walls and neighbours', () => {
   // left wall face at 60, right neighbour at 5500, top face at 60, bottom face at 6940
   expect(byDir).toEqual({ right: 2000, left: 2440, down: 3440, up: 2440 });
 });
+
+test('mannequins styled with the Iconic Table are one display: no overlap or aisle between them', () => {
+  // As it is styled in the shop: two mannequins tucked into a corner of the table's outline, overlapping it and each other.
+  const table = item('table', 5000, 3500, 1265, 1200, { assetRef: '105-17-007', name: 'Iconic Table' });
+  const female = item('female', 4600, 2875, 444, 300, { assetRef: '112-18-001', name: 'Long Torso Female' });
+  const male = item('male', 4340, 3100, 504, 300, { assetRef: '112-18-002', name: 'Long Torso Male' });
+  expect(layoutIssues(project([table, female, male]))).toEqual([]);
+  // Standing a little way off the table is not a "narrow aisle" either.
+  const near = { ...female, position: P(5000, 2500) };
+  expect(layoutIssues(project([table, near]))).toEqual([]);
+
+  // A mannequin in any other fixture is still a problem — a Volume Table, a rack …
+  const volume = item('volume', 5000, 3500, 1800, 1280, { assetRef: '105-17-001', name: 'Volume Table' });
+  expect(layoutIssues(project([volume, female])).map((i) => i.kind)).toEqual(['overlap']);
+  const rack = item('rack', 4600, 2875, 1310, 500, { assetRef: '105-06-001', name: 'Floor Rack 1400' });
+  expect(layoutIssues(project([table, female, rack])).map((i) => i.kind).sort()).toEqual(['overlap', 'overlap']);
+  // … and so is a mannequin too close to a wall.
+  const atWall = { ...female, position: P(700, 3500) };
+  expect(layoutIssues(project([table, atWall])).map((i) => i.kind)).toEqual(['aisle']);
+});
+

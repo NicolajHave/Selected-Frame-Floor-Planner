@@ -73,8 +73,8 @@ export const PRICES: Readonly<Record<string, PriceEntry>> = {
   '105-15-003': system('105-15-003-A', 138),
   '105-15-004': system('105-15-004-A', 187),
   // Mannequins (not from &elements)
-  '112-18-001': system('112_99_040', 440.13, ''),
-  '112-18-002': system('112_99_041', 453.55, ''),
+  '112-18-001': system('112_99_040', 440, ''),
+  '112-18-002': system('112_99_041', 453, ''),
 };
 
 /** Wall rack columns: one at each end of a run of wall units, one between neighbours. */
