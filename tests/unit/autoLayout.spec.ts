@@ -348,3 +348,35 @@ test('a logo in every proposal with a solid wall: LED from 30 m², stainless ste
   glass.walls = Object.fromEntries(glass.corners.map((c) => [c.id, { transparent: true }]));
   expect(logos(proposeLayout(project(glass), { style: 'brand', aisle: 900, wallRacks: true }).inventory)).toEqual([]);
 });
+
+test('a rack right at a Volume Table stands at its short side, never along the long side', () => {
+  // Narrow shops: so little free floor that a rack goes right at the Volume Table.
+  let beside = 0;
+  for (const [w, d] of [[5000, 8000], [6000, 7000]] as const) {
+    const tight = project(room(w, d, [door('c2', w / 2)]));
+    for (const style of ['brand', 'volume'] as const) {
+      const inv = proposeLayout(tight, { style, aisle: 900, wallRacks: true }).inventory;
+      expect(layoutIssues({ ...tight, inventory: inv }, 900)).toEqual([]);
+      const tables = inv.filter((i) => i.assetRef === '105-17-001');
+      const racks = inv.filter((i) => i.assetRef?.startsWith('105-06-'));
+      for (const t of tables) {
+        const outline = rectCorners(t.position, t.size, t.rotation);
+        const long = { x: Math.cos(t.rotation), y: Math.sin(t.rotation) }; // the table is 1800 along its own x
+        for (const rack of racks) {
+          if (outlineGap(outline, rectCorners(rack.position, rack.size, rack.rotation)).distance > 1) continue;
+          beside++;
+          const dx = rack.position.x - t.position.x;
+          const dy = rack.position.y - t.position.y;
+          // Off the end of the table (along its length), not off its long side.
+          expect(Math.abs(dx * long.x + dy * long.y)).toBeCloseTo(t.size.width / 2 + rack.size.depth / 2, 0);
+          expect(Math.abs(-dx * long.y + dy * long.x)).toBeLessThan(1);
+          // And lying across that end: its length runs along the table's short side.
+          expect(Math.abs(Math.cos(rack.rotation - t.rotation))).toBeLessThan(0.001);
+        }
+      }
+    }
+  }
+  // Each of the four proposals has one.
+  expect(beside).toBe(4);
+});
+
