@@ -45,7 +45,7 @@ const WALL_UNIT_HEIGHT = 2288;
 const ICONIC_TABLE = '105-17-007';
 const VOLUME_TABLE = '105-17-001';
 const CARPET = '105-19-001';
-const LED_LOGO = '105-13-LED';
+const CORONA_LOGO = '105-13-001';
 const STEEL_LOGO = '105-13-015';
 /** From this floor area (m²) a shop gets an entrance / impact zone and a Volume Table. */
 export const IMPACT_ZONE_M2 = 30;
@@ -58,8 +58,16 @@ const ROW_STEP = 250;
 const TABLE_STEP = 150;
 /** Fixtures this close (mm) stand together: no aisle is expected between them (as in the layout check). */
 const TOUCHING = 100;
-/** Between the Iconic Table and the mannequins beside it (mm): standing together. */
-const MANNEQUIN_GAP = 50;
+/**
+ * Where the two mannequins stand at the Iconic Table, from the table's
+ * centre in its own frame (mm; +y is the table's front, towards the
+ * entrance): together at one of its back corners, in the empty corner of
+ * its outline — the table top is rounded and does not fill it.
+ */
+const MANNEQUIN_SPOTS = [
+  { id: '112-18-001', x: -400, y: -625 },
+  { id: '112-18-002', x: -660, y: -275 },
+] as const;
 /** Kept clear in front of a door before the impact zone starts (mm). */
 const DOOR_CLEAR = 900;
 /** The same in from an open side, where no door swings (mm). */
@@ -305,37 +313,56 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
       if (pillars.some((p) => segmentCrosses(way.center, c, p))) return null;
       // Local front (+y) towards the entrance: the back faces into the shop.
       const facing = Math.atan2(-way.nx, way.ny) + Math.PI;
-      const along = { x: way.ny, y: -way.nx };
       const carpet = impact ? fromAsset(CARPET, c, facing) : null;
       const carpetOutline = carpet ? rectCorners(carpet.position, carpet.size, carpet.rotation) : null;
       if (carpetOutline && !carpetFits(carpetOutline)) return null;
       const table = fromAsset(ICONIC_TABLE, c, facing)!;
       const tableOutline = rectCorners(table.position, table.size, table.rotation);
       if (!clearOf(tableOutline, aisle, aisle)) return null;
-      // Standing with the table (50 mm from it); the aisle to everything else.
-      const mannequins = ([[-1, '112-18-001'], [1, '112-18-002']] as const).flatMap(([k, id]) => {
-        const m = fromAsset(id, c, facing)!;
-        const reach = table.size.width / 2 + m.size.width / 2 + MANNEQUIN_GAP;
-        m.position = pt(c.x + along.x * reach * k, c.y + along.y * reach * k);
-        const outline = rectCorners(m.position, m.size, m.rotation);
-        return clearOf(outline, aisle, aisle) ? [{ item: m, outline }] : [];
-      });
+      // The mannequins stand with the table, at one of its corners (see
+      // MANNEQUIN_SPOTS): the back left one first, then the others if
+      // something is in the way there. The aisle to everything else.
+      const ax = { x: Math.cos(facing), y: Math.sin(facing) };
+      const ay = { x: -ax.y, y: ax.x };
+      let mannequins: Placed[] = [];
+      for (const [mx, my] of [[1, 1], [-1, 1], [1, -1], [-1, -1]] as const) {
+        const group = MANNEQUIN_SPOTS.flatMap((spot) => {
+          const m = fromAsset(spot.id, c, facing)!;
+          m.position = pt(c.x + ax.x * spot.x * mx + ay.x * spot.y * my, c.y + ax.y * spot.x * mx + ay.y * spot.y * my);
+          const outline = rectCorners(m.position, m.size, m.rotation);
+          return clearOf(outline, aisle, aisle) ? [{ item: m, outline }] : [];
+        });
+        if (group.length > mannequins.length) mannequins = group;
+        if (mannequins.length === MANNEQUIN_SPOTS.length) break;
+      }
       return { way, carpet, carpetOutline, table, tableOutline, mannequins };
     };
+    // Of the spots where the zone fits, the one nearest the entrance: as
+    // little further in and as little to the side as possible. One with
+    // both mannequins before one without; the main entrance before the next.
     let zone: NonNullable<ReturnType<typeof zoneAt>> | null = null;
-    search: for (const way of ways) {
+    for (const way of ways) {
       const shifts = [0];
       for (let s = ROW_STEP; s <= Math.min(way.reach, 4000); s += ROW_STEP) shifts.push(s, -s);
       const d0 = depthIn(way);
+      let best: { zone: NonNullable<ReturnType<typeof zoneAt>>; cost: number } | null = null;
       for (const shift of shifts) {
         for (let d = d0; d < d0 + 3000; d += ROW_STEP) {
+          const cost = d - d0 + Math.abs(shift);
+          if (best && best.zone.mannequins.length === MANNEQUIN_SPOTS.length && cost >= best.cost) break;
           const z = zoneAt(pt(way.center.x + way.nx * d + way.ny * shift, way.center.y + way.ny * d - way.nx * shift), way);
           if (!z) continue;
-          // The first spot with both mannequins wins; else the best seen.
-          if (!zone || z.mannequins.length > zone.mannequins.length) zone = z;
-          if (z.mannequins.length === 2) break search;
+          if (
+            !best ||
+            z.mannequins.length > best.zone.mannequins.length ||
+            (z.mannequins.length === best.zone.mannequins.length && cost < best.cost)
+          ) {
+            best = { zone: z, cost };
+          }
         }
       }
+      if (best && (!zone || best.zone.mannequins.length > zone.mannequins.length)) zone = best.zone;
+      if (zone?.mannequins.length === MANNEQUIN_SPOTS.length) break;
     }
     if (zone) {
       door = zone.way;
@@ -726,14 +753,15 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
   rackWall.clear();
   kept!.walls.forEach((wall, id) => rackWall.set(id, wall));
 
-  // 5. The logo, in every proposal with a solid wall to hang it on: the LED
-  //    logo from 30 m², the stainless steel one below. It hangs over a wall
+  // 5. The logo, in every proposal with a solid wall to hang it on: the
+  //    Corona Light logo from 30 m², the stainless steel one below (never
+  //    the LED logo). It hangs over a wall
   //    rack of two or more units when there is one — the one the entrance
   //    looks at most directly — centred over that rack's leftmost unit (as
   //    seen from inside the shop). With only single units, over the one the
   //    entrance looks at. Without wall racks, centred on the longest stretch
   //    clear of doors and windows of the wall facing the entrance.
-  const logo = findAsset(area >= IMPACT_ZONE_M2 ? LED_LOGO : STEEL_LOGO);
+  const logo = findAsset(area >= IMPACT_ZONE_M2 ? CORONA_LOGO : STEEL_LOGO);
   if (logo) {
     const fits = (i: number) => !wallStyle(room, i).transparent && wallHeightOf(room, i) >= (logo.minWallHeight ?? 0);
     const ahead = (p: Point) => (door ? (p.x - door.center.x) * door.nx + (p.y - door.center.y) * door.ny : 0);

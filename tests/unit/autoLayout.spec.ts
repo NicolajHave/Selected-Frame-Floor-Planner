@@ -5,7 +5,7 @@ import type { Project } from '@/model/project';
 import type { Opening, RoomPolygon } from '@/model/objects';
 import type { Mm, Radians } from '@/model/units';
 import { rectCorners } from '@/geometry/transform';
-import { outlineGap } from '@/geometry/footprint';
+import { convexOverlap, outlineGap } from '@/geometry/footprint';
 import { rackSlots } from '@/lib/racks';
 
 function room(w: number, d: number, openings: Opening[] = []): RoomPolygon {
@@ -41,7 +41,10 @@ for (const style of ['volume', 'brand'] as const) {
       for (let j = i + 1; j < floor.length; j++) {
         const a = rectCorners(floor[i]!.position, floor[i]!.size, floor[i]!.rotation);
         const b = rectCorners(floor[j]!.position, floor[j]!.size, floor[j]!.rotation);
-        // Either the full aisle apart, or standing together (touching, ≤ 100 mm: racks in pairs, mannequins by the table).
+        // The mannequins are styled right at the Iconic Table, reaching in over its outline: one display.
+        const refs = [floor[i]!.assetRef ?? '', floor[j]!.assetRef ?? ''];
+        if (refs.some((r) => r.startsWith('112-18')) && refs.some((r) => r === '105-17-007' || r.startsWith('112-18'))) continue;
+        // Either the full aisle apart, or standing together (touching, ≤ 100 mm: racks in pairs).
         const d = outlineGap(a, b).distance;
         expect(d >= 899 || d <= 100, `${floor[i]!.name} – ${floor[j]!.name}: ${d}`).toBe(true);
       }
@@ -57,7 +60,7 @@ test('volume fits more than brand; brand has a welcome table, mannequins, signs 
   expect(b.some((i) => i.assetRef === '105-17-007')).toBe(true);
   expect(b.filter((i) => i.assetRef?.startsWith('112-18')).length).toBe(2);
   expect(b.some((i) => i.accessories?.length)).toBe(true);
-  expect(b.some((i) => i.assetRef === '105-13-LED')).toBe(true);
+  expect(b.some((i) => i.assetRef === '105-13-001')).toBe(true);
 });
 
 test('a wider aisle means fewer fixtures; no wall racks when asked; no room says so', () => {
@@ -144,15 +147,17 @@ test('two mannequins stand beside the Iconic Table, on the carpet, in either sty
         expect(p.y).toBeGreaterThanOrEqual(Math.min(...c.map((q) => q.y)) - 1);
         expect(p.y).toBeLessThanOrEqual(Math.max(...c.map((q) => q.y)) + 1);
       }
-      const gap = outlineGap(rectCorners(m.position, m.size, m.rotation), rectCorners(table.position, table.size, table.rotation)).distance;
-      expect(gap).toBeLessThanOrEqual(100);
+      // Right at the table: reaching in over its outline, or at most a hand's breadth from it.
+      const outline = rectCorners(m.position, m.size, m.rotation);
+      const tableOutline = rectCorners(table.position, table.size, table.rotation);
+      expect(convexOverlap(outline, tableOutline) || outlineGap(outline, tableOutline).distance <= 100).toBe(true);
     }
   }
 });
 
 test('the logo hangs centred over the leftmost wall unit on its wall', () => {
   const inv = proposeLayout(shop, { style: 'brand', aisle: 900, wallRacks: true }).inventory;
-  const logo = inv.find((i) => i.assetRef === '105-13-LED')!;
+  const logo = inv.find((i) => i.assetRef === '105-13-001')!;
   // The door is in the bottom wall, so the logo is on the top wall (y ≈ 0), facing down into the shop.
   expect(logo.position.y).toBeLessThan(200);
   const racks = inv.filter((i) => i.modules?.length && i.position.y < 1000);
@@ -330,11 +335,11 @@ test('the logo prefers a wall rack of two or more units, centred over its leftmo
   }
 });
 
-test('a logo in every proposal with a solid wall: LED from 30 m², stainless steel below', () => {
+test('a logo in every proposal with a solid wall: Corona Light from 30 m², stainless steel below, never LED', () => {
   const logos = (inv: { assetRef?: string }[]) => inv.filter((i) => i.assetRef?.startsWith('105-13'));
   for (const style of ['brand', 'volume'] as const) {
     const big = logos(proposeLayout(shop, { style, aisle: 900, wallRacks: true }).inventory);
-    expect(big.map((l) => l.assetRef)).toEqual(['105-13-LED']);
+    expect(big.map((l) => l.assetRef)).toEqual(['105-13-001']);
     const small = logos(proposeLayout(shopOf(5000, 5000), { style, aisle: 900, wallRacks: true }).inventory);
     expect(small.map((l) => l.assetRef)).toEqual(['105-13-015']);
     // Without wall racks too: centred on the wall facing the entrance (the top wall here).
@@ -378,5 +383,34 @@ test('a rack right at a Volume Table stands at its short side, never along the l
   }
   // Each of the four proposals has one.
   expect(beside).toBe(4);
+});
+
+test('the mannequins stand together at a back corner of the Iconic Table, facing the entrance with it', () => {
+  for (const style of ['brand', 'volume'] as const) {
+    const inv = proposeLayout(shop, { style, aisle: 900, wallRacks: true }).inventory;
+    const table = inv.find((i) => i.assetRef === '105-17-007')!;
+    const female = inv.find((i) => i.assetRef === '112-18-001')!;
+    const male = inv.find((i) => i.assetRef === '112-18-002')!;
+    // The shop's door is in the bottom wall (y = 9000): the table's front faces down the plan.
+    const local = (m: typeof female) => {
+      const dx = m.position.x - table.position.x;
+      const dy = m.position.y - table.position.y;
+      const c = Math.cos(table.rotation);
+      const s = Math.sin(table.rotation);
+      return { x: Math.round(dx * c + dy * s), y: Math.round(-dx * s + dy * c) };
+    };
+    expect(local(female)).toEqual({ x: -400, y: -625 });
+    expect(local(male)).toEqual({ x: -660, y: -275 });
+    // Behind the table as seen from the door, and turned the same way as the table.
+    expect(female.position.y).toBeLessThan(table.position.y);
+    expect(male.position.y).toBeLessThan(table.position.y);
+    expect(female.rotation).toBeCloseTo(table.rotation);
+    expect(male.rotation).toBeCloseTo(table.rotation);
+    // They reach in over the table's outline, and that is no layout problem.
+    const t = rectCorners(table.position, table.size, table.rotation);
+    expect(convexOverlap(rectCorners(female.position, female.size, female.rotation), t)).toBe(true);
+    expect(convexOverlap(rectCorners(male.position, male.size, male.rotation), t)).toBe(true);
+    expect(layoutIssues({ ...shop, inventory: inv }, 900)).toEqual([]);
+  }
 });
 

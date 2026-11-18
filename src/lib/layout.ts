@@ -15,6 +15,7 @@ export const DEFAULT_MIN_AISLE = 900;
 const TOUCHING = 100;
 /** Items lower than this (trays, signs, carpets) sit on furniture or are walked over. */
 const MIN_OBSTACLE_HEIGHT = 300;
+const ICONIC_TABLE = '105-17-007';
 /** Room to stand in front of a passage or out-swinging door. */
 const DOOR_APPROACH = 900;
 
@@ -32,7 +33,17 @@ export interface Obstacle {
    * keep clear of it.
    */
   partition?: boolean;
+  /**
+   * 'mannequin' | 'iconic-table': mannequins are styled together with the
+   * Iconic Table — right at it, in the empty corners of its outline — and
+   * with each other. That is one display, not fixtures in each other's way.
+   */
+  display?: 'mannequin' | 'iconic-table';
 }
+
+/** Whether `a` and `b` belong together as one display: mannequins with the Iconic Table, or with each other. */
+const oneDisplay = (a: Obstacle, b: Obstacle): boolean =>
+  (a.display === 'mannequin' && !!b.display) || (b.display === 'mannequin' && !!a.display);
 
 /** Things that stand on the floor and block movement. */
 export function floorObstacles(project: Project): Obstacle[] {
@@ -47,7 +58,14 @@ export function floorObstacles(project: Project): Obstacle[] {
     const asset = findAsset(it.assetRef);
     if (it.size.height < MIN_OBSTACLE_HEIGHT) continue;
     if (asset?.mountHeight) continue; // hangs on the wall above head height
-    out.push({ kind: 'inventory', id: it.id, name: it.name, outline: rectCorners(it.position, it.size, it.rotation) });
+    const display = asset?.category === 'Mannequins' ? 'mannequin' : asset?.id === ICONIC_TABLE ? 'iconic-table' : undefined;
+    out.push({
+      kind: 'inventory',
+      id: it.id,
+      name: it.name,
+      outline: rectCorners(it.position, it.size, it.rotation),
+      ...(display ? { display } : {}),
+    });
   }
   return out;
 }
@@ -157,6 +175,7 @@ export function layoutIssues(project: Project, minAisle = DEFAULT_MIN_AISLE): La
       const a = obstacles[i]!;
       const b = obstacles[j]!;
       if (a.partition && b.partition) continue;
+      if (oneDisplay(a, b)) continue;
       if (convexOverlap(a.outline, b.outline)) {
         issues.push({
           key: `overlap:${a.id}:${b.id}`,
