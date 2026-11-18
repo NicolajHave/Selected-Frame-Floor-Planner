@@ -4,6 +4,7 @@ import type { PlanUnderlay } from '@/model/project';
 import type { Point } from '@/model/geometry';
 import type { Mm } from '@/model/units';
 import { traceRoom, type GreyImage } from './wallTrace';
+import { resolveSrc } from './assets';
 
 /** Longest side the plan picture is traced at, px: fine enough, and quick. */
 const TRACE_SIDE = 2000;
@@ -55,7 +56,9 @@ export interface UnderlayTrace {
 
 /** Traces the room around `world` on the underlay, closing openings up to `gapMm`. */
 export async function traceUnderlayAt(u: PlanUnderlay, world: Point[], gapMm: number): Promise<UnderlayTrace> {
-  const img = await grey(u.src);
+  const src = resolveSrc(u.src);
+  if (!src) throw new Error('The drawing has not loaded yet.');
+  const img = await grey(src);
   const mmPerPx = u.width / img.w;
   const seeds = world.map((p) => ({
     x: ((p.x - u.position.x) / u.width) * img.w,

@@ -178,7 +178,8 @@ footprint (`lib/racks.ts`): it snaps to walls like a wall unit, renders
 each unit's model in 3D, and the parts list counts its units.
 
 interface PlanUnderlay {           // imported PDF page / image to trace
-  src: string;                     // JPEG data URL, so files are self-contained
+  src: string;                     // `asset:<id>` — the picture is kept outside the plan (lib/assets.ts);
+                                   // a JPEG data URL in saved files and in plans from before
   fileName: string;
   position: Point;                 // top-left, world mm
   width: Mm;                       // height = width * aspect

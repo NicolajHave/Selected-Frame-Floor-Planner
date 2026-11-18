@@ -3,7 +3,10 @@
 import { useEffect } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { cloud } from './api';
+import { cloudProject } from './assetSync';
+import { inlineProject, isAssetRef } from '@/lib/assets';
 import type { CloudUser } from './useCloudUser';
+import type { Project } from '@/model/project';
 
 /** Pause after the last edit before saving to the cloud. */
 const SAVE_DELAY_MS = 1500;
@@ -18,13 +21,26 @@ export async function saveNow(): Promise<void> {
   const snapshot = store().project;
   store().setCloudStatus('saving');
   try {
-    const r = await cloud.saveProject(link.projectId, link.version, snapshot.name, snapshot);
+    // The drawing goes up once, on its own; the plan then only refers to it.
+    const data = await cloudProject(link.projectId, snapshot);
+    const r = await cloud.saveProject(link.projectId, link.version, snapshot.name, data);
     if (store().cloud?.projectId !== link.projectId) return; // another plan was opened meanwhile
     if (r.ok) store().markSynced(r, snapshot);
     else store().setCloudConflict({ version: r.version, updatedAt: r.updated_at, updatedByEmail: r.updated_by_email });
   } catch (e) {
     store().setCloudStatus('error', message(e));
   }
+}
+
+/**
+ * A new cloud project starts whole, drawing included (it has nowhere else
+ * to keep it yet); `settleDrawing` then moves the drawing out of it.
+ */
+export const createCloudProject = (name: string, project: Project) => cloud.createProject(name, inlineProject(project));
+
+/** After linking a plan to its new cloud project: store its drawing on its own and save the plan without it. */
+export async function settleDrawing(project: Project): Promise<void> {
+  if (isAssetRef(project.underlay?.src)) await saveNow();
 }
 
 /** Compare with the cloud copy: take a newer version if we have no unsaved edits. */
@@ -84,7 +100,7 @@ export async function keepMine(): Promise<void> {
 export async function saveAsCopy(ownerEmail: string): Promise<void> {
   const project = store().project;
   try {
-    const created = await cloud.createProject(`${project.name} (copy)`, project);
+    const created = await createCloudProject(`${project.name} (copy)`, project);
     usePlannerStore.setState((s) => {
       s.project.name = `${project.name} (copy)`;
     });
@@ -95,6 +111,7 @@ export async function saveAsCopy(ownerEmail: string): Promise<void> {
       ownerEmail,
       lastSavedAt: created.updated_at,
     });
+    await settleDrawing(project);
   } catch (e) {
     store().setCloudStatus('error', message(e));
   }

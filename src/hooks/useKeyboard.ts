@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { usePlannerStore } from '@/store/plannerStore';
 import { downloadJson } from '@/lib/io';
+import { inlineProject } from '@/lib/assets';
 import type { Point } from '@/model/geometry';
 import { planPointer } from '@/render/svg/pointer';
 import { screenToWorld } from '@/render/svg/viewport';
@@ -103,7 +104,7 @@ export function useKeyboard() {
 
       if (meta && key === 's') {
         e.preventDefault();
-        downloadJson(`${s.project.name || 'plan'}.sf`, s.project);
+        downloadJson(`${s.project.name || 'plan'}.sf`, inlineProject(s.project));
         return;
       }
     };

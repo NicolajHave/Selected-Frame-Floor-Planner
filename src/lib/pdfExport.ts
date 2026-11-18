@@ -21,6 +21,7 @@ import { buildPartsList, type PartsList } from './partsList';
 import { DEFAULT_MIN_AISLE, innerOutline, layoutIssues } from './layout';
 import { elevationShots, overviewShots, type ElevationSpec, type ViewSpec } from './views';
 import { INK, MARGIN, MUTED, PAGE_H, PAGE_W, SAGE, fit, font, num, today } from './pdf/style';
+import { resolveSrc } from './assets';
 import {
   VIEW_BOX,
   drawConceptPage,
@@ -236,13 +237,14 @@ function drawPlanPage(
   const P = (p: Point) => [X(p.x), Y(p.y)] as const;
 
   // Underlay, faint and clipped to the drawing area
-  if (u) {
+  const underlaySrc = resolveSrc(u?.src);
+  if (u && underlaySrc) {
     doc.saveGraphicsState();
     doc.rect(area.x, area.y, area.w, area.h, null);
     doc.clip();
     doc.discardPath();
     doc.setGState(new GState({ opacity: 0.22 }));
-    doc.addImage(u.src, 'JPEG', X(u.position.x), Y(u.position.y), u.width / scale, (u.width * u.aspect) / scale);
+    doc.addImage(underlaySrc, 'JPEG', X(u.position.x), Y(u.position.y), u.width / scale, (u.width * u.aspect) / scale);
     doc.restoreGraphicsState();
   }
 

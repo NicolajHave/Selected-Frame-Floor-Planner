@@ -83,6 +83,10 @@ export class FakeCloud {
     id: string; project_id: string; author_name: string; author_email: string | null; via_link: boolean; body: string;
     x: number | null; y: number | null; variant_id: string | null; created_at: string; resolved_at: string | null; resolved_by_email: string | null;
   }[] = [];
+  /** Plan drawings stored next to the plans: `${projectId}:${assetId}` → data URL. */
+  assets = new Map<string, string>();
+  /** false: a database from before the asset functions (the drawing then stays inside the plan). */
+  assetsSupported = true;
   /** Every RPC call, for assertions. */
   calls: { fn: string; email: string | null; args: Record<string, unknown> }[] = [];
   private seq = 0;
@@ -363,6 +367,27 @@ export class FakeCloud {
         if (this.expired(l)) return { expired: true };
         const p = this.projects.get(l.project_id);
         return p ? { name: p.name, data: p.data, updated_at: p.updated_at, owner_email: p.owner_email } : null;
+      }
+      case 'fp_has_asset':
+      case 'fp_get_asset':
+      case 'fp_put_asset':
+      case 'fp_get_shared_asset': {
+        if (!this.assetsSupported) {
+          throw new RpcError(`Could not find the function public.${fn} in the schema cache`, 'PGRST202');
+        }
+        if (fn === 'fp_get_shared_asset') {
+          return this.assets.get(`${this.linkProject(args.p_token)}:${args.p_asset}`) ?? null;
+        }
+        const key = `${args.p_id}:${args.p_asset}`;
+        if (fn === 'fp_put_asset') {
+          this.require(email, args.p_id, ['owner', 'editor']);
+          if (!/^a[0-9a-f]{28}$/.test(args.p_asset)) throw new RpcError('That is not a drawing id.', '22023');
+          if (!/^data:image\/(jpeg|png);base64,/.test(args.p_data)) throw new RpcError('Only JPEG or PNG drawings can be stored.', '22023');
+          if (!this.assets.has(key)) this.assets.set(key, args.p_data);
+          return null;
+        }
+        this.require(email, args.p_id, ['owner', 'editor', 'viewer']);
+        return fn === 'fp_has_asset' ? this.assets.has(key) : this.assets.get(key) ?? null;
       }
       default:
         throw new RpcError(`Unknown function ${fn}`, '42883');

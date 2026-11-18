@@ -30,11 +30,12 @@ export interface DerivedMetrics {
 
 /**
  * A scanned or exported floor plan (PDF page or image) drawn under the
- * room so it can be traced. Stored inline as a data URL so saved files
- * and autosave are self-contained.
+ * room so it can be traced. The picture itself is kept outside the plan
+ * (lib/assets): `src` is a reference to it, `asset:<id>`. In a saved file,
+ * and in plans from before, it is the picture inline as a data URL.
  */
 export interface PlanUnderlay {
-  src: string;             // data URL, JPEG or PNG
+  src: string;             // `asset:<id>`, or a JPEG/PNG data URL
   fileName: string;
   position: Point;         // top-left corner, world mm
   width: Mm;               // world width; height = width * aspect

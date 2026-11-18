@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { clsx } from 'clsx';
 import { usePlannerStore } from '@/store/plannerStore';
 import { cloud, type CloudProjectSummary, type CloudRole } from '@/lib/cloud/api';
+import { createCloudProject, settleDrawing } from '@/lib/cloud/sync';
 import type { CloudUser } from '@/lib/cloud/useCloudUser';
 import { Dialog, ErrorText } from '../ui/Dialog';
 import { Button } from '../ui/Button';
@@ -62,7 +63,7 @@ export function ProjectsDialog({ user, onClose }: { user: CloudUser; onClose: ()
   const saveToCloud = () =>
     run('save', async () => {
       const { project } = usePlannerStore.getState();
-      const created = await cloud.createProject(project.name, project);
+      const created = await createCloudProject(project.name, project);
       usePlannerStore.getState().linkCloud({
         projectId: created.id,
         version: created.version,
@@ -70,6 +71,7 @@ export function ProjectsDialog({ user, onClose }: { user: CloudUser; onClose: ()
         ownerEmail: user.email,
         lastSavedAt: created.updated_at,
       });
+      await settleDrawing(project);
       await refresh();
     });
 

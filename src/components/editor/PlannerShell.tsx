@@ -20,6 +20,7 @@ import { CLOUD_ENABLED } from '@/lib/cloud/config';
 import { cloud } from '@/lib/cloud/api';
 import { useCloudUser } from '@/lib/cloud/useCloudUser';
 import { useCloudSync } from '@/lib/cloud/sync';
+import { useUnderlayAsset } from '@/lib/cloud/assetSync';
 import { CloudBanners } from '../cloud/CloudBanners';
 import { RackBuilder } from '../racks/RackBuilder';
 import { CommentPins, CommentsButton, CommentsPanel, useCommentsSync } from '../comments/Comments';
@@ -75,6 +76,8 @@ export function PlannerShell() {
   }, []);
 
   useCloudSync(user, CLOUD_ENABLED && restored && !shareToken);
+  // The plan's drawing is kept outside the plan: fetch it when the plan only refers to it.
+  useUnderlayAsset(user, shareToken);
 
   // Comments: on a cloud plan you're signed in to, or through a view-only link.
   const cloudLink = usePlannerStore((s) => s.cloud);
