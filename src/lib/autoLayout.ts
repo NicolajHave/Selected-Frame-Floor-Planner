@@ -675,23 +675,22 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
     }
     // The Volume Tables keep the aisle all the way round. Only at a pinch —
     // a floor with room for hardly a rack anywhere else — one rack stands
-    // right beside a table, along its side.
+    // right at a table: at one of its short sides (its ends), never along a
+    // long side.
     const racksNow = () => placed.slice(fixed).filter(isRack).length;
     for (const table of placed.slice(fixed).filter((o) => o.item.assetRef === VOLUME_TABLE)) {
       if (left() <= 0 || racksNow() >= 2) break;
       const id = brand ? '105-06-014' : '105-06-001';
       const rack = findAsset(id)!.size;
-      const r = table.item.rotation;
+      const { width, depth } = table.item.size;
+      // The table's long axis, whichever way its size is given.
+      const r = table.item.rotation + (width >= depth ? 0 : Math.PI / 2);
       const ax = { x: Math.cos(r), y: Math.sin(r) };
-      const ay = { x: -ax.y, y: ax.x };
-      for (const [n, reach, turn] of [
-        [ay, table.item.size.depth / 2, r],
-        [{ x: -ay.x, y: -ay.y }, table.item.size.depth / 2, r],
-        [ax, table.item.size.width / 2, r + Math.PI / 2],
-        [{ x: -ax.x, y: -ax.y }, table.item.size.width / 2, r + Math.PI / 2],
-      ] as const) {
-        const off = reach + rack.depth / 2;
-        const item = fromAsset(id, pt(table.item.position.x + n.x * off, table.item.position.y + n.y * off), turn)!;
+      const reach = Math.max(width, depth) / 2 + rack.depth / 2;
+      for (const end of [1, -1]) {
+        // Across the end of the table: the rack's length runs along the short side.
+        const centre = pt(table.item.position.x + ax.x * reach * end, table.item.position.y + ax.y * reach * end);
+        const item = fromAsset(id, centre, r + Math.PI / 2)!;
         const outline = rectCorners(item.position, item.size, item.rotation);
         if (!clearBeside(outline, table.outline)) continue;
         placed.push({ item, outline });
