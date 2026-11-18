@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { entrance, entrances, proposeLayout } from '@/lib/autoLayout';
+import { entrance, entrances, proposeLayout, shelve } from '@/lib/autoLayout';
 import { layoutIssues } from '@/lib/layout';
 import type { Project } from '@/model/project';
-import type { Opening, RoomPolygon } from '@/model/objects';
+import type { InventoryItem, Opening, RoomPolygon } from '@/model/objects';
 import type { Mm, Radians } from '@/model/units';
 import { rectCorners } from '@/geometry/transform';
 import { convexOverlap, outlineGap } from '@/geometry/footprint';
@@ -414,3 +414,71 @@ test('the mannequins stand together at a back corner of the Iconic Table, facing
   }
 });
 
+
+const [H, S, h, s7, M] = ['105-99-005', '105-99-004', '105-99-012', '105-99-010', '105-99-007'];
+/** Racks of `units` on walls with `space` mm free; returns the units after the shelf rule. */
+function shelved(area: number, ...racks: [units: string[], space: number][]): string[][] {
+  const items = racks.map(([modules, space], i) => ({ item: { id: `r${i}`, modules } as InventoryItem, space }));
+  shelve(items, area);
+  return items.map((r) => r.item.modules!);
+}
+
+test('one shelf unit in a shop: in its longest rack, in the middle, with hanging on either side', () => {
+  expect(shelved(50, [[H, H, H], 5000], [[H, H], 3000])).toEqual([[H, S, H], [H, H]]);
+  expect(shelved(50, [[H, H], 3000], [[H, H, H, H, H], 6900])).toEqual([[H, H], [H, H, S, H, H]]);
+  expect(shelved(50, [[H, H], 3000])).toEqual([[H, S]]);
+  // Of two racks as long, the one on the wall with more room.
+  expect(shelved(50, [[H, H], 3000], [[H, H], 4000])).toEqual([[H, H], [H, S]]);
+  // A mirror stays in the middle of its rack; a lone unit is never the shelf.
+  expect(shelved(50, [[H, M, H], 5000])).toEqual([[H, M, S]]);
+  expect(shelved(50, [[M], 2000], [[h], 1000], [[H], 2000])).toEqual([[M], [h], [H]]);
+  expect(shelved(50, [[H, h], 2500])).toEqual([[S, h]]);
+});
+
+test('a second shelf unit: over 80 m², or on a wall with more than 8.4 m free; the narrow one from 7 m', () => {
+  // A long wall: two full units, side by side in the middle of the rack.
+  expect(shelved(50, [[H, H, H, H, H, h], 8500])).toEqual([[H, H, S, S, H, h]]);
+  expect(shelved(50, [[H, H, H, H, H, H], 9000])).toEqual([[H, H, S, S, H, H]]);
+  // Exactly 8.4 m is not more than 8.4 m: the narrow unit comes in beside the shelf instead.
+  expect(shelved(50, [[H, H, H, H, H, h], 8400])).toEqual([[H, H, S, s7, H, H]]);
+  // From 7 m: the 700 unit that ended the rack becomes shelves, beside the full one.
+  expect(shelved(50, [[H, H, H, H, h], 7000])).toEqual([[H, H, S, s7, H]]);
+  expect(shelved(50, [[H, H, H, H, h], 6999])).toEqual([[H, H, S, H, h]]);
+  // The middle is measured, not counted: a 700 unit at the end does not shift it.
+  expect(shelved(50, [[H, H, H, H, H, h], 6999])).toEqual([[H, H, S, H, H, h]]);
+  // No 700 unit in the rack: nothing to turn into the narrow shelf.
+  expect(shelved(50, [[H, H, H, H], 7200])).toEqual([[H, H, S, H]]);
+
+  // A large shop: beside the first on a wall of 7 m or more, else in the next rack.
+  expect(shelved(81, [[H, H, H, H, h], 7200])).toEqual([[H, S, S, H, h]]);
+  expect(shelved(81, [[H, H, H], 5000], [[H, H], 3000])).toEqual([[H, S, H], [H, S]]);
+  expect(shelved(80, [[H, H, H], 5000], [[H, H], 3000])).toEqual([[H, S, H], [H, H]]);
+  // Never more than two, however large the shop and long the walls.
+  const all = shelved(200, [[H, H, H, H, H, H, h], 10000], [[H, H, H, H, H, H], 9000], [[H, H, H], 5000]).flat();
+  expect(all.filter((m) => m === S || m === s7)).toHaveLength(2);
+});
+
+test('a proposal has one shelf unit; a large shop two, side by side', () => {
+  const shelves = (p: Project, style: 'volume' | 'brand') =>
+    proposeLayout(p, { style, aisle: 900, wallRacks: true })
+      .inventory.filter((i) => i.modules?.length)
+      .map((i) => i.modules!);
+  for (const style of ['volume', 'brand'] as const) {
+    // 42 m², no wall with 7 m free.
+    const small = shelves(project(room(6500, 6500, [door('c2', 3250)])), style);
+    expect(small.flat().filter((m) => m === S), style).toHaveLength(1);
+    expect(small.flat().filter((m) => m === s7), style).toHaveLength(0);
+    // The rack with the shelves still has hanging in it.
+    expect(small.find((m) => m.includes(S))!.some((m) => m === H), style).toBe(true);
+  }
+  // 108 m² with a 12 m wall: two, next to each other in the same rack.
+  const large = shelves(shop, 'volume');
+  expect(large.flat().filter((m) => m === S)).toHaveLength(2);
+  const rack = large.find((m) => m.includes(S))!;
+  expect(rack.lastIndexOf(S) - rack.indexOf(S)).toBe(1);
+  expect(rack.filter((m) => m === H).length).toBeGreaterThanOrEqual(2);
+  // A large brand shop keeps its racks short: one shelf unit in each of two racks.
+  const brand = shelves(shop, 'brand');
+  expect(brand.filter((m) => m.includes(S))).toHaveLength(2);
+  expect(brand.flat().filter((m) => m === S)).toHaveLength(2);
+});

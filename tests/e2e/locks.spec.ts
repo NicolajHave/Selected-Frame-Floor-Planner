@@ -21,9 +21,9 @@ test('lock the floor layout: walls, doors and windows stay put, fixtures still m
   const rack = await place(page, 'Floor Rack 1400', room.minX + 4000, room.minY + 3000);
   await page.keyboard.press('Escape');
 
-  const lock = page.getByRole('button', { name: 'Lock room' });
+  const lock = page.getByRole('button', { name: 'Lock floor plan' });
   await lock.click();
-  await expect(page.getByRole('button', { name: 'Room locked' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'Floor plan locked' })).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByRole('button', { name: 'Draw area' })).toBeDisabled();
   await expect(page.getByTitle('Place Window', { exact: true })).toBeDisabled();
   expect((await saved(page)).layoutLocked).toBe(true);
@@ -32,7 +32,7 @@ test('lock the floor layout: walls, doors and windows stay put, fixtures still m
   const before = await saved(page);
   const corner = before.room.corners[0].point;
   await drag(page, corner, { x: corner.x - 800, y: corner.y - 600 });
-  await expect(page.getByText(/room is locked/i).first()).toBeVisible();
+  await expect(page.getByText(/floor plan is locked/i).first()).toBeVisible();
   // Nor can the door be slid along its wall.
   const door = before.room.openings[0];
   await drag(page, { x: room.minX + door.offset, y: room.minY }, { x: room.minX + door.offset + 1500, y: room.minY });
@@ -48,7 +48,7 @@ test('lock the floor layout: walls, doors and windows stay put, fixtures still m
   expect(moved.position.x - rack.position.x).toBeCloseTo(1000, -1);
 
   // Unlocked again, the corner drags.
-  await page.getByRole('button', { name: 'Room locked' }).click();
+  await page.getByRole('button', { name: 'Floor plan locked' }).click();
   await drag(page, corner, { x: corner.x - 800, y: corner.y - 600 });
   expect((await saved(page)).room.corners[0].point).not.toEqual(corner);
   expect(errors, 'console errors').toEqual([]);

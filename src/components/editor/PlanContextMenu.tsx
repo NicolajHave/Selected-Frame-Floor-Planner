@@ -115,7 +115,7 @@ export function PlanContextMenu() {
 function menuFor(hit: PlanHit, world: Point): Item[][] {
   const s = usePlannerStore.getState();
   const readOnly = s.readOnly;
-  const layoutLocked: string | false = s.project.layoutLocked ? 'The room is locked' : false;
+  const layoutLocked: string | false = s.project.layoutLocked ? 'The floor plan is locked' : false;
   const store = () => usePlannerStore.getState();
 
   if (hit.kind === 'inventory' || hit.kind === 'pillar' || hit.kind === 'note') {

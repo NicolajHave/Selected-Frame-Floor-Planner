@@ -46,11 +46,11 @@ test('draw an interior wall with two clicks; adjust it; fixtures keep clear of i
   await expect(page.locator('footer')).toContainText(/1 layout issue/);
   await expect(panel).toContainText(/Interior wall and Floor Rack 1400 overlap|Floor Rack 1400 and Interior wall overlap/);
 
-  // It shows in 3D, and the room lock holds it like the other walls.
+  // It shows in 3D, and the floor plan lock holds it like the other walls.
   await page.getByRole('button', { name: '3D View' }).click();
   await expect(page.locator('[data-stage] canvas')).toBeVisible();
   await page.getByRole('button', { name: '2D Plan' }).click();
-  await page.getByRole('button', { name: 'Lock room' }).click();
+  await page.getByRole('button', { name: 'Lock floor plan' }).click();
   await expect(page.getByRole('button', { name: '+ Wall' })).toBeDisabled();
   expect(errors).toEqual([]);
 });

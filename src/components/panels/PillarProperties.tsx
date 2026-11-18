@@ -11,6 +11,8 @@ export function PillarProperties({ id }: { id: string }) {
   const pillar = usePlannerStore((s) => s.project.pillars.find((p) => p.id === id));
   const updatePillar = usePlannerStore((s) => s.updatePillar);
   const duplicate = usePlannerStore((s) => s.duplicateSelected);
+  const beginGesture = usePlannerStore((s) => s.beginGesture);
+  const endGesture = usePlannerStore((s) => s.endGesture);
   const remove = usePlannerStore((s) => s.deleteSelected);
 
   if (!pillar) return null;
@@ -84,6 +86,8 @@ export function PillarProperties({ id }: { id: string }) {
           value={radToDeg(pillar.rotation)}
           step={5}
           onCommit={(v) => updatePillar(id, { rotation: degToRad(v) })}
+          // One degree a step; a whole hold is one undo step.
+          stepper={{ by: 1, onStart: beginGesture, onEnd: endGesture }}
         />
       </Section>
 

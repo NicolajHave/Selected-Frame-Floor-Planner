@@ -49,7 +49,7 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
   const is3d = view.viewMode === '3d';
   const layoutLocked = usePlannerStore((s) => !!s.project.layoutLocked);
   const setLayoutLocked = usePlannerStore((s) => s.setLayoutLocked);
-  const lockedTitle = 'The room is locked — unlock it to change walls, doors, windows and pillars';
+  const lockedTitle = 'The floor plan is locked — unlock it to change walls, doors, windows and pillars';
   const hasCloudPlan = usePlannerStore((s) => !!s.cloud);
 
   const fit = useFitToPlan();
@@ -306,22 +306,22 @@ export function TopBar({ getViewportSize, user, authReady }: Props) {
 
           {divider}
 
-          {/* Room lock: walls, doors, windows and pillars stay put; fixtures still move */}
+          {/* Floor plan lock: walls, doors, windows and pillars stay put; fixtures still move */}
           <Button
             variant="subtle"
             className={tight}
             active={layoutLocked}
             aria-pressed={layoutLocked}
-            aria-label={layoutLocked ? 'Room locked' : 'Lock room'}
+            aria-label={layoutLocked ? 'Floor plan locked' : 'Lock floor plan'}
             onClick={() => setLayoutLocked(!layoutLocked)}
             title={
               layoutLocked
-                ? 'Unlock the room to change walls, doors, windows and pillars'
-                : 'Lock the room: walls, doors, windows and pillars can’t be moved by accident. Fixtures still move.'
+                ? 'Unlock the floor plan to change walls, doors, windows and pillars'
+                : 'Lock the floor plan: walls, doors, windows and pillars can’t be moved by accident. Fixtures still move.'
             }
           >
             <LockIcon locked={layoutLocked} />
-            {fold < 2 && (layoutLocked ? 'Room locked' : 'Lock room')}
+            {fold < 2 && (layoutLocked ? 'Floor plan locked' : 'Lock floor plan')}
           </Button>
         </>
       )}

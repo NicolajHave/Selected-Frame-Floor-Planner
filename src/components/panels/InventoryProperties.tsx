@@ -17,6 +17,8 @@ export function InventoryProperties({ id }: { id: string }) {
   const item = usePlannerStore((s) => s.project.inventory.find((i) => i.id === id));
   const updateInventory = usePlannerStore((s) => s.updateInventory);
   const duplicate = usePlannerStore((s) => s.duplicateSelected);
+  const beginGesture = usePlannerStore((s) => s.beginGesture);
+  const endGesture = usePlannerStore((s) => s.endGesture);
   const remove = usePlannerStore((s) => s.deleteSelected);
   const room = usePlannerStore((s) => s.project.room);
 
@@ -159,6 +161,8 @@ export function InventoryProperties({ id }: { id: string }) {
           value={radToDeg(item.rotation)}
           step={5}
           onCommit={(v) => updateInventory(id, { rotation: degToRad(v) })}
+          // One degree a step; a whole hold is one undo step.
+          stepper={{ by: 1, onStart: beginGesture, onEnd: endGesture }}
         />
       </Section>
 
