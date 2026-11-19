@@ -20,6 +20,20 @@ const nextConfig = {
       },
     ];
   },
+  // Turbopack (the default bundler): Node-only modules that pdf.js and
+  // LibreDWG's glue reach for only under Node get an empty stand-in in the
+  // browser.
+  turbopack: {
+    resolveAlias: {
+      // pdf.js asks for node-canvas only under Node; the planner never draws PDFs there.
+      canvas: './src/lib/stubs/empty.js',
+      module: { browser: './src/lib/stubs/empty.js' },
+      fs: { browser: './src/lib/stubs/empty.js' },
+      path: { browser: './src/lib/stubs/empty.js' },
+      crypto: { browser: './src/lib/stubs/empty.js' },
+    },
+  },
+  // The same for webpack (`next build --webpack`).
   webpack: (config) => {
     // pdf.js optionally requires node-canvas for server-side rendering; we
     // only rasterise PDFs in the browser.
