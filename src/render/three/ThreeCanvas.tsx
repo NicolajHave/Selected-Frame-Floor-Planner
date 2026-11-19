@@ -1,11 +1,14 @@
 'use client';
 
 import { useCallback, useMemo, useRef, useState } from 'react';
+import * as THREE from 'three';
 import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber';
 import { usePlannerStore } from '@/store/plannerStore';
 import { boundingBox } from '@/geometry/polygon';
 import { findAsset } from '@/lib/assetCatalog';
 import { openingType } from '@/lib/openingTypes';
+import { electricalType } from '@/lib/electricalTypes';
+import { wallUnderRay } from '@/geometry/wallRay';
 import { OrbitView } from './controls/OrbitView';
 import { SceneContents } from './scene/SceneContents';
 import { floorPoint } from './scene/useFloorDrag';
@@ -85,19 +88,32 @@ export function ThreeCanvas() {
     a.remove();
   };
 
-  const onFloorClick = (e: ThreeEvent<MouseEvent>) => {
+  /** A click that hit nothing of the shop's: on the floor, a wall or the empty space around. */
+  const onBackdropClick = (e: ThreeEvent<MouseEvent>) => {
     if (e.delta > CLICK_SLOP) return; // end of an orbit drag
     const s = usePlannerStore.getState();
     const p = floorPoint(e.ray);
+    if (s.tool === 'add-electrical' && s.pendingElectrical && electricalType(s.pendingElectrical).mount === 'wall') {
+      // A point on a wall is placed by clicking the wall where it shows; the
+      // plan's x, y is scene x, z. Failing that, the floor next to a wall.
+      const o = e.ray.origin;
+      const d = e.ray.direction;
+      const hit = room ? wallUnderRay(room, [o.x / MM, o.z / MM, o.y / MM], [d.x, d.z, d.y]) : null;
+      const at = hit?.point ?? p;
+      if (at) s.addElectricalAt(at);
+      return;
+    }
     if (!p) return;
     if (s.tool === 'add-pillar') s.addPillarAt(p);
     else if (s.tool === 'add-inventory') s.addInventoryAt(p, { wallSnap: !e.nativeEvent.altKey });
     else if (s.tool === 'add-opening') s.addOpeningAt(p);
+    else if (s.tool === 'add-electrical') s.addElectricalAt(p);
     else s.setSelection(null);
   };
 
   const pendingOpening = usePlannerStore((s) => s.pendingOpening);
-  const armed = tool === 'add-pillar' || tool === 'add-inventory' || tool === 'add-opening';
+  const pendingElectrical = usePlannerStore((s) => s.pendingElectrical);
+  const armed = tool === 'add-pillar' || tool === 'add-inventory' || tool === 'add-opening' || tool === 'add-electrical';
   const pendingRack = usePlannerStore((s) => s.pendingRack);
   const pendingName = pendingRack?.name ?? findAsset(pendingAssetRef ?? undefined)?.name;
   const hint = isWalking
@@ -106,6 +122,10 @@ export function ThreeCanvas() {
       ? 'Click the floor to place a pillar.'
       : tool === 'add-opening' && pendingOpening
         ? `Click next to a wall to place the ${openingType(pendingOpening).name.toLowerCase()}.`
+      : tool === 'add-electrical' && pendingElectrical
+        ? electricalType(pendingElectrical).mount === 'floor'
+          ? 'Click the floor to place the floor box.'
+          : `Click a wall to place the ${electricalType(pendingElectrical).name.toLowerCase()} — it goes ${electricalType(pendingElectrical).height} mm above the floor.`
       : tool === 'add-inventory'
         ? `Click the floor to place ${pendingName ?? 'an inventory placeholder'}.`
         : readOnly
@@ -130,11 +150,13 @@ export function ThreeCanvas() {
         {/* Context ground grid, 1 m cells */}
         <gridHelper args={[60, 60, '#C9C5BB', '#DDD9D0']} position={[0, -0.002, 0]} />
 
-        {/* Invisible floor catching placement clicks and click-to-deselect */}
+        {/* An invisible shell round everything: it catches the clicks that hit
+            nothing of the shop's — for placing things and for deselecting —
+            whichever way the click looks, also up along a wall. */}
         {!isWalking && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} onClick={onFloorClick}>
-            <planeGeometry args={[400, 400]} />
-            <meshBasicMaterial colorWrite={false} depthWrite={false} />
+          <mesh position={target} onClick={onBackdropClick}>
+            <sphereGeometry args={[420, 24, 12]} />
+            <meshBasicMaterial colorWrite={false} depthWrite={false} side={THREE.BackSide} />
           </mesh>
         )}
 
@@ -144,7 +166,7 @@ export function ThreeCanvas() {
         </SceneModeContext.Provider>
       </Canvas>
 
-      <div className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 max-[900px]:bottom-16 max-[900px]:top-auto max-[900px]:w-[calc(100%-24px)] max-[900px]:text-center">
+      <div className="pointer-events-none absolute left-1/2 top-14 -translate-x-1/2 max-[900px]:bottom-16 max-[900px]:top-auto max-[900px]:w-[calc(100%-24px)] max-[900px]:text-center">
         <div className="rounded-[2px] border border-wall-200 bg-wall-50/95 px-3 py-1.5 text-[11px] text-ink-700 shadow-panel backdrop-blur-sm">
           {hint}
         </div>
