@@ -1,6 +1,6 @@
 import type { jsPDF as JsPdf } from 'jspdf';
 import type { Project } from '@/model/project';
-import type { ElevationSpec } from '../views';
+import type { ElevationSpec, PictureLabel } from '../views';
 import { wallFrame } from '@/geometry/openings';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import {
@@ -243,11 +243,23 @@ export function drawConceptPage(doc: JsPdf, info: DocInfo, project: Project, ext
 /** Area a full-page picture fills. */
 export const VIEW_BOX = { x: MARGIN, y: CONTENT_TOP, w: PAGE_W - 2 * MARGIN, h: CONTENT_BOTTOM - CONTENT_TOP };
 
-export function drawViewPage(doc: JsPdf, info: DocInfo, title: string, image: string | undefined) {
+export function drawViewPage(doc: JsPdf, info: DocInfo, title: string, image: string | undefined, labels: PictureLabel[] = []) {
   pageFrame(doc, info, title, { liveLink: true });
   const b = VIEW_BOX;
   if (image) doc.addImage(image, 'JPEG', b.x, b.y, b.w, b.h, undefined, 'FAST');
   else missingPicture(doc, b.x, b.y, b.w, b.h);
+  // Small tags on the picture ("W1" at each wall), quiet enough not to compete with it.
+  for (const l of labels) {
+    const x = b.x + l.u * b.w;
+    const y = b.y + l.v * b.h;
+    font(doc, 6.5, 'bold', SAGE);
+    const w = doc.getTextWidth(l.text) + 2.6;
+    doc.setFillColor(250, 250, 248);
+    doc.setDrawColor(...RULE);
+    doc.setLineWidth(0.12);
+    doc.roundedRect(x - w / 2, y - 1.9, w, 3.8, 0.9, 0.9, 'FD');
+    doc.text(l.text, x, y + 0.1, { align: 'center', baseline: 'middle' });
+  }
 }
 
 function missingPicture(doc: JsPdf, x: number, y: number, w: number, h: number) {
@@ -329,13 +341,15 @@ function drawElevation(
   layout: ElevationLayout,
   marks: ElevationMark[],
 ) {
+  // "W1", as the wall is numbered on the plan and in the 3D views.
+  const label = `Wall ${spec.wallIndex + 1} (W${spec.wallIndex + 1})`;
   font(doc, 9, 'bold');
-  doc.text(`Wall ${spec.wallIndex + 1}`, x, y + 4);
-  const label = `Wall ${spec.wallIndex + 1}`;
+  doc.text(label, x, y + 4);
+  const labelW = doc.getTextWidth(label);
   font(doc, 8, 'normal', MUTED);
   doc.text(
-    `${num(spec.length / 1000, 2, true)} m long · ${num(spec.height / 1000, 2, true)} m high${spec.transparent ? ' · transparent' : ''} · seen from inside`,
-    x + doc.getTextWidth(label) + 9,
+    `${num(spec.length / 1000, 2, true)} m long · ${num(spec.height / 1000, 2, true)} m high${spec.transparent ? ' · open side' : ''} · seen from the shop, with what stands further in drawn lighter`,
+    x + labelW + 4,
     y + 4,
   );
 

@@ -352,12 +352,22 @@ handlers for stills, and makes the scene's `Suspense` wait for every
 model so a picture is never taken with placeholders. Cameras for the
 pictures come from `lib/views.ts` (pure, unit-tested): four perspective
 views fitted to the shop's bounding box, an isometric, and one
-orthographic elevation per wall, seen from inside and clipped to the
-1.6 m slice in front of the wall, together with the heights its ladder
-shows.
+orthographic elevation per wall, seen from the shop from beyond
+everything in front of it, together with the heights its ladder shows
+and the walls' "W1" tags for the 3D pages (`wallLabels`).
 
 Walls are grouped per wall; a `useFrame` hides a wall whose outside
 faces the camera (a doll's-house cutaway), in the editor and in stills.
+
+An elevation is staged (`scene/stage.ts`, a mutable object the scene
+reads every frame): its wall alone of the room's walls, an even front
+light without shadows, and fixtures left out by id. It is laid together
+from takes of the same view: the wall with what stands at it; the rest of
+the shop faintly over that (without what hangs on walls behind the
+viewer); then outlines. Outlines come from a depth take — a shader that
+writes depth instead of colour — where the depth breaks between
+neighbouring pixels, so the picture reads as a drawing whichever way the
+wall faces the light.
 
 ---
 

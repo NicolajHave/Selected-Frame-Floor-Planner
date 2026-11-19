@@ -34,6 +34,7 @@ function PillarMesh({ pillar: p, selected }: { pillar: Pillar; selected: boolean
     <group
       position={[p.position.x * MM, 0, p.position.y * MM]}
       rotation={[0, -p.rotation, 0]}
+      userData={{ stageId: p.id }}
       {...(interactive ? handlers : {})}
     >
       <mesh position={[0, h / 2, 0]} castShadow receiveShadow>

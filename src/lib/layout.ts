@@ -8,6 +8,7 @@ import { openingSpan } from '@/geometry/openings';
 import { closestOnSegment, convexOverlap, edges, outlineGap, pointInPolygon, rayHit, segmentGap, type Gap, type Polygon, segmentCrosses } from '@/geometry/footprint';
 import { wallStyle } from '@/geometry/wallStyle';
 import { findAsset } from './assetCatalog';
+import { itemMount } from './racks';
 
 export const DEFAULT_MIN_AISLE = 900;
 
@@ -39,11 +40,33 @@ export interface Obstacle {
    * with each other. That is one display, not fixtures in each other's way.
    */
   display?: 'mannequin' | 'iconic-table';
+  /** For a fixture that stands against a wall (wall racks and units): the way it is turned, radians. */
+  wallTurn?: number;
 }
 
 /** Whether `a` and `b` belong together as one display: mannequins with the Iconic Table, or with each other. */
 const oneDisplay = (a: Obstacle, b: Obstacle): boolean =>
   (a.display === 'mannequin' && !!b.display) || (b.display === 'mannequin' && !!a.display);
+
+/**
+ * Whether `a` and `b` stand side by side against the same wall: turned the
+ * same way and in line with each other. What is between them is a stretch
+ * of wall, not somewhere to walk, however narrow it is.
+ */
+function besideOnWall(a: Obstacle, b: Obstacle): boolean {
+  if (a.wallTurn === undefined || b.wallTurn === undefined) return false;
+  const turn = Math.abs(Math.atan2(Math.sin(a.wallTurn - b.wallTurn), Math.cos(a.wallTurn - b.wallTurn)));
+  if (turn > 0.02) return false;
+  // Front to back (the fixtures' own depth axis), the two must largely cover the same stretch.
+  const axis = { x: -Math.sin(a.wallTurn), y: Math.cos(a.wallTurn) };
+  const span = (o: Obstacle) => {
+    const ds = o.outline.map((p) => p.x * axis.x + p.y * axis.y);
+    return [Math.min(...ds), Math.max(...ds)] as const;
+  };
+  const [a0, a1] = span(a);
+  const [b0, b1] = span(b);
+  return Math.min(a1, b1) - Math.max(a0, b0) > 0.5 * Math.min(a1 - a0, b1 - b0);
+}
 
 /** Things that stand on the floor and block movement. */
 export function floorObstacles(project: Project): Obstacle[] {
@@ -65,6 +88,7 @@ export function floorObstacles(project: Project): Obstacle[] {
       name: it.name,
       outline: rectCorners(it.position, it.size, it.rotation),
       ...(display ? { display } : {}),
+      ...(itemMount(it) === 'wall' ? { wallTurn: it.rotation } : {}),
     });
   }
   return out;
@@ -187,9 +211,10 @@ export function layoutIssues(project: Project, minAisle = DEFAULT_MIN_AISLE): La
         continue;
       }
       const gap = outlineGap(a.outline, b.outline);
-      // Fixtures either side of an interior wall have the wall between them, not an aisle.
+      // Fixtures either side of an interior wall have the wall between them, not an aisle;
+      // nor is the gap between two racks side by side on a wall.
       const walled = partitions.some((w) => w !== a && w !== b && segmentCrosses(gap.from, gap.to, w.outline));
-      if (gap.distance > TOUCHING && gap.distance < minAisle && !walled) {
+      if (gap.distance > TOUCHING && gap.distance < minAisle && !walled && !besideOnWall(a, b)) {
         issues.push({
           key: `aisle:${a.id}:${b.id}`,
           kind: 'aisle',

@@ -3,6 +3,7 @@ import type { Point } from '@/model/geometry';
 import { rectCorners } from '@/geometry/transform';
 import { wallFrame } from '@/geometry/openings';
 import { findAsset } from './assetCatalog';
+import { itemMount } from './racks';
 import { tallestWall, wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 
 /** A camera for one picture, in scene metres (x, y up, z). */
@@ -40,6 +41,13 @@ export interface ElevationSpec extends ViewSpec {
   /** Heights (mm) worth dimensioning on this wall, ascending. */
   heights: number[];
   transparent: boolean;
+  /** Fixtures and pillars (ids) that stand at this wall: drawn in full. */
+  atWall: string[];
+  /**
+   * Fixtures (ids) mounted on a wall behind the viewer, their backs to the
+   * picture: left out, like the wall they are on.
+   */
+  behindViewer: string[];
   /** The wall's start corner, for anchoring things drawn on top. */
   wallStartCornerId: string;
   /**
@@ -155,34 +163,55 @@ export function overviewShots(project: Project, aspect: number): ViewSpec[] {
   return views;
 }
 
-/** Depth (mm) of the slice in front of a wall that its elevation shows. */
-const SECTION_DEPTH = 1600;
-
 /** How far in front of a wall (mm) fixtures count as standing against it. */
 const NEAR_WALL = 600;
 
 /**
  * One orthographic elevation per wall of at least 1 m, seen square-on from
- * inside the room, with the heights worth dimensioning on that wall. It
- * shows a slice of the room in front of the wall, like a section.
+ * the shop: the wall alone as the backdrop, at its height, with everything
+ * that stands in front of it. No other wall is in the picture — whatever
+ * side one looks in from is open — and nothing mounted on a wall behind the
+ * viewer. What stands at the wall itself (`atWall`) is meant to be drawn in
+ * full and the rest of the shop faintly over it, so the wall stays readable.
  */
 export function elevationShots(project: Project, aspect: number): ElevationSpec[] {
   const room = project.room;
   if (!room?.closed) return [];
+  const things = [
+    ...project.inventory.map((it) => ({
+      id: it.id,
+      outline: rectCorners(it.position, it.size, it.rotation),
+      // The way a wall-mounted fixture faces (its back is to its wall).
+      front: itemMount(it) === 'wall' || findAsset(it.assetRef)?.mountHeight ? { x: -Math.sin(it.rotation), y: Math.cos(it.rotation) } : null,
+    })),
+    ...project.pillars.map((p) => ({ id: p.id, outline: rectCorners(p.position, p.size, p.rotation), front: null })),
+  ];
   const out: ElevationSpec[] = [];
   room.corners.forEach((_, i) => {
     const w = wallFrame(room, i);
     if (!w || w.length < 1000) return;
     const H = wallHeightOf(room, i);
     const mid = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 };
-    // Depth of the room in front of this wall: place the camera just inside the far side.
-    const depth = Math.max(...room.corners.map((c) => (c.point.x - mid.x) * w.nx + (c.point.y - mid.y) * w.ny));
-    const camDist = Math.max(500, depth - 60);
+    const depthOf = (p: Point) => (p.x - mid.x) * w.nx + (p.y - mid.y) * w.ny;
+    // The viewer stands beyond everything in front of the wall, so nothing is cut through.
+    const depth = Math.max(...room.corners.map((c) => depthOf(c.point)), ...things.flatMap((t) => t.outline.map(depthOf)));
+    const camDist = Math.max(2000, depth + 1000);
     const frustumMm = fitAspect(
       { left: -w.length / 2 - 500, right: w.length / 2 + 500, bottom: -250, top: H + 350 },
       aspect,
       1,
     );
+    const atWall: string[] = [];
+    const behindViewer: string[] = [];
+    for (const t of things) {
+      const dists = t.outline.map((p) => (p.x - w.a.x) * w.nx + (p.y - w.a.y) * w.ny);
+      const alongs = t.outline.map((p) => (p.x - w.a.x) * w.ux + (p.y - w.a.y) * w.uy);
+      const close = Math.min(...dists) <= room.wallThickness / 2 + NEAR_WALL && Math.max(...dists) >= 0;
+      const overlaps = Math.max(...alongs) > 0 && Math.min(...alongs) < w.length;
+      if (close && overlaps) atWall.push(t.id);
+      // Facing the same way the viewer looks (towards this wall): seen from behind.
+      else if (t.front && t.front.x * -w.nx + t.front.y * -w.ny > 0.5) behindViewer.push(t.id);
+    }
     out.push({
       title: `Elevation · wall ${i + 1}`,
       wallIndex: i,
@@ -191,6 +220,8 @@ export function elevationShots(project: Project, aspect: number): ElevationSpec[
       frustumMm,
       heights: wallHeights(project, i),
       transparent: !!wallStyle(room, i).transparent,
+      atWall,
+      behindViewer,
       wallStartCornerId: room.corners[i]!.id,
       sign: Math.sign(w.ny * w.ux - w.nx * w.uy) || 1,
       shot: {
@@ -204,11 +235,65 @@ export function elevationShots(project: Project, aspect: number): ElevationSpec[
           top: frustumMm.top * M,
           bottom: frustumMm.bottom * M,
         },
-        // Only the slice next to the wall: what stands in the room is left out.
-        near: Math.max(0.01, (camDist - SECTION_DEPTH) * M),
+        near: 0.05,
+        // Through the wall itself and what hangs on it.
         far: (camDist + 1000) * M,
       },
     });
+  });
+  return out;
+}
+
+/** Where a label goes in a picture: fractions of its width and height from the top-left. */
+export interface PictureLabel {
+  text: string;
+  u: number;
+  v: number;
+}
+
+/**
+ * Where scene point `p` (metres) lands in a picture of `shot` with the
+ * given width-to-height ratio; null when it is behind the camera.
+ */
+export function projectToPicture(shot: ShotSpec, aspect: number, p: [number, number, number]): { u: number; v: number } | null {
+  const forward = normalize(shot.target.map((t, i) => t - shot.position[i]!));
+  const right = normalize(cross(forward, [0, 1, 0]));
+  const up = cross(right, forward);
+  const rel = p.map((v, i) => v - shot.position[i]!);
+  const x = dot(rel, right);
+  const y = dot(rel, up);
+  if (shot.kind === 'ortho') {
+    const f = shot.frustum;
+    return { u: (x - f.left) / (f.right - f.left), v: (f.top - y) / (f.top - f.bottom) };
+  }
+  const z = dot(rel, forward);
+  if (z <= 0.01) return null;
+  const tanV = Math.tan((shot.fov * Math.PI) / 360);
+  return { u: (x / (z * tanV * aspect) + 1) / 2, v: (1 - y / (z * tanV)) / 2 };
+}
+
+/**
+ * "W1", "W2" … for a 3D picture, the same numbers as on the plan: above the
+ * top of a wall that shows, and on the floor line just outside a wall that
+ * is cut away towards the camera.
+ */
+export function wallLabels(project: Project, shot: ShotSpec, aspect: number): PictureLabel[] {
+  const room = project.room;
+  if (!room?.closed) return [];
+  const out: PictureLabel[] = [];
+  room.corners.forEach((_, i) => {
+    const w = wallFrame(room, i);
+    if (!w || w.length < 1000) return;
+    const mid = { x: (w.a.x + w.b.x) / 2, y: (w.a.y + w.b.y) / 2 };
+    // Cut away (or an open side): the camera is on the wall's outside.
+    const outside = (shot.position[0] / M - mid.x) * -w.nx + (shot.position[2] / M - mid.y) * -w.ny > 0;
+    const shown = !outside && !wallStyle(room, i).transparent;
+    const at: [number, number, number] = shown
+      ? [mid.x * M, (wallHeightOf(room, i) + 220) * M, mid.y * M]
+      : [(mid.x - w.nx * 420) * M, 0, (mid.y - w.ny * 420) * M];
+    const spot = projectToPicture(shot, aspect, at);
+    if (!spot || spot.u < 0.02 || spot.u > 0.98 || spot.v < 0.03 || spot.v > 0.97) return;
+    out.push({ text: `W${i + 1}`, ...spot });
   });
   return out;
 }

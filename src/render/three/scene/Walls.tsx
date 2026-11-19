@@ -3,6 +3,7 @@
 import { useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { useFrame } from '@react-three/fiber';
+import { useStage } from './stage';
 import type { RoomPolygon } from '@/model/objects';
 import { openingSpan, wallFrame } from '@/geometry/openings';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
@@ -39,10 +40,12 @@ interface WallSide {
  *
  * Cutaway: a wall whose outside faces the camera is hidden, so the shop
  * can be seen into from any angle (like a doll's house). From inside the
- * room every wall shows.
+ * room every wall shows. A staged still (an elevation in the PDF) can ask
+ * for one wall alone instead.
  */
 export function Walls({ room }: { room: RoomPolygon }) {
   const groups = useRef<(THREE.Group | null)[]>([]);
+  const stage = useStage();
   const thickness = room.wallThickness * MM;
 
   const pieces = useMemo<Piece[]>(() => {
@@ -111,7 +114,7 @@ export function Walls({ room }: { room: RoomPolygon }) {
       const g = groups.current[i];
       if (!g || !side) return;
       const outside = (camera.position.x - side.mx) * side.nx + (camera.position.z - side.mz) * side.nz;
-      g.visible = outside <= 0;
+      g.visible = stage && stage.onlyWall !== null ? i === stage.onlyWall : outside <= 0;
     });
   });
 

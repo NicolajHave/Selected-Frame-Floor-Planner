@@ -37,6 +37,8 @@ test('export an A3 presentation PDF: cover, concept, 3D views, plan, elevations,
   expect(pages[1]).toContain('Power needed behind the shelves.');
   expect(pages.filter((p) => p.startsWith('3D View'))).toHaveLength(4);
   expect(pages[6]).toContain('Isometric View');
+  // The walls carry their numbers in the 3D pictures too.
+  for (const p of pages.slice(2, 7)) for (const w of ['W1', 'W2', 'W3', 'W4']) expect(p).toContain(w);
 
   const plan = pageWith(pages, 'Plan View');
   // The drawing at a standard scale, legend and title block
@@ -51,7 +53,8 @@ test('export an A3 presentation PDF: cover, concept, 3D views, plan, elevations,
   expect(plan).toContain('900'); // door width
   // Elevations: every wall, heights from the floor to the wall top and the logo
   const elevations = pages.filter((p) => p.startsWith('Elevations')).join(' ');
-  for (const w of ['Wall 1', 'Wall 2', 'Wall 3', 'Wall 4']) expect(elevations).toContain(w);
+  for (const w of ['Wall 1 (W1)', 'Wall 2 (W2)', 'Wall 3 (W3)', 'Wall 4 (W4)']) expect(elevations).toContain(w);
+  expect(elevations).toContain('seen from the shop');
   expect(elevations).toContain('10,00 m long');
   expect(elevations).toContain('2.400'); // logo bottom edge
   expect(elevations).toContain('mm');

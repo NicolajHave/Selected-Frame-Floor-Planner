@@ -1,7 +1,9 @@
 'use client';
 
 import { Suspense, useEffect } from 'react';
+import { useFrame } from '@react-three/fiber';
 import type { Project } from '@/model/project';
+import { useStage, type Stage } from './stage';
 import { Lights } from './Lights';
 import { Floor } from './Floor';
 import { Walls } from './Walls';
@@ -12,8 +14,10 @@ import { ElectricalMeshes } from './ElectricalMeshes';
 /** The shop itself: room, pillars, fixtures and electrical points. Shared by the editor and the PDF renders. */
 export function SceneContents({ project, onReady }: { project: Project; onReady?: () => void }) {
   const room = project.room;
+  const stage = useStage();
   return (
     <>
+      {stage && <Staging stage={stage} />}
       <Lights />
       {room && room.closed && (
         <>
@@ -31,6 +35,17 @@ export function SceneContents({ project, onReady }: { project: Project; onReady?
       </Suspense>
     </>
   );
+}
+
+/** Shows and hides fixtures and pillars as the still being taken is staged. */
+function Staging({ stage }: { stage: Stage }) {
+  useFrame(({ scene }) => {
+    scene.traverse((o) => {
+      const id: unknown = o.userData.stageId;
+      if (typeof id === 'string') o.visible = !stage.hidden.has(id);
+    });
+  });
+  return null;
 }
 
 /**

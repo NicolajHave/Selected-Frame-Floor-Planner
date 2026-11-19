@@ -120,11 +120,13 @@ def preview(path, look_from=(-1.7, -4.4, 1.35), target=(0, 0, 1.12)):
     bpy.ops.render.render(write_still=True)
 
 
-def thumbnail(path, width=360, height=192):
+def thumbnail(path, width=360, height=192, top=False):
     """
     The library card picture: the model alone on a transparent background
     with its shadow, seen from the front left and a little above, framed
-    to fill the card.
+    to fill the card. With `top` it is seen from straight above, turned as
+    on the plan: for what lies flat on the floor (the carpet), whose
+    outline is the whole point and should read the same in both places.
     """
     import mathutils
     scene = bpy.context.scene
@@ -160,10 +162,13 @@ def thumbnail(path, width=360, height=192):
     view = mathutils.Vector((math.sin(azimuth) * math.cos(elevation),
                              -math.cos(azimuth) * math.cos(elevation),
                              math.sin(elevation)))
+    if top:
+        view = mathutils.Vector((0.0, 0.0, 1.0))
     bpy.ops.object.camera_add()
     cam = bpy.context.active_object
     cam.data.lens = 50
-    cam.rotation_euler = (-view).to_track_quat('-Z', 'Y').to_euler()
+    # Straight down, the model's back (+y) is up the picture: as the plan draws it.
+    cam.rotation_euler = (0.0, 0.0, 0.0) if top else (-view).to_track_quat('-Z', 'Y').to_euler()
     scene.camera = cam
     scene.render.resolution_x = width
     scene.render.resolution_y = height
@@ -297,7 +302,7 @@ def main():
         if a.thumbs:
             thumbs = os.path.join(ROOT, 'public', 'assets', 'thumbs')
             os.makedirs(thumbs, exist_ok=True)
-            thumbnail(os.path.join(thumbs, f'{mod.ID}.png'))
+            thumbnail(os.path.join(thumbs, f'{mod.ID}.png'), top=getattr(mod, 'THUMB_FROM_ABOVE', False))
         if a.preview:
             preview(os.path.join(a.preview, f'{mod.ID}.png'))
 
