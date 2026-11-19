@@ -39,6 +39,37 @@ export function clampToWall(length: number, thickness: number, along: number): n
   return Math.max(end, Math.min(length - end, along));
 }
 
+/** Dragged up or down a wall in the 3D view, a point moves in steps of this many mm. */
+export const HEIGHT_STEP = 50;
+
+/** The height a wall point takes when it is dragged up or down its wall: in steps, between the floor and the top. */
+export function draggedHeight(pointer: number, top: number): number {
+  const highest = Math.max(HEIGHT_STEP, Math.floor(top / HEIGHT_STEP) * HEIGHT_STEP);
+  return Math.max(HEIGHT_STEP, Math.min(highest, Math.round(pointer / HEIGHT_STEP) * HEIGHT_STEP));
+}
+
+/** A drag counts as up-and-down within about 35° of upright on the screen. */
+const UPRIGHT = Math.cos((35 * Math.PI) / 180);
+
+/**
+ * Which way a drag in the 3D view takes a wall point: along its wall, or up
+ * and down it. One or the other, settled by how the drag sets off: a wall
+ * seen in perspective runs at a slant, so a point that simply followed the
+ * pointer would change height whenever it was moved along. `move` is the
+ * pointer's first movement on the screen and `wall` the way the wall runs
+ * there (both px). Up and down only when the movement is clearly upright,
+ * and more upright than it is along the wall's line — a wall seen nearly
+ * end-on runs upright itself, and there the drag goes along.
+ */
+export function dragAxis(move: readonly [number, number], wall: readonly [number, number]): 'along' | 'height' {
+  const m = Math.hypot(move[0], move[1]);
+  const w = Math.hypot(wall[0], wall[1]);
+  if (!m) return 'along';
+  const up = Math.abs(move[1]) / m;
+  const along = w ? Math.abs(move[0] * wall[0] + move[1] * wall[1]) / (m * w) : 0;
+  return up > UPRIGHT && up > along + 0.02 ? 'height' : 'along';
+}
+
 /** Wall anchor (start corner + distance along) for a point near `p`, or null. */
 export function wallAnchorAt(
   room: RoomPolygon,

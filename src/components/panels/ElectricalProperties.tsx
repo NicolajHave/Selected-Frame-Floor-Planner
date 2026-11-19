@@ -4,7 +4,7 @@ import { usePlannerStore } from '@/store/plannerStore';
 import { mm } from '@/model/units';
 import type { Mm } from '@/model/units';
 import type { ElectricalKind } from '@/model/objects';
-import { electricalAnchor } from '@/geometry/electrical';
+import { HEIGHT_STEP, electricalAnchor } from '@/geometry/electrical';
 import { wallFrame } from '@/geometry/openings';
 import { wallHeightOf } from '@/geometry/wallStyle';
 import { ELECTRICAL_TYPES, electricalType } from '@/lib/electricalTypes';
@@ -89,7 +89,8 @@ export function ElectricalProperties({ id }: { id: string }) {
             <p className="text-[11px] text-ink-500">
               Height to the centre of the outlet, from the floor.
               {w && ` ${Math.round(w.length - (point.offset ?? 0)).toLocaleString('da-DK')} mm to the wall's end.`} Drag
-              it on the plan to move it along the wall.
+              it to move it along the wall. In the 3D view, drag it straight up or down to change the height, in steps
+              of {HEIGHT_STEP} mm.
             </p>
             {tooHigh && (
               <p className="rounded-[2px] border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-950">
@@ -98,7 +99,7 @@ export function ElectricalProperties({ id }: { id: string }) {
             )}
           </>
         ) : (
-          <p className="text-[11px] text-ink-500">Drag it on the plan to move it.</p>
+          <p className="text-[11px] text-ink-500">Drag it to move it, on the plan or in the 3D view.</p>
         )}
       </Section>
 
