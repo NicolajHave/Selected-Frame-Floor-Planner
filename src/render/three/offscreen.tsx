@@ -35,6 +35,14 @@ export async function renderShots(project: Project, shots: ShotRequest[]): Promi
   canvas.height = first.height;
   const root = createRoot(canvas);
   try {
+    // The renderer is made here (fiber may build it asynchronously); the scene goes in after.
+    await root.configure({
+      size: { width: first.width, height: first.height, top: 0, left: 0 },
+      dpr: 1,
+      frameloop: 'never',
+      shadows: true,
+      gl: { preserveDrawingBuffer: true, antialias: true },
+    });
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(() => reject(new Error('3D models took too long to load')), LOAD_TIMEOUT);
       const done = () => {
@@ -45,13 +53,6 @@ export async function renderShots(project: Project, shots: ShotRequest[]): Promi
         window.clearTimeout(timer);
         reject(e instanceof Error ? e : new Error(String(e)));
       };
-      root.configure({
-        size: { width: first.width, height: first.height, top: 0, left: 0 },
-        dpr: 1,
-        frameloop: 'never',
-        shadows: true,
-        gl: { preserveDrawingBuffer: true, antialias: true },
-      });
       root.render(
         <SceneModeContext.Provider value="render">
           <Catch onError={fail}>

@@ -435,7 +435,15 @@ never reach the shared database.
 
 ---
 
-## 8. Testing
+## 8. Build and testing
+
+**Build**: Next.js 16 (App Router) with React 19 and react-three-fiber 9,
+bundled by Turbopack. pdf.js and LibreDWG's glue reach for Node-only
+modules (node-canvas, `fs`, `path` …) only when they run under Node;
+`next.config.mjs` gives those an empty stand-in (`src/lib/stubs/empty.js`)
+— under `turbopack.resolveAlias`, and the same under `webpack` for
+`next build --webpack`. CI runs on the Node version production uses (24).
+
 
 `npm test` runs two Playwright projects (see `playwright.config.ts`):
 
