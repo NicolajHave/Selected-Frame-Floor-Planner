@@ -49,16 +49,28 @@ export interface PdfSource {
   close: () => void;
 }
 
+/** Where pdf.js finds its data files (copied there on install, see scripts/copy-vendor.mjs). */
+const PDFJS_DATA = '/vendor/pdfjs';
+
 export async function openPdf(file: File): Promise<PdfSource> {
-  // Loaded on demand: pdf.js is large and only needed for this import.
-  const pdfjs = await import('pdfjs-dist');
+  // Loaded on demand: pdf.js is large and only needed for this import. The
+  // "legacy" build is the one for browsers a year or two old as well; the
+  // other needs this year's.
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.js',
+    'pdfjs-dist/legacy/build/pdf.worker.min.mjs',
     import.meta.url,
   ).toString();
-  // isEvalSupported off: pdf.js 3 can otherwise be made to run script from a
-  // crafted font in a PDF, and drawings come from other people.
-  const doc = await pdfjs.getDocument({ data: await file.arrayBuffer(), isEvalSupported: false }).promise;
+  const doc = await pdfjs.getDocument({
+    data: await file.arrayBuffer(),
+    // Scanned drawings are often JBIG2 or JPEG 2000: their decoders, the
+    // fonts a PDF may leave out, and the maps for CJK text are fetched
+    // from here when a page needs them.
+    wasmUrl: `${PDFJS_DATA}/wasm/`,
+    iccUrl: `${PDFJS_DATA}/iccs/`,
+    standardFontDataUrl: `${PDFJS_DATA}/standard_fonts/`,
+    cMapUrl: `${PDFJS_DATA}/cmaps/`,
+  }).promise;
 
   const draw = async (n: number, maxSide: number, crop: Crop | null, type: 'image/jpeg' | 'image/png') => {
     const page = await doc.getPage(n);
@@ -76,7 +88,7 @@ export async function openPdf(file: File): Promise<PdfSource> {
     const w = Math.max(1, Math.round(cw * scale));
     const h = Math.max(1, Math.round(ch * scale));
     const canvas = whiteCanvas(w, h);
-    await page.render({ canvasContext: canvas.getContext('2d')!, viewport }).promise;
+    await page.render({ canvas, viewport }).promise;
     page.cleanup();
     return { src: canvas.toDataURL(type, JPEG_QUALITY), aspect: h / w };
   };
@@ -85,7 +97,8 @@ export async function openPdf(file: File): Promise<PdfSource> {
     pageCount: doc.numPages,
     preview: (n, maxSide) => draw(n, maxSide, null, 'image/jpeg'),
     render: async (n, crop) => ({ ...(await draw(n, MAX_SIDE, crop ?? null, 'image/jpeg')), pageCount: doc.numPages }),
-    close: () => void doc.destroy(),
+    // Ends the document and its worker.
+    close: () => void doc.loadingTask.destroy(),
   };
 }
 

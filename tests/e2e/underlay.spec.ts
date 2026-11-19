@@ -4,6 +4,7 @@ import { openFresh, saved, toScreen, trackErrors } from './helpers';
 
 const PLAN_PDF = path.join(__dirname, '../fixtures/sample-plan.pdf');
 const THREE_PAGES = path.join(__dirname, '../fixtures/three-pages.pdf');
+const SCANNED_PDF = path.join(__dirname, '../fixtures/scanned-plan.pdf');
 const ROOM_DXF = path.join(__dirname, '../fixtures/room-cm.dxf');
 
 // The fixture is A4 landscape (842 × 595 pt) at 1:100 with a 10 m dimension
@@ -179,6 +180,60 @@ test('a DXF drawing comes in at its own scale, no calibration needed', async ({ 
 test('LibreDWG’s WebAssembly is served for DWG import', async ({ request }) => {
   const res = await request.head('/vendor/libredwg/libredwg-web.wasm');
   expect(res.status()).toBe(200);
+});
+
+/** How much of the underlay picture is dark (lines, text) and how much is light (paper), 0–1. */
+async function inkAndPaper(page: Page) {
+  return page.evaluate(async () => {
+    const href = document.querySelector('[data-layer="underlay"] image')!.getAttribute('href')!;
+    const img = new Image();
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = href;
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d')!;
+    ctx.drawImage(img, 0, 0);
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let ink = 0;
+    let paper = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i]! < 110) ink++;
+      else if (data[i]! > 225) paper++;
+    }
+    return { ink: ink / (data.length / 4), paper: paper / (data.length / 4), width: canvas.width };
+  });
+}
+
+test('a scanned drawing (a JPEG 2000 picture in a PDF) comes in whole', async ({ page }) => {
+  const errors = trackErrors(page);
+  await openFresh(page);
+  // pdf.js fetches the decoder for such pictures when a page needs it.
+  const decoders: string[] = [];
+  page.on('response', (r) => {
+    if (r.url().includes('/vendor/pdfjs/')) decoders.push(`${r.status()} ${new URL(r.url()).pathname}`);
+  });
+  await page.getByTestId('underlay-file').setInputFiles(SCANNED_PDF);
+  await page.getByRole('dialog').getByRole('button', { name: 'Use whole page' }).click();
+  await expect(page.locator('[data-layer="underlay"] image')).toBeVisible();
+  expect((await saved(page)).underlay.fileName).toBe('scanned-plan.pdf');
+
+  // The drawing is there: mostly paper, with its lines on it — not a blank page.
+  const scan = await inkAndPaper(page);
+  expect(scan.width).toBe(2400);
+  expect(scan.paper).toBeGreaterThan(0.8);
+  expect(scan.ink).toBeGreaterThan(0.002);
+  expect(decoders).toContain('200 /vendor/pdfjs/wasm/openjpeg.wasm');
+  expect(errors).toEqual([]);
+});
+
+test('pdf.js’s decoders, fonts and character maps are served for PDF import', async ({ request }) => {
+  for (const file of ['wasm/openjpeg.wasm', 'wasm/jbig2.wasm', 'wasm/qcms_bg.wasm', 'standard_fonts/LiberationSans-Regular.ttf', 'cmaps/UniJIS-UTF16-H.bcmap', 'iccs/CGATS001Compat-v2-micro.icc']) {
+    expect((await request.head(`/vendor/pdfjs/${file}`)).status(), file).toBe(200);
+  }
 });
 
 test('lock the plan in place; draft the walls by clicking inside the room', async ({ page }) => {
