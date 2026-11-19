@@ -63,6 +63,16 @@ const SECOND_SHELF_M2 = 80;
 /** So may a wall with more free length than this (mm); from the shorter length, a narrow one. */
 const SECOND_SHELF_WALL = 8400;
 const NARROW_SHELF_WALL = 7000;
+/** The floor racks of a volume shop: the plain one, and the ones with one, two and three rows of shelves. */
+const FLOOR_RACK = '105-06-001';
+const FLOOR_RACK_700 = '105-06-002';
+const SHELF_RACK_1 = '105-06-010';
+const SHELF_RACK_2 = '105-06-011';
+const SHELF_RACK_3 = '105-06-013';
+/** At most this share of a shop's floor racks have shelves. */
+const SHELF_RACK_SHARE = 0.25;
+/** The rack with three rows of shelves is for shops larger than this (m²). */
+const TRIPLE_SHELF_M2 = 80;
 /** Up to this many units stand on a wall as one rack; a wall with room for more gets sets with a gap between. */
 const LONGEST_RUN = 5;
 /** The gap between the sets of a split wall (mm). */
@@ -105,6 +115,8 @@ interface Placed {
   space?: number;
   /** For a wall rack: which wall (and side of it) it stands on; the sets of a split wall share it. */
   wall?: string;
+  /** For a rack standing in rows on the floor: its place in the grid. */
+  cell?: { row: number; col: number };
 }
 
 function fromAsset(assetId: string, centre: Point, rotation: number): InventoryItem | null {
@@ -287,6 +299,49 @@ export function shelve(racks: { item: InventoryItem; space: number; wall?: strin
 }
 
 /**
+ * The shelf racks among `count` floor racks in a shop of `area` m², as
+ * catalog ids: at most a quarter of them, the rest being plain racks. Two
+ * rows of shelves is the usual one; one row comes in for variety, and three
+ * rows only in a shop over 80 m².
+ */
+export function shelfRacks(count: number, area: number): string[] {
+  const turn = area > TRIPLE_SHELF_M2 ? [SHELF_RACK_2, SHELF_RACK_3, SHELF_RACK_2, SHELF_RACK_1] : [SHELF_RACK_2, SHELF_RACK_1];
+  return Array.from({ length: Math.floor(count * SHELF_RACK_SHARE) }, (_, i) => turn[i % turn.length]!);
+}
+
+/** `k` of `list`, evenly spread over it. */
+export function spreadOver<T>(list: T[], k: number): T[] {
+  const n = Math.min(k, list.length);
+  return Array.from({ length: n }, (_, i) => list[Math.floor(((i + 0.5) * list.length) / n)]!);
+}
+
+/**
+ * Turns some of the plain floor racks standing in rows into shelf racks
+ * (see `shelfRacks`; `total` counts every floor rack of the shop). They are
+ * spread over the floor like the dark squares of a chessboard, thinned out
+ * evenly where fewer are called for, and never both racks of a pair. A
+ * shelf rack takes a plain one's place: nothing moves.
+ */
+function shelveFloor(rows: Placed[], total: number, area: number): void {
+  const stands = new Map<number, Placed[]>();
+  for (const p of rows) {
+    if (p.group === undefined || !p.cell || p.item.assetRef !== FLOOR_RACK) continue;
+    stands.set(p.group, [...(stands.get(p.group) ?? []), p]);
+  }
+  const inOrder = [...stands.values()].sort((a, b) => a[0]!.cell!.row - b[0]!.cell!.row || a[0]!.cell!.col - b[0]!.cell!.col);
+  const dark = inOrder.filter((st) => (st[0]!.cell!.row + st[0]!.cell!.col) % 2 === 0);
+  const light = inOrder.filter((st) => (st[0]!.cell!.row + st[0]!.cell!.col) % 2 !== 0);
+  const kinds = shelfRacks(total, area);
+  const chosen = kinds.length <= dark.length ? spreadOver(dark, kinds.length) : [...dark, ...spreadOver(light, kinds.length - dark.length)];
+  chosen.forEach((stand, i) => {
+    const asset = findAsset(kinds[i]!);
+    // The second rack of a pair, so the shelves all face the same way.
+    const rack = stand.at(-1)!.item;
+    if (asset) Object.assign(rack, { assetRef: asset.id, name: asset.name, category: asset.category, size: { ...asset.size } });
+  });
+}
+
+/**
  * Free stretches of wall `index` (along its inner face, mm from its start),
  * between corners and openings: where a rack may stand, from – to, and the
  * wall space there as one would measure it (corner or opening to the next,
@@ -339,7 +394,7 @@ function wallRack(room: RoomPolygon, index: number, along: number, modules: stri
  * the longest run first; never more than `max` racks.
  */
 function floorRuns(length: number, brand: boolean, max: number): string[][] {
-  const [big, small] = brand ? ['105-06-014', '105-06-014-700'] : ['105-06-001', '105-06-002'];
+  const [big, small] = brand ? ['105-06-014', '105-06-014-700'] : [FLOOR_RACK, FLOOR_RACK_700];
   const w = (id: string) => findAsset(id)!.size.width;
   const out: string[][] = [];
   for (let n = Math.floor(length / w(big)); n >= 0; n--) {
@@ -753,8 +808,9 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
     //    height on the plan) and evenly spaced, so the aisles between them
     //    lead into the shop; as many as the shop's size calls for. Volume
     //    shops stand them two and two, back to back (touching, the aisle
-    //    round the pair) and fill up with single racks; brand shops keep
-    //    them single, then add podiums where there is still room.
+    //    round the pair) and fill up with single racks — plain racks, of
+    //    which up to a quarter become shelf racks at the end; brand shops
+    //    keep them single, then add podiums where there is still room.
     let standSeq = 0;
     /**
      * `want` stands from `stands` (taken in turn; `smaller` where the one
@@ -796,12 +852,13 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
                   // The stand in the middle of its place on the grid.
                   let at = u + (across - depthOf(ids)) / 2;
                   const group = standSeq++;
+                  const cell = { row: rows.length, col };
                   const items = ids.map((id) => {
                     const depth = findAsset(id)!.size.depth;
                     const mid = at + depth / 2;
                     at += depth;
                     const item = fromAsset(id, pt(mid * f.x - v * f.y, mid * f.y + v * f.x), turn)!;
-                    return { item, outline: rectCorners(item.position, item.size, item.rotation), group };
+                    return { item, outline: rectCorners(item.position, item.size, item.rotation), group, cell };
                   });
                   if (items.every((x) => clearOf(x.outline, between, aisle))) {
                     placed.push(...items);
@@ -876,10 +933,11 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
       }
       placed.push(...racks.flat());
     } else {
-      placed.push(...bays([['105-06-001', '105-06-011'], ['105-06-001', '105-06-013']], gap, Math.floor(left() / 2)).flat());
-      let singles = bays([['105-06-001'], ['105-06-011']], gap, left());
+      // Plain racks, two and two and then singly; which of them get shelves is settled at the end (`shelveFloor`).
+      placed.push(...bays([[FLOOR_RACK, FLOOR_RACK]], gap, Math.floor(left() / 2)).flat());
+      let singles = bays([[FLOOR_RACK]], gap, left());
       if (singles.length < left()) {
-        const more = bays([['105-06-001'], ['105-06-011']], gap, left(), ['105-06-002']);
+        const more = bays([[FLOOR_RACK]], gap, left(), [FLOOR_RACK_700]);
         if (more.length > singles.length) singles = more;
       }
       placed.push(...singles.flat());
@@ -891,7 +949,7 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
     const racksNow = () => placed.slice(fixed).filter(isRack).length;
     for (const table of placed.slice(fixed).filter((o) => o.item.assetRef === VOLUME_TABLE)) {
       if (left() <= 0 || racksNow() >= 2) break;
-      const id = brand ? '105-06-014' : '105-06-001';
+      const id = brand ? '105-06-014' : FLOOR_RACK;
       const rack = findAsset(id)!.size;
       const { width, depth } = table.item.size;
       // The table's long axis, whichever way its size is given.
@@ -1012,5 +1070,10 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
     placed.filter((p) => p.item.modules?.length && inventory.includes(p.item)).map((p) => ({ item: p.item, space: p.space ?? 0, wall: p.wall })),
     area,
   );
+  // 8. And the shelf racks on the floor: at most a quarter of the floor racks (see `shelfRacks`).
+  if (!brand) {
+    const standing = placed.filter((p) => inventory.includes(p.item));
+    shelveFloor(standing, standing.filter(isRack).length, area);
+  }
   return { inventory };
 }

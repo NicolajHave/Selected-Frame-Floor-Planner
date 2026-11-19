@@ -21,6 +21,16 @@ const STYLES: { id: ShopStyle; name: string; text: string }[] = [
   },
 ];
 
+/** What a proposal keeps to, in the words of the people who set the rules. */
+const RULES = [
+  'The entrance is the shop’s open side if it has one, otherwise its widest double door. From 30 m² an Iconic Table with two mannequins stands on a carpet in front of it.',
+  'Volume Tables: one from 30 m², two from 60 m², free on the floor.',
+  'The logo hangs over a wall rack: Corona Light from 30 m², stainless steel below.',
+  'Wall racks are hanging units with one shelf unit in the shop — a second beside it over 80 m² or on a wall with more than 8.4 m free.',
+  'A wall with room for more than five units gets sets of three, half a metre apart.',
+  'Floor racks stand in straight rows, two and two in a volume shop. At most one in four has shelves; three rows of shelves only over 80 m².',
+];
+
 /** Makes an automatic layout as a new layout tab, to start from and adjust. */
 export function AutoLayoutDialog({ onClose }: { onClose: () => void }) {
   const minAisle = usePlannerStore((s) => s.project.minAisle ?? DEFAULT_MIN_AISLE);
@@ -46,12 +56,17 @@ export function AutoLayoutDialog({ onClose }: { onClose: () => void }) {
       >
         <p className="text-[12px] leading-relaxed text-ink-700">
           Places fixtures in the room for you{empty ? '' : ', as a new layout tab — your own layout stays as it is'}. Doorways
-          stay clear and every fixture keeps at least the minimum aisle to the next one and to the walls. The entrance is
-          the shop's open side if it has one, otherwise its widest double door. The logo hangs over a wall rack (Corona
-          Light from 30 m², stainless steel below). The wall racks are hanging, with one shelf unit in the shop — a second
-          beside it over 80 m² or on a wall with more than 8.4 m free. A wall with room for more than five units gets
-          sets of three, half a metre apart. Then adjust it like any other.
+          stay clear and every fixture keeps at least the minimum aisle to the next one and to the walls. Then adjust it
+          like any other.
         </p>
+        <details className="text-[12px] leading-relaxed text-ink-700">
+          <summary className="cursor-pointer select-none text-ink-900">The rules it follows</summary>
+          <ul className="mt-2 flex list-disc flex-col gap-1 pl-4">
+            {RULES.map((rule) => (
+              <li key={rule}>{rule}</li>
+            ))}
+          </ul>
+        </details>
 
         <fieldset className="grid grid-cols-2 gap-2">
           <legend className="sr-only">Kind of shop</legend>
