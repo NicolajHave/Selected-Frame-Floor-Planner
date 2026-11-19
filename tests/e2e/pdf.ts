@@ -3,13 +3,13 @@ import { expect, type Page } from '@playwright/test';
 
 /** Text of each page, via pdf.js. */
 export async function pdfText(file: string): Promise<string[]> {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
+  // The build for Node.
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   const doc = await pdfjs.getDocument({ data: new Uint8Array(fs.readFileSync(file)), verbosity: 0 }).promise;
   const pages: string[] = [];
   for (let i = 1; i <= doc.numPages; i++) {
     const content = await (await doc.getPage(i)).getTextContent();
-    pages.push(content.items.map((it: { str: string }) => it.str).join(' '));
+    pages.push(content.items.map((it) => ('str' in it ? it.str : '')).join(' '));
   }
   return pages;
 }

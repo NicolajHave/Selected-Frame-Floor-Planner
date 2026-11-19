@@ -11,7 +11,7 @@
     "test:unit": "playwright test --project=unit",
     "test:e2e": "playwright test --project=e2e",
     "models:compress": "node scripts/compress-models.mjs",
-    "postinstall": "node scripts/copy-libredwg.mjs"
+    "postinstall": "node scripts/copy-vendor.mjs"
   },
   "dependencies": {
     "@mlightcad/libredwg-web": "0.8.6",
@@ -23,7 +23,7 @@
     "jspdf": "4.2.1",
     "nanoid": "5.1.16",
     "next": "16.4.6",
-    "pdfjs-dist": "^3.11.174",
+    "pdfjs-dist": "6.5.438",
     "qrcode": "^1.5.4",
     "react": "19.3.1",
     "react-dom": "19.3.1",

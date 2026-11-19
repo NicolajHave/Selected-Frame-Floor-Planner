@@ -438,12 +438,18 @@ never reach the shared database.
 ## 8. Build and testing
 
 **Build**: Next.js 16 (App Router) with React 19 and react-three-fiber 9,
-bundled by Turbopack. pdf.js and LibreDWG's glue reach for Node-only
-modules (node-canvas, `fs`, `path` …) only when they run under Node;
-`next.config.mjs` gives those an empty stand-in (`src/lib/stubs/empty.js`)
-— under `turbopack.resolveAlias`, and the same under `webpack` for
-`next build --webpack`. CI runs on the Node version production uses (24).
+bundled by Turbopack. LibreDWG's glue reaches for Node built-ins (`fs`,
+`path` …) only when it runs under Node; `next.config.mjs` gives those an
+empty stand-in (`src/lib/stubs/empty.js`) — under `turbopack.resolveAlias`,
+and the same under `webpack` for `next build --webpack`. CI runs on the
+Node version production uses (24).
 
+**Vendor files** (`scripts/copy-vendor.mjs`, on install): what two
+libraries fetch on demand is copied to `public/vendor/` (generated, not
+committed) — LibreDWG's WebAssembly, and pdf.js's data files: the decoders
+for scanned pages (JBIG2, JPEG 2000), colour profiles, the standard fonts
+and the CJK character maps. PDF import uses pdf.js's "legacy" build, the
+one that also runs in browsers a year or two old.
 
 `npm test` runs two Playwright projects (see `playwright.config.ts`):
 
