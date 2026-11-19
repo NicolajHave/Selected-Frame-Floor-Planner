@@ -41,7 +41,7 @@ function InventoryMesh({ item, selected }: { item: InventoryItem; selected: bool
   const rotation: [number, number, number] = [0, -item.rotation, 0];
 
   return (
-    <group position={position} rotation={rotation} {...(interactive ? handlers : {})}>
+    <group position={position} rotation={rotation} userData={{ stageId: item.id }} {...(interactive ? handlers : {})}>
       {item.modules?.length ? (
         <RackModels modules={item.modules} interactive={interactive} />
       ) : asset?.glbUrl ? (

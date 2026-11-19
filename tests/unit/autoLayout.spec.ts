@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { entrance, entrances, proposeLayout, shelve } from '@/lib/autoLayout';
+import { entrance, entrances, proposeLayout, shelve, wallSets } from '@/lib/autoLayout';
 import { layoutIssues } from '@/lib/layout';
 import type { Project } from '@/model/project';
 import type { InventoryItem, Opening, RoomPolygon } from '@/model/objects';
@@ -471,14 +471,83 @@ test('a proposal has one shelf unit; a large shop two, side by side', () => {
     // The rack with the shelves still has hanging in it.
     expect(small.find((m) => m.includes(S))!.some((m) => m === H), style).toBe(true);
   }
-  // 108 m² with a 12 m wall: two, next to each other in the same rack.
+  // 108 m² with a 12 m wall, which is split in two sets: two, either side of the gap between them.
   const large = shelves(shop, 'volume');
   expect(large.flat().filter((m) => m === S)).toHaveLength(2);
-  const rack = large.find((m) => m.includes(S))!;
-  expect(rack.lastIndexOf(S) - rack.indexOf(S)).toBe(1);
-  expect(rack.filter((m) => m === H).length).toBeGreaterThanOrEqual(2);
+  expect(large.filter((m) => m.includes(S))).toEqual([[H, H, S], [S, H, H]]);
   // A large brand shop keeps its racks short: one shelf unit in each of two racks.
   const brand = shelves(shop, 'brand');
   expect(brand.filter((m) => m.includes(S))).toHaveLength(2);
   expect(brand.flat().filter((m) => m === S)).toHaveLength(2);
+});
+
+test('more than five wall units are split into sets of three, twos towards the middle', () => {
+  expect([1, 2, 3, 4, 5].map(wallSets)).toEqual([null, null, null, null, null]);
+  expect(wallSets(6)).toEqual([3, 3]);
+  // 3 + 4 would be lopsided: seven do not split, so six are used.
+  expect(wallSets(7)).toBeNull();
+  expect(wallSets(8)).toEqual([3, 2, 3]);
+  expect(wallSets(9)).toEqual([3, 3, 3]);
+  expect(wallSets(10)).toEqual([3, 2, 2, 3]);
+  expect(wallSets(11)).toBeNull();
+  expect(wallSets(12)).toEqual([3, 3, 3, 3]);
+  expect(wallSets(14)).toEqual([3, 3, 2, 3, 3]);
+});
+
+test('a long wall gets sets of wall units with half a metre between, the same from either end', () => {
+  /** The racks on the top wall of a `width` mm wide shop, left to right: units, and the gap to the next rack. */
+  const topWall = (width: number) => {
+    const p = project(room(width, 9000, [door('c2', width / 2)]));
+    const { inventory } = proposeLayout(p, { style: 'volume', aisle: 900, wallRacks: true });
+    expect(layoutIssues({ ...p, inventory }, 900), `${width}`).toEqual([]);
+    const racks = inventory.filter((i) => i.modules?.length && i.position.y < 700).sort((a, b) => a.position.x - b.position.x);
+    return {
+      sets: racks.map((r) => r.modules!.length),
+      gaps: racks.slice(1).map((r, i) => Math.round(r.position.x - r.size.width / 2 - (racks[i]!.position.x + racks[i]!.size.width / 2))),
+      // How far the row stands from the middle of the wall.
+      off: Math.round((racks[0]!.position.x - racks[0]!.size.width / 2 + racks.at(-1)!.position.x + racks.at(-1)!.size.width / 2) / 2 - width / 2),
+      units: racks.map((r) => r.modules!),
+    };
+  };
+  // Room for five or fewer: one rack, as before.
+  expect(topWall(8000).sets).toEqual([5]); // four units and the 700 that ends the rack
+  expect(topWall(10000)).toMatchObject({ sets: [6], gaps: [] }); // five and a 700: six in a row would fit, 3 + 3 with the gap not
+  // Room for six, and for seven: 3 + 3.
+  expect(topWall(11000)).toMatchObject({ sets: [3, 3], gaps: [500], off: 0 });
+  expect(topWall(12000)).toMatchObject({ sets: [3, 3], gaps: [500], off: 0 });
+  expect(topWall(14000)).toMatchObject({ sets: [3, 2, 3], gaps: [500, 500], off: 0 });
+  expect(topWall(17500)).toMatchObject({ sets: [3, 2, 2, 3], gaps: [500, 500, 500], off: 0 });
+  // The sets are whole 1400 units; the shelves sit at the middle of the wall.
+  expect(topWall(12000).units).toEqual([[H, H, S], [S, H, H]]);
+  expect(topWall(14000).units).toEqual([[H, H, H], [S, S], [H, H, H]]);
+  expect(topWall(17500).units).toEqual([[H, H, H], [H, S], [S, H], [H, H, H]]);
+  // A brand shop keeps its one short rack to a wall.
+  const brand = proposeLayout(project(room(14000, 9000, [door('c2', 7000)])), { style: 'brand', aisle: 900, wallRacks: true });
+  expect(brand.inventory.filter((i) => i.modules?.length && i.position.y < 700).map((i) => i.modules!.length)).toEqual([3]);
+});
+
+test('the sets of one wall share its shelves: at the middle of the wall, whichever rack that is', () => {
+  /** Racks of `units` side by side on one wall, 500 mm apart. */
+  const onOneWall = (area: number, space: number, ...sets: string[][]) => {
+    let x = 0;
+    const items = sets.map((modules, i) => {
+      const width = modules.length * 1411 + 95;
+      const item = { id: `r${i}`, modules, position: { x: x + width / 2, y: 0 }, rotation: 0 } as unknown as InventoryItem;
+      x += width + 500;
+      return { item, space, wall: 'w0' };
+    });
+    shelve(items, area);
+    return items.map((r) => r.item.modules!);
+  };
+  expect(onOneWall(50, 10500, [H, H, H], [H, H, H])).toEqual([[H, H, S], [S, H, H]]);
+  expect(onOneWall(50, 12600, [H, H, H], [H, H], [H, H, H])).toEqual([[H, H, H], [S, S], [H, H, H]]);
+  expect(onOneWall(50, 14000, [H, H, H], [H, H, H], [H, H, H])).toEqual([[H, H, H], [S, S, H], [H, H, H]]);
+  // Racks on other walls are not part of it: the wall with the most hanging takes the shelves.
+  const mixed = [
+    { item: { id: 'a', modules: [H, H, H, H, H] } as InventoryItem, space: 7500, wall: 'w1' },
+    { item: { id: 'b', modules: [H, H, H], position: { x: 2164, y: 0 }, rotation: 0 } as unknown as InventoryItem, space: 10500, wall: 'w0' },
+    { item: { id: 'c', modules: [H, H, H], position: { x: 6992, y: 0 }, rotation: 0 } as unknown as InventoryItem, space: 10500, wall: 'w0' },
+  ];
+  shelve(mixed, 50);
+  expect(mixed.map((r) => r.item.modules)).toEqual([[H, H, H, H, H], [H, H, S], [S, H, H]]);
 });

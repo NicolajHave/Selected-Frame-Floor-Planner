@@ -105,6 +105,22 @@ test.describe('layoutIssues', () => {
     expect(layoutIssues(p, 600)).toEqual([]);
   });
 
+  test('the gap between two wall racks side by side on a wall is wall, not a narrow aisle', () => {
+    // Two racks of three units against the top wall, 500 mm apart.
+    const rack = (id: string, x: number, extra: Partial<InventoryItem> = {}) =>
+      item(id, x, 60 + 258, 4328, 517, { modules: ['105-99-005', '105-99-005', '105-99-005'], ...extra });
+    expect(layoutIssues(project([rack('a', 2500), rack('b', 2500 + 4328 + 500)]))).toEqual([]);
+    // A floor rack as near to a wall rack is in the way, as before …
+    const floor = item('floor', 2500 + 2164 + 500 + 650, 60 + 258, 1300, 500);
+    expect(layoutIssues(project([rack('a', 2500), floor])).map((i) => i.kind)).toEqual(['aisle']);
+    // … and so is a wall rack round the corner, which is not beside the first but across from its end.
+    const side = item('side', 10000 - 60 - 258, 2000, 2917, 517, { modules: ['105-99-005', '105-99-005'], rotation: (Math.PI / 2) as Radians });
+    const near = rack('a', 10000 - 60 - 517 - 400 - 2164);
+    expect(layoutIssues(project([near, side])).map((i) => i.kind)).toEqual(['aisle']);
+    // Two racks that overlap are still an overlap.
+    expect(layoutIssues(project([rack('a', 2500), rack('b', 2500 + 4000)])).map((i) => i.kind)).toEqual(['overlap']);
+  });
+
   test('low items and wall-hung logos are not obstacles', () => {
     const tray = item('tray', 3000, 3000, 420, 275, { size: { width: 420 as Mm, depth: 275 as Mm, height: 28 as Mm } });
     const table = item('table', 3000, 3000, 1800, 1280);

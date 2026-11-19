@@ -146,10 +146,12 @@ URL. No environment variables are needed.
    the PDF includes them only when you tick **Prices in the parts list**.
 12. **PDF** (top bar) exports an A3 presentation: cover, what the concept
    asks of the site plus your notes for this draft, the shop in 3D from
-   four sides and as an isometric, the plan to scale (numbered fixtures,
-   wall dimensions, title block), an elevation of every wall with a
-   height ladder (wall top, fixture tops, logo bottom/top, door heads),
-   then the parts list and layout check. For a cloud plan the cover
+   four sides and as an isometric (the walls tagged W1, W2 … as on the
+   plan), the plan to scale (numbered fixtures, wall dimensions, title
+   block), an elevation of every wall — the wall alone as the backdrop
+   with what stands at it in firm line and the rest of the shop faintly
+   in front — with a height ladder (wall top, fixture tops, logo
+   bottom/top, door heads), then the parts list and layout check. For a cloud plan the cover
    carries the shop's **live 3D link** with a QR code: a view-only link
    (the same one on every export) that opens the latest version straight
    in 3D, so a partner or sales rep can walk around the shop while

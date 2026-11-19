@@ -19,7 +19,7 @@ import { activePriceList } from './prices';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
 import { buildPartsList, type PartsList } from './partsList';
 import { DEFAULT_MIN_AISLE, innerOutline, layoutIssues } from './layout';
-import { elevationShots, overviewShots, type ElevationSpec, type ViewSpec } from './views';
+import { elevationShots, overviewShots, wallLabels, type ElevationSpec, type ViewSpec } from './views';
 import { INK, MARGIN, MUTED, PAGE_H, PAGE_W, SAGE, fit, font, num, today } from './pdf/style';
 import { resolveSrc } from './assets';
 import {
@@ -101,9 +101,27 @@ export async function buildPlanPdf(project: Project, opts: PdfOptions): Promise<
       progress('Rendering 3D views…');
       try {
         const { renderShots } = await import('@/render/three/offscreen');
+        const everything = [...project.inventory.map((it) => it.id), ...project.pillars.map((p) => p.id)];
         images = await renderShots(project, [
           ...overview.map((v) => ({ spec: v.shot, width: px(VIEW_BOX.w), height: px(VIEW_BOX.h) })),
-          ...elevations.map((v) => ({ spec: v.shot, width: px(layout.imgW), height: px(layout.imgH) })),
+          // An elevation: the wall alone with what stands at it, then the rest of the shop faintly over that.
+          ...elevations.map((v) => {
+            const atWall = new Set(v.atWall);
+            return {
+              spec: v.shot,
+              width: px(layout.imgW),
+              height: px(layout.imgH),
+              takes: (() => {
+                const wall = { onlyWall: v.wallIndex, frontLight: true, hidden: new Set(everything.filter((id) => !atWall.has(id))) };
+                const shop = { onlyWall: v.wallIndex, frontLight: true, hidden: new Set(v.behindViewer) };
+                return [
+                  { stage: wall, alpha: 1 },
+                  { stage: shop, alpha: ELEVATION.shop, lines: ELEVATION.shopLines },
+                  { stage: wall, alpha: 0, lines: ELEVATION.wallLines },
+                ];
+              })(),
+            };
+          }),
         ]);
       } catch (e) {
         console.warn('3D pictures failed', e);
@@ -126,7 +144,14 @@ export async function buildPlanPdf(project: Project, opts: PdfOptions): Promise<
 
   for (const v of overview) {
     doc.addPage('a3', 'landscape');
-    drawViewPage(doc, info, v.shot.kind === 'ortho' ? 'Isometric View' : '3D View', images[v.shot.id]);
+    drawViewPage(
+      doc,
+      info,
+      v.shot.kind === 'ortho' ? 'Isometric View' : '3D View',
+      images[v.shot.id],
+      // The walls' numbers, as on the plan.
+      images[v.shot.id] ? wallLabels(project, v.shot, VIEW_BOX.w / VIEW_BOX.h) : [],
+    );
   }
 
   doc.addPage('a3', 'landscape');
@@ -151,6 +176,12 @@ export async function buildPlanPdf(project: Project, opts: PdfOptions): Promise<
 }
 
 const px = (paperMm: number) => Math.round(paperMm * PX_PER_MM);
+
+/**
+ * An elevation: the wall and what stands at it in full and in firm line;
+ * what stands further into the shop faintly over that, in light line.
+ */
+const ELEVATION = { shop: 0.38, shopLines: 0.28, wallLines: 0.85 };
 
 export async function downloadPlanPdf(project: Project, opts: PdfOptions): Promise<void> {
   const doc = await buildPlanPdf(project, opts);

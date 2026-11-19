@@ -63,6 +63,10 @@ const SECOND_SHELF_M2 = 80;
 /** So may a wall with more free length than this (mm); from the shorter length, a narrow one. */
 const SECOND_SHELF_WALL = 8400;
 const NARROW_SHELF_WALL = 7000;
+/** Up to this many units stand on a wall as one rack; a wall with room for more gets sets with a gap between. */
+const LONGEST_RUN = 5;
+/** The gap between the sets of a split wall (mm). */
+const SET_GAP = 500;
 /** How finely a row is searched for the next spot a rack fits (mm). */
 const ROW_STEP = 250;
 /** How finely the floor is searched for a free spot for a Volume Table (mm). */
@@ -99,6 +103,8 @@ interface Placed {
   host?: Polygon;
   /** For a wall rack: the free length of the wall it stands on (mm). */
   space?: number;
+  /** For a wall rack: which wall (and side of it) it stands on; the sets of a split wall share it. */
+  wall?: string;
 }
 
 function fromAsset(assetId: string, centre: Point, rotation: number): InventoryItem | null {
@@ -117,95 +123,157 @@ function fromAsset(assetId: string, centre: Point, rotation: number): InventoryI
 }
 
 /**
- * Wall racks for a stretch of wall `length` mm long, the longest first, so
- * a stretch that cannot take the first gets the next size down rather than
- * staying empty. All hanging units: the shop's shelf unit is chosen once
- * every rack is in place (see `shelve`).
+ * `n` wall units as sets of three, with sets of two towards the middle
+ * where the count calls for them, the same from either end: 6 → 3 + 3,
+ * 8 → 3 + 2 + 3, 9 → 3 + 3 + 3, 10 → 3 + 2 + 2 + 3. Null when `n` does not
+ * split that way (7, 11, 13): one unit fewer then does.
  */
-function rackOptions(length: number, style: ShopStyle): string[][] {
-  const fits = (modules: string[]) => modules.length > 0 && rackSize(modules).width <= length;
-  const options: string[][] = [];
+export function wallSets(n: number): number[] | null {
+  let best: number[] | null = null;
+  let most = -1;
+  // `ends` threes at each end, `twos` twos inside them at each side, and maybe one set in the very middle.
+  for (let ends = 1; 6 * ends <= n; ends++) {
+    for (let twos = 0; 6 * ends + 4 * twos <= n; twos++) {
+      const middle = n - 6 * ends - 4 * twos;
+      if (middle !== 0 && middle !== 2 && !(middle === 3 && twos === 0)) continue;
+      const half = [...Array<number>(ends).fill(3), ...Array<number>(twos).fill(2)];
+      const sets = [...half, ...(middle ? [middle] : []), ...[...half].reverse()];
+      const threes = sets.filter((k) => k === 3).length;
+      if (threes > most) [best, most] = [sets, threes];
+    }
+  }
+  return best;
+}
+
+/** How much wall a row of racks takes: each rack, and the gap between them. */
+const setsWidth = (sets: string[][]): number =>
+  sets.reduce((sum, modules) => sum + rackSize(modules).width, 0) + SET_GAP * Math.max(0, sets.length - 1);
+
+/**
+ * Wall racks for a stretch of wall `length` mm long, the most units first,
+ * so a stretch that cannot take the first gets the next size down rather
+ * than staying empty. Each is one rack or, on a long wall, several sets
+ * with a gap between. All hanging units: the shop's shelf unit is chosen
+ * once every rack is in place (see `shelve`).
+ */
+function rackOptions(length: number, style: ShopStyle): string[][][] {
+  const fits = (sets: string[][]) => sets.every((modules) => modules.length > 0) && setsWidth(sets) <= length;
+  const options: string[][][] = [];
   if (style === 'brand') {
     // A short, curated rack: at most three units, a mirror in the middle.
     options.push(
-      [HANG_UNIT, MIRROR_UNIT, HANG_UNIT],
-      [HANG_UNIT, HANG_UNIT],
-      [HANG_UNIT, HANG_UNIT_700],
-      [MIRROR_UNIT],
-      [HANG_UNIT_700],
+      [[HANG_UNIT, MIRROR_UNIT, HANG_UNIT]],
+      [[HANG_UNIT, HANG_UNIT]],
+      [[HANG_UNIT, HANG_UNIT_700]],
+      [[MIRROR_UNIT]],
+      [[HANG_UNIT_700]],
     );
   } else {
-    // Volume: as many units as the stretch takes, a 700 unit to finish the run.
-    for (let n = Math.floor(length / 1400); n >= 0; n--) {
-      const run = Array.from({ length: n }, () => HANG_UNIT);
-      options.push([...run, HANG_UNIT_700], run);
+    // Volume: as many units as the stretch takes. More than five are split
+    // into sets, half a metre apart, rather than standing as one long rack.
+    const most = Math.floor(length / 1400);
+    for (let n = most; n > LONGEST_RUN; n--) {
+      const sets = wallSets(n);
+      if (sets) options.push(sets.map((k) => Array<string>(k).fill(HANG_UNIT)));
+    }
+    // Up to five as one rack, with a 700 unit to finish it.
+    for (let n = Math.min(LONGEST_RUN, most); n >= 0; n--) {
+      const run = Array<string>(n).fill(HANG_UNIT);
+      options.push([[...run, HANG_UNIT_700]], [run]);
     }
   }
   return options.filter(fits);
 }
 
 /**
- * The shelf units of a proposal. As a rule a shop has one: in its longest
- * rack, in the middle of it, with hanging on either side.
+ * The shelf units of a proposal. As a rule a shop has one: on the wall with
+ * the most hanging, in the middle of it, with hanging on either side.
  *
  * One more may come in, always so the shelves hang together:
- *  - a full unit beside the first, in a rack on a wall with more than 8.4 m
- *    free — or 7 m in a shop over 80 m²;
- *  - a full unit in the shop's next rack, when the shop is over 80 m² and
- *    no wall is that long;
+ *  - a full unit beside the first, on a wall with more than 8.4 m free — or
+ *    7 m in a shop over 80 m²;
+ *  - a full unit on the wall with the next most hanging, when the shop is
+ *    over 80 m² and no wall is that long;
  *  - the narrow unit beside the first, on a wall with 7 m free or more:
  *    the 700 unit that ends the rack, as shelves and moved in beside it.
  *
- * Units only change kind or order, never the rack's size: `racks` are
- * changed in place and stay where they stand.
+ * The racks of one wall (`wall`: the sets of a split wall) are taken as one
+ * run with gaps in it, so its shelves sit at the middle of the wall — on a
+ * wall of 3 + 3, either side of the gap.
+ *
+ * Units only change kind or order, never a rack's size: `racks` are changed
+ * in place and stay where they stand.
  */
-export function shelve(racks: { item: InventoryItem; space: number }[], area: number): void {
-  const hang = (item: InventoryItem) => item.modules!.filter((m) => m === HANG_UNIT).length;
-  /** Where each unit's middle is along the rack, from the rack's middle (mm). */
-  const middles = (modules: string[]) => rackSlots(modules).map((slot) => slot.x);
-  /** The hanging unit nearest the middle of the rack; of two as near, the one to the right. */
-  const middle = (modules: string[]) => {
-    const xs = middles(modules);
+export function shelve(racks: { item: InventoryItem; space: number; wall?: string }[], area: number): void {
+  const list = racks.filter((r) => r.item.modules?.length).map((r) => ({ ...r, modules: [...r.item.modules!] }));
+  /** One unit of a rack: where it is along its wall (mm; the same direction for every rack of a wall). */
+  interface Unit {
+    rack: number;
+    at: number;
+    x: number;
+    half: number;
+  }
+  const byWall = new Map<string, number[]>();
+  list.forEach((r, i) => {
+    const key = r.wall ?? `#${i}`;
+    byWall.set(key, [...(byWall.get(key) ?? []), i]);
+  });
+  const walls = [...byWall.values()].map((members) => {
+    const units: Unit[] = members
+      .flatMap((i) => {
+        const { item, modules } = list[i]!;
+        // The rack's own left-to-right axis: all racks on one wall share it.
+        const turn = item.rotation ?? 0;
+        const centre = item.position ? item.position.x * Math.cos(turn) + item.position.y * Math.sin(turn) : 0;
+        return rackSlots(modules).map((slot, at) => ({ rack: i, at, x: centre + slot.x, half: slot.asset.size.width / 2 }));
+      })
+      .sort((a, b) => a.x - b.x);
+    const mid = units.length ? (units[0]!.x - units[0]!.half + units.at(-1)!.x + units.at(-1)!.half) / 2 : 0;
+    return { members, units, mid, space: Math.max(...members.map((i) => list[i]!.space)) };
+  });
+  type Wall = (typeof walls)[number];
+  const kind = (u: Unit) => list[u.rack]!.modules[u.at]!;
+  const turnInto = (u: Unit, id: string) => void (list[u.rack]!.modules[u.at] = id);
+  const hang = (w: Wall) => w.units.filter((u) => kind(u) === HANG_UNIT).length;
+  /** The hanging unit nearest the middle of the wall's racks; of two as near, the one to the right. */
+  const middle = (w: Wall) => {
     let best = -1;
-    modules.forEach((m, i) => {
-      if (m === HANG_UNIT && (best < 0 || Math.abs(xs[i]!) <= Math.abs(xs[best]!) + 1)) best = i;
+    w.units.forEach((u, i) => {
+      if (kind(u) === HANG_UNIT && (best < 0 || Math.abs(u.x - w.mid) <= Math.abs(w.units[best]!.x - w.mid) + 1)) best = i;
     });
     return best;
   };
-  const byLength = racks
-    .filter((r) => r.item.modules?.length)
-    .sort((a, b) => hang(b.item) - hang(a.item) || b.space - a.space);
-  // Hanging stays on either side: a rack of two hanging units or more, else one with something beside its one.
-  const first = byLength.find((r) => hang(r.item) >= 2) ?? byLength.find((r) => hang(r.item) === 1 && r.item.modules!.length >= 2);
+  const done = () => list.forEach((r) => void (r.item.modules = r.modules));
+
+  const byHanging = [...walls].sort((a, b) => hang(b) - hang(a) || b.space - a.space);
+  // Hanging stays on either side: a wall with two hanging units or more, else one with something beside its one.
+  const first = byHanging.find((w) => hang(w) >= 2) ?? byHanging.find((w) => hang(w) === 1 && w.units.length >= 2);
   if (!first) return;
-  const modules = [...first.item.modules!];
-  const at = middle(modules);
-  modules[at] = SHELF_UNIT;
-  first.item.modules = modules;
+  const at = middle(first);
+  turnInto(first.units[at]!, SHELF_UNIT);
 
   const large = area > SECOND_SHELF_M2;
-  if ((first.space > SECOND_SHELF_WALL || (large && first.space >= NARROW_SHELF_WALL)) && hang(first.item) >= 3) {
-    // Beside the first, on the side that keeps the two nearest the middle of the rack.
-    const xs = middles(modules);
-    const sides = [at - 1, at + 1].filter((i) => modules[i] === HANG_UNIT);
-    const beside = sides.sort((i, j) => Math.abs(xs[i]! + xs[at]!) - Math.abs(xs[j]! + xs[at]!))[0];
+  if ((first.space > SECOND_SHELF_WALL || (large && first.space >= NARROW_SHELF_WALL)) && hang(first) >= 3) {
+    // Beside the first, on the side that keeps the two nearest the middle of the wall.
+    const pair = (i: number) => Math.abs(first.units[i]!.x + first.units[at]!.x - 2 * first.mid);
+    const beside = [at - 1, at + 1].filter((i) => first.units[i] && kind(first.units[i]!) === HANG_UNIT).sort((i, j) => pair(i) - pair(j))[0];
     if (beside !== undefined) {
-      modules[beside] = SHELF_UNIT;
-      return;
+      turnInto(first.units[beside]!, SHELF_UNIT);
+      return done();
     }
   }
   if (large) {
-    const next = byLength.find((r) => r !== first && hang(r.item) >= 2);
+    const next = byHanging.find((w) => w !== first && hang(w) >= 2);
     if (next) {
-      const other = [...next.item.modules!];
-      other[middle(other)] = SHELF_UNIT;
-      next.item.modules = other;
-      return;
+      turnInto(next.units[middle(next)]!, SHELF_UNIT);
+      return done();
     }
   }
-  const narrow = modules.indexOf(HANG_UNIT_700);
-  const hanging = hang(first.item);
-  if (first.space >= NARROW_SHELF_WALL && narrow >= 0 && hanging >= 2) {
+  // The narrow shelf: only in a wall's one rack, where a 700 unit ends it.
+  const modules = first.members.length === 1 ? list[first.members[0]!]!.modules : null;
+  const narrow = modules ? modules.indexOf(HANG_UNIT_700) : -1;
+  const hanging = hang(first);
+  if (modules && first.space >= NARROW_SHELF_WALL && narrow >= 0 && hanging >= 2) {
     modules.splice(narrow, 1);
     if (!modules.some((m) => m !== HANG_UNIT && m !== SHELF_UNIT)) {
       // Hanging, the shelves together in the middle, hanging.
@@ -215,6 +283,7 @@ export function shelve(racks: { item: InventoryItem; space: number }[], area: nu
       modules.splice(modules.indexOf(SHELF_UNIT) + 1, 0, SHELF_UNIT_700);
     }
   }
+  done();
 }
 
 /**
@@ -575,26 +644,34 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
         // Not on open sides (no wall there), nor walls too low for the units.
         if (!w || wallStyle(room, i).transparent || wallHeightOf(room, i) < WALL_UNIT_HEIGHT + 100) continue;
         for (const [a, b, space] of freeStretches(room, i)) {
-          fit: for (const modules of rackOptions(b - a, opts.style)) {
+          fit: for (const sets of rackOptions(b - a, opts.style)) {
             // In the middle of the stretch if it fits there, else slid along
             // it (away from a rack round the corner, say) before a unit goes.
-            const half = rackSize(modules).width / 2;
+            const width = setsWidth(sets);
             const mid = (a + b) / 2;
-            const slack = Math.max(0, (b - a) / 2 - half);
+            const slack = Math.max(0, (b - a - width) / 2);
             const tries = [0];
             for (let d = ROW_STEP; d < slack; d += ROW_STEP) tries.push(d, -d);
             if (slack > 0) tries.push(slack, -slack);
             for (const d of tries) {
-              const item = wallRack(room, i, mid + d, modules);
-              const outline = rectCorners(item.position, item.size, item.rotation);
+              // The sets side by side, a gap between them.
+              let from = mid + d - width / 2;
+              const row: Placed[] = sets.map((modules) => {
+                const w = rackSize(modules).width;
+                const item = wallRack(room, i, from + w / 2, modules);
+                from += w + SET_GAP;
+                return { item, outline: rectCorners(item.position, item.size, item.rotation), space, wall: `w${i}` };
+              });
               // Against its wall; clear of doorways, pillars and the other racks (corners).
-              const ok =
-                zones.every((z) => !convexOverlap(outline, z)) &&
-                pillars.every((p) => apart(outline, p, aisle)) &&
-                placed.every((o) => apart(outline, o.outline, aisle));
+              const ok = row.every(
+                ({ outline }) =>
+                  zones.every((z) => !convexOverlap(outline, z)) &&
+                  pillars.every((p) => apart(outline, p, aisle)) &&
+                  placed.every((o) => apart(outline, o.outline, aisle)),
+              );
               if (ok) {
-                placed.push({ item, outline, space });
-                rackWall.set(item.id, i);
+                placed.push(...row);
+                for (const r of row) rackWall.set(r.item.id, i);
                 break fit;
               }
             }
@@ -616,16 +693,17 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
         // The way the fixtures face: out from this side of the wall.
         const front = { x: -dir.y * sign, y: dir.x * sign };
         const turn = Math.atan2(-front.x, front.y);
-        /** `ids` (catalog items or one wall rack) end to end along the wall, centred `slide` mm off its middle. */
-        const run = (ids: string[], modules: string[] | null, slide: number): Placed[] => {
-          const sizes = modules ? [rackSize(modules)] : ids.map((id) => findAsset(id)!.size);
-          const total = sizes.reduce((sum, z) => sum + z.width, 0);
+        /** `parts` (catalog items, or wall racks) in a row along the wall, `gap` mm between them, centred `slide` mm off its middle. */
+        const run = (parts: { id?: string; modules?: string[] }[], gap: number, slide: number): Placed[] => {
+          const sizes = parts.map((part) => (part.modules ? rackSize(part.modules) : findAsset(part.id)!.size));
+          const total = sizes.reduce((sum, z) => sum + z.width, 0) + gap * Math.max(0, parts.length - 1);
           let at = slide - total / 2;
           return sizes.map((size, n) => {
             const along = at + size.width / 2;
-            at += size.width;
+            at += size.width + gap;
             const off = p.size.depth / 2 + size.depth / 2;
             const centre = pt(p.position.x + dir.x * along * sign + front.x * off, p.position.y + dir.y * along * sign + front.y * off);
+            const modules = parts[n]!.modules;
             const item: InventoryItem = modules
               ? {
                   id: newId('inv'),
@@ -637,25 +715,34 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
                   size,
                   rotation: normalizeAngle(turn) as Radians,
                 }
-              : fromAsset(ids[n]!, centre, turn)!;
-            return { item, outline: rectCorners(item.position, item.size, item.rotation), host, ...(modules && { space: length }) };
+              : fromAsset(parts[n]!.id!, centre, turn)!;
+            return {
+              item,
+              outline: rectCorners(item.position, item.size, item.rotation),
+              host,
+              ...(modules && { space: length, wall: `p${k}:${sign}` }),
+            };
           });
         };
         const tall = p.size.height >= WALL_UNIT_HEIGHT + 100;
-        const options: { ids: string[]; modules: string[] | null }[] =
-          tall && opts.wallRacks
-            ? rackOptions(length, opts.style).map((modules) => ({ ids: [], modules }))
-            : floorRuns(length, brand, rackCap - besideWalls).map((ids) => ({ ids, modules: null }));
+        const racks = tall && opts.wallRacks;
+        // Wall racks (on a long wall, sets with a gap between), else floor racks end to end.
+        const options: { parts: { id?: string; modules?: string[] }[]; gap: number; width: number }[] = racks
+          ? rackOptions(length, opts.style).map((sets) => ({ parts: sets.map((modules) => ({ modules })), gap: SET_GAP, width: setsWidth(sets) }))
+          : floorRuns(length, brand, rackCap - besideWalls).map((ids) => ({
+              parts: ids.map((id) => ({ id })),
+              gap: 0,
+              width: ids.reduce((sum, id) => sum + findAsset(id)!.size.width, 0),
+            }));
         fit: for (const o of options) {
-          const width = o.modules ? rackSize(o.modules).width : o.ids.reduce((sum, id) => sum + findAsset(id)!.size.width, 0);
-          const slack = Math.max(0, (length - width) / 2);
+          const slack = Math.max(0, (length - o.width) / 2);
           const slides = [0];
           for (let d = ROW_STEP; d < slack; d += ROW_STEP) slides.push(d, -d);
           for (const slide of slides) {
-            const items = run(o.ids, o.modules, slide);
+            const items = run(o.parts, o.gap, slide);
             if (!items.every((x) => clearBeside(x.outline, host))) continue;
             placed.push(...items);
-            if (!o.modules) besideWalls += items.length;
+            if (!racks) besideWalls += items.length;
             break fit;
           }
         }
@@ -922,7 +1009,7 @@ export function proposeLayout(project: Project, opts: AutoLayoutOptions): AutoLa
 
   // 7. The shelf units, among the racks that stayed: one as a rule (see `shelve`).
   shelve(
-    placed.filter((p) => p.item.modules?.length && inventory.includes(p.item)).map((p) => ({ item: p.item, space: p.space ?? 0 })),
+    placed.filter((p) => p.item.modules?.length && inventory.includes(p.item)).map((p) => ({ item: p.item, space: p.space ?? 0, wall: p.wall })),
     area,
   );
   return { inventory };
