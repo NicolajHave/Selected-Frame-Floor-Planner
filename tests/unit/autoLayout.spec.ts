@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { entrance, entrances, proposeLayout, shelve, wallSets } from '@/lib/autoLayout';
+import { entrance, entrances, proposeLayout, shelfRacks, shelve, spreadOver, wallSets } from '@/lib/autoLayout';
 import { layoutIssues } from '@/lib/layout';
 import type { Project } from '@/model/project';
 import type { InventoryItem, Opening, RoomPolygon } from '@/model/objects';
@@ -550,4 +550,67 @@ test('the sets of one wall share its shelves: at the middle of the wall, whichev
   ];
   shelve(mixed, 50);
   expect(mixed.map((r) => r.item.modules)).toEqual([[H, H, H, H, H], [H, H, S], [S, H, H]]);
+});
+
+const [PLAIN, ONE_ROW, TWO_ROWS, THREE_ROWS] = ['105-06-001', '105-06-010', '105-06-011', '105-06-013'];
+const SHELF_RACKS = [ONE_ROW, TWO_ROWS, THREE_ROWS];
+
+test('at most a quarter of the floor racks are shelf racks; three rows of shelves only over 80 m²', () => {
+  // Fewer than four racks: none of them.
+  expect([0, 1, 2, 3].map((n) => shelfRacks(n, 100))).toEqual([[], [], [], []]);
+  expect(shelfRacks(4, 60)).toEqual([TWO_ROWS]);
+  expect(shelfRacks(7, 60)).toEqual([TWO_ROWS]);
+  // Two rows is the usual one, one row for variety — and three rows only in a shop over 80 m².
+  expect(shelfRacks(8, 80)).toEqual([TWO_ROWS, ONE_ROW]);
+  expect(shelfRacks(8, 80.5)).toEqual([TWO_ROWS, THREE_ROWS]);
+  expect(shelfRacks(21, 216)).toEqual([TWO_ROWS, THREE_ROWS, TWO_ROWS, ONE_ROW, TWO_ROWS]);
+  for (let n = 0; n <= 40; n++) expect(shelfRacks(n, 300).length).toBeLessThanOrEqual(n / 4);
+
+  expect(spreadOver(['a', 'b', 'c', 'd', 'e', 'f'], 2)).toEqual(['b', 'e']);
+  expect(spreadOver(['a', 'b', 'c'], 3)).toEqual(['a', 'b', 'c']);
+  expect(spreadOver(['a', 'b'], 5)).toEqual(['a', 'b']);
+  expect(spreadOver([], 2)).toEqual([]);
+});
+
+test('a volume proposal stands plain racks on the floor, with the shelf racks spread among them', () => {
+  for (const [w, d] of [[6500, 6500], [8000, 7000], [10000, 7000], [10000, 8200], [12000, 9000], [15000, 14500]] as const) {
+    const size = `${w} × ${d}`;
+    const p = project(room(w, d, [door('c2', w / 2)]));
+    const { inventory } = proposeLayout(p, { style: 'volume', aisle: 900, wallRacks: true });
+    expect(layoutIssues({ ...p, inventory }, 900), size).toEqual([]);
+    const racks = inventory.filter((i) => i.assetRef?.startsWith('105-06-'));
+    const shelf = racks.filter((i) => SHELF_RACKS.includes(i.assetRef!));
+    // A quarter at most, and as many as that allows.
+    expect(shelf.length, size).toBe(Math.floor(racks.length / 4));
+    // Three rows of shelves only in a shop over 80 m².
+    if ((w * d) / 1e6 <= 80) expect(shelf.filter((i) => i.assetRef === THREE_ROWS), size).toEqual([]);
+    // A shelf rack is named and sized as itself.
+    for (const i of shelf) expect(i.name, size).toMatch(/Shelf Floor Rack$/);
+    // Never two shelf racks back to back: the other rack of a pair is a plain one.
+    for (const a of shelf) {
+      const partner = racks.find((b) => b !== a && Math.hypot(b.position.x - a.position.x, b.position.y - a.position.y) < 520);
+      if (partner) expect(partner.assetRef, size).toBe(PLAIN);
+    }
+  }
+  // A large floor: plain racks two and two, the shelf racks like the dark squares of a chessboard.
+  const p = project(room(15000, 14500, [door('c2', 7500)]));
+  const racks = proposeLayout(p, { style: 'volume', aisle: 900, wallRacks: true }).inventory.filter((i) => i.assetRef?.startsWith('105-06-'));
+  expect(racks.filter((i) => i.assetRef === PLAIN).length).toBeGreaterThanOrEqual(15);
+  expect(new Set(racks.filter((i) => SHELF_RACKS.includes(i.assetRef!)).map((i) => i.assetRef)).size).toBe(3);
+  // In each row of pairs, no two neighbouring pairs both have a shelf rack.
+  const rows = new Map<number, typeof racks>();
+  for (const r of racks) rows.set(Math.round(r.position.y / 100), [...(rows.get(Math.round(r.position.y / 100)) ?? []), r]);
+  for (const row of rows.values()) {
+    const stands: boolean[] = [];
+    const sorted = [...row].sort((a, b) => a.position.x - b.position.x);
+    sorted.forEach((r, i) => {
+      // Racks half a metre apart are one pair.
+      if (i > 0 && r.position.x - sorted[i - 1]!.position.x < 520) stands[stands.length - 1] ||= SHELF_RACKS.includes(r.assetRef!);
+      else stands.push(SHELF_RACKS.includes(r.assetRef!));
+    });
+    for (let i = 1; i < stands.length; i++) expect(stands[i] && stands[i - 1]).toBe(false);
+  }
+  // A brand shop has no shelf racks on the floor.
+  const brand = proposeLayout(p, { style: 'brand', aisle: 900, wallRacks: true }).inventory;
+  expect(brand.filter((i) => SHELF_RACKS.includes(i.assetRef ?? ''))).toEqual([]);
 });
