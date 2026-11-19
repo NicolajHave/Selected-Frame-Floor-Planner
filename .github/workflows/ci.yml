@@ -32,8 +32,18 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The browser only, kept between runs. Not `--with-deps`: that asks
+      # Ubuntu's package servers for extra fonts on every run (Asian and
+      # symbol fonts the tests do not use), and the job then waits on them
+      # or fails with them. What Chromium needs is on the runner already.
+      - name: Keep Chromium between runs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: End-to-end tests
         run: npm run test:e2e
