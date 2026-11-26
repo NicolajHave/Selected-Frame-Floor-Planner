@@ -63,6 +63,10 @@ URL. No environment variables are needed.
    tiles, linoleum, terrazzo, carpet — in one of its colours or one of
    your own, and the colour of the walls; a wall can have its own colour
    (click it). They show in the 3D view and the PDF's pictures.
+   Someone with a **view-only link** can choose them too, with "Floor &
+   walls" above the plan: for their own view, kept with the link, and
+   offered to the plan's owner as a suggestion ("Use in the plan" or
+   "Dismiss"). It changes nothing in the plan by itself.
 4. **Doors & windows**: pick one in the library and click a wall — a
    preview shows where it goes. Openings stay clear of corners and of
    each other. Drag one along its wall (or onto another), drag its
