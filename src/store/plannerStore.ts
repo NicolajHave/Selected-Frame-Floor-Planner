@@ -11,6 +11,7 @@ import type {
   PlanUnderlay,
   RoomPolygon,
   FloorFinish,
+  RoomFinish,
   Pillar,
   InventoryItem,
   Accessory,
@@ -33,7 +34,7 @@ import { autosaveProject, internImage, onAssetDurable } from '@/lib/assets';
 import { trail } from '@/lib/monitor';
 import { clipCount, makeClip, placeClip, readClip, writeClip } from '@/lib/clipboard';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
-import { isColor } from '@/lib/finishes';
+import { isColor, overlayFinish } from '@/lib/finishes';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, pushToWalls, snapToWall } from '@/geometry/wallSnap';
 import { rectCorners } from '@/geometry/transform';
@@ -204,7 +205,7 @@ interface PlannerState {
   /** Viewing without edit rights (viewer role or a share link): edits are ignored. */
   readOnly: boolean;
   /** Set while showing a plan opened from a share link. */
-  shared: { name: string; ownerEmail: string; updatedAt: string } | null;
+  shared: { name: string; ownerEmail: string; updatedAt: string; planFinish?: RoomFinish } | null;
 
   /** Undo stack: project snapshots before each edit, oldest first. */
   past: Project[];
@@ -377,6 +378,11 @@ interface PlannerState {
   markSynced: (result: SaveResult, saved: Project) => void;
   setCloudConflict: (c: CloudConflict) => void;
   openShared: (p: SharedProject) => void;
+  /**
+   * On a share link: show the floor and wall colour a visitor chose, laid
+   * over the plan's own (null: the plan's own again). Nothing is saved.
+   */
+  showLinkFinish: (finish: RoomFinish | null) => void;
   /** Replace the plan with an earlier version of it (one undo step). */
   restoreVersion: (data: unknown, name: string) => void;
 }
@@ -2354,7 +2360,17 @@ export const usePlannerStore = create<PlannerState>()(
             s.tool = 'select';
             s.cloud = null;
             s.readOnly = true;
-            s.shared = { name: sp.name, ownerEmail: sp.owner_email, updatedAt: sp.updated_at };
+            const planFinish = s.project.room?.finish;
+            s.shared = { name: sp.name, ownerEmail: sp.owner_email, updatedAt: sp.updated_at, ...(planFinish ? { planFinish } : {}) };
+          }),
+
+        showLinkFinish: (finish) =>
+          setState((s) => {
+            const room = s.project.room;
+            if (!s.shared || !room) return;
+            const shown = overlayFinish(s.shared.planFinish, finish);
+            if (shown) room.finish = shown;
+            else delete room.finish;
           }),
       });
     }),

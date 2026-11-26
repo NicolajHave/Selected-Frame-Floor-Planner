@@ -1,4 +1,4 @@
-import type { FloorFinish, RoomPolygon } from '@/model/objects';
+import type { FloorFinish, RoomFinish, RoomPolygon } from '@/model/objects';
 
 /**
  * What the shop is finished in: the floor (a kind of floor in one of its
@@ -211,3 +211,44 @@ export function wallColorOf(room: RoomPolygon, index: number): string {
 /** What a colour is called: its name in the list, or the code of one's own. */
 export const wallColorName = (color: string): string =>
   WALL_COLORS.find((c) => c.color.toLowerCase() === color.toLowerCase())?.name ?? color.toUpperCase();
+
+const KIND = /^[a-z][a-z-]{0,31}$/;
+const TONE = /^[a-z0-9][a-z0-9-]{0,31}$/;
+
+/**
+ * Only what a finish may hold, from something that came from outside (a
+ * link, this browser's storage): a kind of floor with a tone and whether it
+ * is laid the other way, and a wall colour. Null when nothing of it is one.
+ */
+export function cleanFinish(raw: unknown): RoomFinish | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as { floor?: unknown; wall?: unknown };
+  const out: RoomFinish = {};
+  const f = r.floor as { kind?: unknown; tone?: unknown; turned?: unknown } | null | undefined;
+  if (f && typeof f === 'object' && typeof f.kind === 'string' && KIND.test(f.kind)) {
+    out.floor = { kind: f.kind };
+    if (typeof f.tone === 'string' && (TONE.test(f.tone) || isColor(f.tone))) out.floor.tone = f.tone;
+    if (f.turned === true) out.floor.turned = true;
+  }
+  if (isColor(r.wall)) out.wall = r.wall;
+  return out.floor || out.wall ? out : null;
+}
+
+/** A plan's finish with another laid over it: where the other says something, that; elsewhere the plan's. */
+export function overlayFinish(plan: RoomFinish | undefined | null, over: RoomFinish | undefined | null): RoomFinish | undefined {
+  const floor = over?.floor ?? plan?.floor;
+  const wall = over?.wall ?? plan?.wall;
+  if (!floor && !wall) return undefined;
+  return { ...(floor ? { floor } : {}), ...(wall ? { wall } : {}) };
+}
+
+/** "Wood · Smoked oak · walls Sage": a finish in words; only what it says. */
+export function finishInWords(finish: RoomFinish | undefined | null): string {
+  const parts: string[] = [];
+  if (finish?.floor) parts.push(resolveFloor(finish.floor).label);
+  if (isColor(finish?.wall)) parts.push(`walls ${wallColorName(finish!.wall!)}`);
+  return parts.join(' · ');
+}
+
+export const sameFinish = (a: RoomFinish | undefined | null, b: RoomFinish | undefined | null) =>
+  JSON.stringify(cleanFinish(a)) === JSON.stringify(cleanFinish(b));

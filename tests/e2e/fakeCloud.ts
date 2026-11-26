@@ -98,6 +98,10 @@ export class FakeCloud {
     id: number; key: string; kind: string; message: string; stack: string; version: string; context: Record<string, unknown>;
     hits: number; users: string[]; anonymous_hits: number; first_seen: string; last_seen: string;
   }[] = [];
+  /** The floor and wall colour picked on a plan's link: project id → the choice (as fp_link_finishes). */
+  linkFinishes = new Map<string, { finish: Record<string, unknown>; chosen_by: string; chosen_at: string }>();
+  /** false: a database from before the link finish (a visitor's choice then stays in their browser). */
+  linkFinishSupported = true;
   /** Every RPC call, for assertions. */
   calls: { fn: string; email: string | null; args: Record<string, unknown> }[] = [];
   private seq = 0;
@@ -378,6 +382,41 @@ export class FakeCloud {
         if (this.expired(l)) return { expired: true };
         const p = this.projects.get(l.project_id);
         return p ? { name: p.name, data: p.data, updated_at: p.updated_at, owner_email: p.owner_email } : null;
+      }
+      case 'fp_get_shared_finish':
+      case 'fp_set_shared_finish':
+      case 'fp_get_link_finish':
+      case 'fp_clear_link_finish': {
+        if (!this.linkFinishSupported) throw new RpcError(`Could not find the function public.${fn} in the schema cache`, 'PGRST202');
+        if (fn === 'fp_get_link_finish') {
+          this.require(email, args.p_id, ['owner', 'editor', 'viewer']);
+          return this.linkFinishes.get(args.p_id) ?? null;
+        }
+        if (fn === 'fp_clear_link_finish') {
+          this.require(email, args.p_id, ['owner', 'editor']);
+          this.linkFinishes.delete(args.p_id);
+          return null;
+        }
+        const id = this.linkProject(args.p_token);
+        if (fn === 'fp_get_shared_finish') return this.linkFinishes.get(id) ?? null;
+        // As fp_clean_finish: only what a finish may hold is kept.
+        const raw = (args.p_finish ?? {}) as { floor?: { kind?: unknown; tone?: unknown; turned?: unknown }; wall?: unknown };
+        const finish: Record<string, unknown> = {};
+        if (raw.floor && typeof raw.floor.kind === 'string' && /^[a-z][a-z-]{0,31}$/.test(raw.floor.kind)) {
+          finish.floor = {
+            kind: raw.floor.kind,
+            ...(typeof raw.floor.tone === 'string' && /^([a-z0-9][a-z0-9-]{0,31}|#[0-9A-Fa-f]{6})$/.test(raw.floor.tone) ? { tone: raw.floor.tone } : {}),
+            ...(raw.floor.turned === true ? { turned: true } : {}),
+          };
+        }
+        if (typeof raw.wall === 'string' && /^#[0-9A-Fa-f]{6}$/.test(raw.wall)) finish.wall = raw.wall;
+        if (!Object.keys(finish).length) {
+          this.linkFinishes.delete(id);
+          return null;
+        }
+        const chosen = { finish, chosen_by: String(args.p_name ?? '').trim().slice(0, 80) || 'Someone with the link', chosen_at: new Date().toISOString() };
+        this.linkFinishes.set(id, chosen);
+        return chosen;
       }
       case 'fp_report_error': {
         if (!this.errorsSupported) throw new RpcError(`Could not find the function public.${fn} in the schema cache`, 'PGRST202');

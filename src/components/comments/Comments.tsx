@@ -30,7 +30,7 @@ export function useCommentsSync(target: CommentTarget | null) {
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-/** The open comments count, as a button for the top right of the plan. */
+/** The open comments count, as a button for the top right of the plan (the shell places it). */
 export function CommentsButton() {
   const target = useComments((s) => s.target);
   const list = useComments((s) => s.list);
@@ -44,7 +44,7 @@ export function CommentsButton() {
       aria-pressed={open}
       title="Comments on this plan"
       className={clsx(
-        'absolute right-3 top-3 z-10 flex h-7 items-center gap-1.5 rounded-[2px] border px-2.5 text-[11px] font-medium shadow-panel backdrop-blur-sm',
+        'flex h-7 items-center gap-1.5 rounded-[2px] border px-2.5 text-[11px] font-medium shadow-panel backdrop-blur-sm',
         open ? 'border-ink-900 bg-ink-900 text-wall-50' : 'border-wall-200 bg-wall-50/95 text-ink-900 hover:border-ink-900',
       )}
     >
@@ -191,7 +191,7 @@ export function CommentsPanel() {
   return (
     <aside
       aria-label="Comments"
-      className="absolute bottom-3 right-3 top-12 z-10 flex w-[300px] flex-col rounded-[2px] border border-wall-200 bg-wall-50 shadow-panel"
+      className="absolute bottom-3 right-3 top-12 z-20 flex w-[300px] flex-col rounded-[2px] border border-wall-200 bg-wall-50 shadow-panel"
     >
       <header className="flex items-center justify-between border-b border-wall-200 px-3 py-2">
         <span className="text-[10px] font-medium uppercase tracking-widest2 text-ink-500">Comments</span>

@@ -27,6 +27,7 @@ import { CloudBanners } from '../cloud/CloudBanners';
 import { RackBuilder } from '../racks/RackBuilder';
 import { CommentPins, CommentsButton, CommentsPanel, useCommentsSync } from '../comments/Comments';
 import type { CommentTarget } from '@/lib/cloud/comments';
+import { LinkFinishButton, LinkFinishPanel, useLinkFinishSync } from '../cloud/LinkFinish';
 
 // Error monitoring, from the first moment: errors nothing catches are
 // reported with where the planner stood — never the plan itself.
@@ -116,6 +117,10 @@ export function PlannerShell() {
         ? { kind: 'member', projectId: cloudLink.projectId, canResolve: cloudLink.role !== 'viewer' }
         : null;
   useCommentsSync(commentTarget);
+  // The floor and wall colour a visitor picks on the link: theirs to choose there, a suggestion to people on the plan.
+  useLinkFinishSync(
+    commentTarget && (commentTarget.kind === 'link' ? commentTarget : { kind: 'member', projectId: commentTarget.projectId, canAdopt: commentTarget.canResolve }),
+  );
 
   const [autosave, setAutosave] = useState<AutosaveStatus>('saved');
   useEffect(() => {
@@ -187,8 +192,12 @@ export function PlannerShell() {
             </>
           )}
           <VariantBar />
-          <CommentsButton />
+          <div className="absolute right-3 top-3 z-10 flex items-center gap-2">
+            <LinkFinishButton />
+            <CommentsButton />
+          </div>
           <CommentsPanel />
+          <LinkFinishPanel />
           <NoticeToast />
           <CloudBanners user={user} />
           {shareError && (

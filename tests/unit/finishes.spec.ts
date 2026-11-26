@@ -4,10 +4,14 @@ import {
   DEFAULT_WALL_COLOR,
   FLOOR_TYPES,
   WALL_COLORS,
+  cleanFinish,
+  finishInWords,
   isColor,
+  overlayFinish,
   resolveFloor,
   roomFloor,
   roomWallColor,
+  sameFinish,
   wallColorName,
   wallColorOf,
 } from '@/lib/finishes';
@@ -77,4 +81,37 @@ test('the lists hold together: every colour is a colour, every name is told apar
   expect(WALL_COLORS[0]!.color).toBe(DEFAULT_WALL_COLOR);
   expect(isColor('#12345')).toBe(false);
   expect(isColor(undefined)).toBe(false);
+});
+
+test('a finish from outside keeps only what a finish may hold', () => {
+  expect(cleanFinish({ floor: { kind: 'wood', tone: 'smoked-oak', turned: true, extra: 1 }, wall: '#A8B399', more: 'x' })).toEqual({
+    floor: { kind: 'wood', tone: 'smoked-oak', turned: true },
+    wall: '#A8B399',
+  });
+  expect(cleanFinish({ floor: { kind: 'tiles', tone: '#336699', turned: 'yes' } })).toEqual({ floor: { kind: 'tiles', tone: '#336699' } });
+  // Nothing of it a finish: nothing.
+  expect(cleanFinish({ floor: { kind: 'Wood <script>' }, wall: 'red' })).toBeNull();
+  expect(cleanFinish({ floor: { tone: 'grey' } })).toBeNull();
+  expect(cleanFinish('wood')).toBeNull();
+  expect(cleanFinish(null)).toBeNull();
+  expect(cleanFinish({ wall: '#fff' })).toBeNull();
+});
+
+test('a visitor\'s choice lies over the plan\'s: what it says wins, the rest is the plan\'s', () => {
+  const plan = { floor: { kind: 'concrete', tone: 'grey' }, wall: '#D8D7D3' };
+  expect(overlayFinish(plan, { wall: '#B76E51' })).toEqual({ floor: { kind: 'concrete', tone: 'grey' }, wall: '#B76E51' });
+  expect(overlayFinish(plan, { floor: { kind: 'plain' } })).toEqual({ floor: { kind: 'plain' }, wall: '#D8D7D3' });
+  expect(overlayFinish(plan, null)).toEqual(plan);
+  expect(overlayFinish(undefined, { floor: { kind: 'wood' } })).toEqual({ floor: { kind: 'wood' } });
+  expect(overlayFinish(undefined, null)).toBeUndefined();
+  expect(sameFinish(overlayFinish(plan, { wall: '#D8D7D3' }), plan)).toBe(true);
+  expect(sameFinish(overlayFinish(plan, { wall: '#B76E51' }), plan)).toBe(false);
+  expect(sameFinish(undefined, null)).toBe(true);
+});
+
+test('a finish in words says only what it says', () => {
+  expect(finishInWords({ floor: { kind: 'wood', tone: 'smoked-oak' }, wall: '#A8B399' })).toBe('Wood · Smoked oak · walls Sage');
+  expect(finishInWords({ wall: '#123abc' })).toBe('walls #123ABC');
+  expect(finishInWords({ floor: { kind: 'plain' } })).toBe('Plain · Neutral');
+  expect(finishInWords(undefined)).toBe('');
 });
