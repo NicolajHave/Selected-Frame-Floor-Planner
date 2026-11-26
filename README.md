@@ -53,7 +53,11 @@ URL. No environment variables are needed.
    wall absorbs the change. **Click a wall** to give it its own height,
    make it **transparent** (glass or an open side: dashed on the plan,
    see-through in 3D) or add a door or window to it. Double-click a wall
-   to add a corner there.
+   to add a corner there. **Click a corner** to type its angle (the one
+   inside the room): choose which of its two walls turns — it is marked
+   on the plan — and it turns about the corner, its far end following
+   the wall beyond, which keeps its direction (or tick that the wall
+   keeps its length instead).
 4. **Doors & windows**: pick one in the library and click a wall — a
    preview shows where it goes. Openings stay clear of corners and of
    each other. Drag one along its wall (or onto another), drag its

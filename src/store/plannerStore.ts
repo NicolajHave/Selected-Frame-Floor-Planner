@@ -35,7 +35,7 @@ import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, pushToWalls, snapToWall } from '@/geometry/wallSnap';
 import { rectCorners } from '@/geometry/transform';
-import { scaleRoomByCorner as scaleRoom } from '@/geometry/corners';
+import { scaleRoomByCorner as scaleRoom, setCornerAngle as turnWall, type Turn } from '@/geometry/corners';
 import { boxOf, snapToObjects, squareAngle, type SnapGuide } from '@/geometry/objectSnap';
 import { DEFAULT_MIN_AISLE, innerOutline } from '@/lib/layout';
 import { setWallLength as resizeWall } from '@/geometry/walls';
@@ -187,6 +187,10 @@ interface PlannerState {
   drawLength: string;
   /** Wall index highlighted on the canvas (e.g. hovered in the wall list). */
   highlightedWall: number | null;
+  /** Which of a corner's two walls turns when its angle is typed (shown on the plan while a corner is selected). */
+  cornerTurn: Turn;
+  /** A wall turned by a typed angle keeps its length (the wall beyond turns with it) instead of following that wall. */
+  cornerKeepLength: boolean;
 
   /** Transient message about the last action, e.g. mounting requirements. */
   notice: Notice | null;
@@ -281,6 +285,10 @@ interface PlannerState {
   /** Replace the room with a closed rectangle spanning two opposite corners. */
   addRectRoom: (a: Point, b: Point) => void;
   moveCorner: (cornerId: string, p: Point) => void;
+  setCornerTurn: (turn: Turn) => void;
+  setCornerKeepLength: (keep: boolean) => void;
+  /** Set the angle inside the room at a corner (degrees); the wall chosen with `cornerTurn` turns about it. */
+  setCornerAngle: (cornerId: string, degrees: number) => void;
   /** Shift-drag of a corner: the whole room scales evenly from `base` (the room when the drag began). */
   scaleRoomByCorner: (base: RoomPolygon, cornerId: string, p: Point) => void;
   insertCorner: (afterCornerId: string, p: Point) => void;
@@ -629,6 +637,8 @@ export const usePlannerStore = create<PlannerState>()(
         partitionStart: null,
         drawLength: '',
         highlightedWall: null,
+        cornerTurn: 'next',
+        cornerKeepLength: false,
         past: [],
         future: [],
 
@@ -1476,6 +1486,60 @@ export const usePlannerStore = create<PlannerState>()(
             record(s);
             const snapped = maybeSnap(s.view, p);
             c.point = { x: snapped.x as Mm, y: snapped.y as Mm };
+            touch(s.project);
+          }),
+
+        setCornerTurn: (turn) =>
+          set((s) => {
+            s.cornerTurn = turn;
+          }),
+
+        setCornerKeepLength: (keep) =>
+          set((s) => {
+            s.cornerKeepLength = keep;
+          }),
+
+        setCornerAngle: (cornerId, degrees) =>
+          set((s) => {
+            const room = s.project.room;
+            if (!room || layoutBlocked(s)) return;
+            const index = room.corners.findIndex((c) => c.id === cornerId);
+            const before = get().project.room!;
+            const edit = turnWall(before.corners, before.closed, index, degrees, s.cornerTurn, s.cornerKeepLength);
+            if (!edit) return;
+            const n = before.corners.length;
+            const far = edit.moved.length === 1 ? edit.moved[0]! : -1;
+            const unchanged = edit.moved.every((j) => {
+              const was = before.corners[j]!.point;
+              const now = edit.corners[j]!.point;
+              return Math.abs(was.x - now.x) < 1e-3 && Math.abs(was.y - now.y) < 1e-3;
+            });
+            if (unchanged) return;
+            record(s);
+            room.corners = edit.corners;
+            // Doors, windows and wall points on the wall that starts at the corner that moved
+            // are measured from that corner: they keep their distance from the wall's other end.
+            if (far >= 0 && (before.closed || far < n - 1)) {
+              const length = (corners: typeof before.corners) => {
+                const a = corners[far]!.point;
+                const b = corners[(far + 1) % n]!.point;
+                return Math.hypot(b.x - a.x, b.y - a.y);
+              };
+              const by = length(edit.corners) - length(before.corners);
+              const startId = before.corners[far]!.id;
+              for (const o of room.openings) if (o.wallStartCornerId === startId) o.offset = (o.offset + by) as Mm;
+              for (const e of s.project.electrical ?? []) {
+                if (e.wallStartCornerId === startId && e.offset !== undefined) e.offset = Math.max(0, e.offset + by) as Mm;
+              }
+            }
+            const wall = (i: number) => (((i % n) + n) % n) + 1;
+            const turned = s.cornerTurn === 'next' ? wall(index) : wall(index - 1);
+            const beyond = s.cornerTurn === 'next' ? wall(index + 1) : wall(index - 2);
+            // Say so when the wall could not follow the wall beyond it, as it otherwise does.
+            s.notice =
+              edit.keptLength && !s.cornerKeepLength && before.closed
+                ? info(`Wall ${turned} kept its length: at that angle it does not meet wall ${beyond}, so wall ${beyond} turned with it.`)
+                : null;
             touch(s.project);
           }),
 
