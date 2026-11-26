@@ -265,8 +265,12 @@ Done so far:
   the quote (`tables.py`)
 - Everything else (`small_items.py`): Iconic Podium, the three logos
   (lettering scaled to 1200 × 225 mm; Corona with a warm halo, LED lit),
-  the three signs, leather and oak trays, the accessories rack, both
-  mannequins (lofted dress forms) and the carpet
+  the three signs, leather and oak trays, the accessories rack and the
+  carpet
+- Mannequins (`mannequins.py`): long torso forms built to ordinary body
+  measures (there is no drawing of them): a linen body with chest, waist,
+  hips and seat, legs apart to mid-thigh, jointed oak arms with hands, an
+  oak neck cap, on a steel pole and base
 
 Every catalog item now has a Blender model; `generate-assets.mjs` only
 fills in for new catalog items until they get one.

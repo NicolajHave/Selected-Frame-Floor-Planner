@@ -1,9 +1,9 @@
-"""112-18-001 (see small_items.py)."""
+"""112-18-001 (see mannequins.py)."""
 
-from small_items import *  # noqa: F401,F403
+from mannequins import female
 
 ID = '112-18-001'
 
 
 def build():
-    mannequin(1500, 340, 330, 250, 340)
+    female()

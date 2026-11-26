@@ -1,7 +1,7 @@
 """
 The smaller catalog items, modelled from the catalog renders and their
 catalog dimensions: the Iconic podium, logos, signs, trays, the
-accessories rack, mannequins and the carpet. Millimetres; z up; the room
+accessories rack and the carpet (the mannequins are in mannequins.py). Millimetres; z up; the room
 side faces -Y (wall-mounted items have their back on +Y).
 """
 
@@ -236,92 +236,6 @@ def accessories_rack():
     # A few hooks.
     for k, (x, z) in enumerate(((-pw / 4, 1100), (pw / 4, 1100), (-pw / 4, 700), (pw / 4, 700))):
         box(f'hook{k}', (120, 60, 8), (x, -32, z), mat='steel', bevel=1)
-
-
-# ---------------------------------------------------------------------------
-# Mannequins: long torso dress forms with wooden arms, on a pole and base
-# ---------------------------------------------------------------------------
-
-def _ellipsoid(name, r, at, mat):
-    bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, radius=1, location=[c * MM for c in at])
-    o = bpy.context.active_object
-    o.name = name
-    o.scale = (r[0] * MM, r[1] * MM, r[2] * MM)
-    o.data.materials.append(material(mat))
-    return smooth(o)
-
-
-def _loft(name, sections, mat, segments=40, steps=6):
-    """
-    A smooth closed body through elliptical cross-sections
-    [(z, rx, ry), ...] (mm, bottom to top), interpolated with a
-    Catmull-Rom curve and capped at both ends.
-    """
-    def catmull(p0, p1, p2, p3, t):
-        return 0.5 * (2 * p1 + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
-
-    pts = [sections[0]] + list(sections) + [sections[-1]]
-    rings = []
-    for i in range(1, len(pts) - 2):
-        for k in range(steps):
-            t = k / steps
-            rings.append(tuple(catmull(pts[i - 1][j], pts[i][j], pts[i + 1][j], pts[i + 2][j], t) for j in range(3)))
-    rings.append(sections[-1])
-    bm = bmesh.new()
-    loops = []
-    for z, rx, ry in rings:
-        loops.append([
-            bm.verts.new((math.cos(2 * math.pi * k / segments) * rx * MM,
-                          math.sin(2 * math.pi * k / segments) * ry * MM, z * MM))
-            for k in range(segments)
-        ])
-    for lo, hi in zip(loops, loops[1:]):
-        for k in range(segments):
-            bm.faces.new((lo[k], lo[(k + 1) % segments], hi[(k + 1) % segments], hi[k]))
-    bm.faces.new(list(reversed(loops[0])))
-    bm.faces.new(loops[-1])
-    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-    me = bpy.data.meshes.new(name)
-    bm.to_mesh(me)
-    bm.free()
-    obj = bpy.data.objects.new(name, me)
-    bpy.context.collection.objects.link(obj)
-    me.materials.append(material(mat))
-    return smooth(obj)
-
-
-def mannequin(height, shoulders, chest, waist, hips):
-    """
-    A long torso dress form: one smooth body from mid-thigh to neck,
-    birch arms and neck cap, on a steel pole and round base.
-    """
-    round_sides(cylinder('base', 150, 8, (0, 0, 4), mat='steel', verts=48))
-    bottom = height * 0.43
-    round_sides(cylinder('pole', 10, bottom - 8, (0, 0, 8 + (bottom - 8) / 2), mat='steel', verts=16))
-    neck = height - 85
-    span = neck - bottom
-    at = lambda f: bottom + f * span  # noqa: E731
-    _loft('torso', [
-        (at(0.00), hips * 0.34, hips * 0.24),     # mid-thigh, closing
-        (at(0.06), hips * 0.46, hips * 0.31),
-        (at(0.20), hips * 0.50, hips * 0.33),     # hips
-        (at(0.42), waist * 0.50, waist * 0.36),   # waist
-        (at(0.66), chest * 0.50, chest * 0.37),   # chest
-        (at(0.84), shoulders * 0.50, chest * 0.33),  # shoulders
-        (at(0.93), shoulders * 0.36, chest * 0.26),
-        (at(1.00), 60, 52),                        # base of the neck
-    ], 'linen')
-    round_sides(cylinder('neck', 52, 70, (0, 0, neck + 35), mat='linen', verts=24))
-    round_sides(cylinder('neck.cap', 56, 8, (0, 0, neck + 74), mat='birch', verts=24))
-    for side in (-1, 1):
-        x = side * (shoulders / 2 + 12)
-        top = at(0.84)
-        upper = round_sides(cylinder(f'arm{side}.upper', 27, 290, (x, 0, top - 150), mat='birch', verts=16))
-        upper.rotation_euler = (0, side * 0.06, 0)
-        round_sides(cylinder(f'arm{side}.elbow', 26, 20, (x + side * 9, -4, top - 300), mat='birch', verts=16))
-        lower = round_sides(cylinder(f'arm{side}.lower', 22, 260, (x + side * 14, -26, top - 435), mat='birch', verts=16))
-        lower.rotation_euler = (0.2, side * 0.03, 0)
-        _ellipsoid(f'hand{side}', (20, 34, 68), (x + side * 18, -52, top - 600), 'birch')
 
 
 # ---------------------------------------------------------------------------
