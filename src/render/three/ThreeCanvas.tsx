@@ -147,8 +147,8 @@ export function ThreeCanvas() {
         )}
         <Capture into={capture} />
 
-        {/* Context ground grid, 1 m cells */}
-        <gridHelper args={[60, 60, '#C9C5BB', '#DDD9D0']} position={[0, -0.002, 0]} />
+        {/* Context ground grid, 1 m cells: under the floor slab (20 mm), not just under its top, or its lines flicker through a floor of another colour. */}
+        <gridHelper args={[60, 60, '#C9C5BB', '#DDD9D0']} position={[0, -0.03, 0]} />
 
         {/* An invisible shell round everything: it catches the clicks that hit
             nothing of the shop's — for placing things and for deselecting —

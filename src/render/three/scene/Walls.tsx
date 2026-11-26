@@ -7,6 +7,7 @@ import { useStage } from './stage';
 import type { RoomPolygon } from '@/model/objects';
 import { openingSpan, wallFrame } from '@/geometry/openings';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
+import { DEFAULT_WALL_COLOR, wallColorOf } from '@/lib/finishes';
 import { MM } from '../units';
 
 /** One box: `from`/`to` along the wall (mm from its start), `y0`/`y1` above the floor (mm). */
@@ -42,6 +43,8 @@ interface WallSide {
  * can be seen into from any angle (like a doll's house). From inside the
  * room every wall shows. A staged still (an elevation in the PDF) can ask
  * for one wall alone instead.
+ *
+ * A wall is the colour chosen for the room's walls, or its own (lib/finishes).
  */
 export function Walls({ room }: { room: RoomPolygon }) {
   const groups = useRef<(THREE.Group | null)[]>([]);
@@ -118,6 +121,9 @@ export function Walls({ room }: { room: RoomPolygon }) {
     });
   });
 
+  // An elevation for the PDF is a drawing: its walls stay the neutral they are drawn on.
+  const colorOf = (wall: number) => (stage?.frontLight ? DEFAULT_WALL_COLOR : wallColorOf(room, wall));
+
   const byWall = new Map<number, Piece[]>();
   for (const p of pieces) byWall.set(p.wall, [...(byWall.get(p.wall) ?? []), p]);
 
@@ -137,7 +143,7 @@ export function Walls({ room }: { room: RoomPolygon }) {
               {p.glass ? (
                 <meshStandardMaterial color="#CFE3EA" transparent opacity={0.35} roughness={0.05} />
               ) : (
-                <meshStandardMaterial color="#F1EEE7" roughness={0.9} metalness={0} />
+                <meshStandardMaterial color={colorOf(wall)} roughness={0.9} metalness={0} />
               )}
             </mesh>
           ))}

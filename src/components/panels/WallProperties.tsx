@@ -9,6 +9,8 @@ import { Section } from '../ui/Section';
 import { NumberField } from '../ui/NumberField';
 import { Button } from '../ui/Button';
 import { Segmented } from '../ui/Segmented';
+import { Swatches } from '../ui/Swatches';
+import { WALL_COLORS, isColor, roomWallColor, wallColorName, wallColorOf } from '@/lib/finishes';
 
 const m = (v: number) => (v / 1000).toLocaleString('da-DK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -20,6 +22,8 @@ export function WallProperties({ cornerId }: { cornerId: string }) {
   const addOpeningOnWall = usePlannerStore((s) => s.addOpeningOnWall);
   const insertCorner = usePlannerStore((s) => s.insertCorner);
   const setSelection = usePlannerStore((s) => s.setSelection);
+  const beginGesture = usePlannerStore((s) => s.beginGesture);
+  const endGesture = usePlannerStore((s) => s.endGesture);
   const index = room?.corners.findIndex((c) => c.id === cornerId) ?? -1;
   const w = room ? wallFrame(room, index) : null;
   if (!room || !w) return null;
@@ -91,6 +95,36 @@ export function WallProperties({ cornerId }: { cornerId: string }) {
           Open: there is no wall here — an open side of the shop, where customers walk in. It is dashed
           on the plan and left out in 3D; nothing is placed against it.
         </p>
+        {!style.transparent && (
+          <div className="flex flex-col gap-2" data-testid="wall-colour">
+            <span className="text-[10px] uppercase tracking-widest2 text-ink-500">Colour</span>
+            <Swatches
+              label="This wall's colour"
+              swatches={WALL_COLORS.map((c) => ({ id: c.color, name: c.name, color: c.color }))}
+              value={WALL_COLORS.find((c) => c.color.toLowerCase() === wallColorOf(room, index).toLowerCase())?.color ?? null}
+              onPick={(color) => updateWall(index, { color })}
+              own={{
+                color: wallColorOf(room, index).toLowerCase(),
+                active: !WALL_COLORS.some((c) => c.color.toLowerCase() === wallColorOf(room, index).toLowerCase()),
+                onPick: (color) => updateWall(index, { color }),
+                onStart: beginGesture,
+                onEnd: endGesture,
+              }}
+            />
+            <p className="text-[11px] leading-relaxed text-ink-500">
+              {isColor(style.color) ? (
+                <>
+                  {wallColorName(style.color)}: this wall has its own colour.{' '}
+                  <button className="underline underline-offset-2 hover:text-ink-900" onClick={() => updateWall(index, { color: null })}>
+                    Use the room&apos;s ({wallColorName(roomWallColor(room))})
+                  </button>
+                </>
+              ) : (
+                `${wallColorName(roomWallColor(room))}, as the room's walls, until you pick one here.`
+              )}
+            </p>
+          </div>
+        )}
       </Section>
 
       <div className="h-px bg-wall-200" />

@@ -17,6 +17,7 @@ import { rackContents } from './racks';
 import { placedPlanShape } from './planShapes';
 import { activePriceList } from './prices';
 import { wallHeightOf, wallStyle } from '@/geometry/wallStyle';
+import { isColor, roomFloor, roomWallColor, wallColorName } from '@/lib/finishes';
 import { buildPartsList, type PartsList } from './partsList';
 import { DEFAULT_MIN_AISLE, innerOutline, layoutIssues } from './layout';
 import { elevationShots, overviewShots, wallLabels, type ElevationSpec, type ViewSpec } from './views';
@@ -623,6 +624,18 @@ function drawKeptDimensions(doc: JsPdf, project: Project, P: (p: Point) => reado
 }
 
 /** The room's wall height, or the range when walls differ. */
+/** What the shop is finished in, where it was chosen: the floor, and the walls' colour. */
+function finishFacts(room: RoomPolygon | null): [string, string][] {
+  if (!room?.closed) return [];
+  const out: [string, string][] = [];
+  if (room.finish?.floor) out.push(['Floor', roomFloor(room).label]);
+  const own = room.corners.filter((_, i) => !wallStyle(room, i).transparent && isColor(wallStyle(room, i).color)).length;
+  if (room.finish?.wall || own) {
+    out.push(['Walls', `${wallColorName(roomWallColor(room))}${own ? ` · ${own} in ${own === 1 ? 'its' : 'their'} own colour` : ''}`]);
+  }
+  return out;
+}
+
 function wallHeightLabel(room: RoomPolygon): string {
   const hs = room.corners.map((_, i) => wallHeightOf(room, i));
   const lo = Math.min(...hs);
@@ -713,7 +726,9 @@ function drawColumn(
   doc.text(legend.heading, x, y);
   y += 6;
 
-  const titleTop = PAGE_H - MARGIN - 62;
+  // The title block grows upwards by a row for each finish chosen.
+  const finishes = finishFacts(project.room);
+  const titleTop = PAGE_H - MARGIN - 62 - 6 * finishes.length;
   const rowH = 6.2;
   const entries = legend.rows;
   const fits = Math.max(0, Math.floor((titleTop - y - 8) / rowH));
@@ -746,6 +761,7 @@ function drawColumn(
     ['Floor area', room?.closed ? `${num(areaM2, 2, true)} m²` : '—'],
     ['Wall length', room ? `${num(walls / 1000, 2, true)} m` : '—'],
     ['Wall height', room ? wallHeightLabel(room) : '—'],
+    ...finishes,
     ['Fixtures', `${parts.totalUnits} units · ${num(parts.totalWeightKg, 1)} kg`],
     ['Hanger capacity', parts.totalHangers ? num(parts.totalHangers) : '—'],
     ['Shelf metres', parts.totalShelfMeters ? `${num(parts.totalShelfMeters, 2, true)} m` : '—'],
