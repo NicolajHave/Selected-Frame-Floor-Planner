@@ -28,7 +28,6 @@ MATERIALS = {
     'screen': dict(color=(0.05, 0.05, 0.06, 1), metallic=0.2, roughness=0.15),
     'leather': dict(color=(0.13, 0.16, 0.12, 1), metallic=0.0, roughness=0.7),
     'linen': dict(color=(0.86, 0.76, 0.60, 1), metallic=0.0, roughness=0.85),
-    'birch': dict(color=(0.88, 0.74, 0.52, 1), metallic=0.0, roughness=0.55),
     'paper': dict(color=(0.96, 0.96, 0.95, 1), metallic=0.0, roughness=0.8),
     'carpet': dict(color=(0.50, 0.46, 0.20, 1), metallic=0.0, roughness=1.0),
     # Lit parts: the glTF carries the emission, so the planner shows them glowing.

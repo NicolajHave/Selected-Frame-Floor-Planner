@@ -194,7 +194,7 @@ export const ASSET_CATALOG: readonly AssetEntry[] = [
   // ---- Mannequins (not in the catalog: the footprints are those of our models) ----
   entry('112-18-001', 'Long Torso Female', 'Mannequins', [444, 300, 1493],
     { itemNumber: '112_18_001', material: '', hsCodes: ['96180000'] }),
-  entry('112-18-002', 'Long Torso Male', 'Mannequins', [504, 300, 1523],
+  entry('112-18-002', 'Long Torso Male', 'Mannequins', [510, 300, 1523],
     { itemNumber: '112_18_002', material: '', hsCodes: ['96180000'] }),
 
   // ---- Carpets ----
