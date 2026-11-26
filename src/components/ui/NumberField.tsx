@@ -22,6 +22,8 @@ interface Props {
   max?: number;
   className?: string;
   stepper?: Stepper;
+  /** Decimals shown and kept (none by default: whole numbers). */
+  decimals?: number;
 }
 
 /** Before a held arrow starts repeating, and between the steps once it does (ms). */
@@ -48,12 +50,15 @@ export function NumberField({
   max,
   className,
   stepper,
+  decimals = 0,
 }: Props) {
-  const [text, setText] = useState(() => String(Math.round(value)));
+  // Whole numbers unless decimals are asked for; then no more than those, and no trailing zeros.
+  const shown = (v: number) => String(Number(v.toFixed(decimals)));
+  const [text, setText] = useState(() => shown(value));
 
   useEffect(() => {
-    setText(String(Math.round(value)));
-  }, [value]);
+    setText(shown(value));
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // For the arrows: the latest of everything, so a running hold never works from a stale render.
   const live = useRef({ value, onCommit, stepper, min, max });
@@ -132,9 +137,9 @@ export function NumberField({
       if (min !== undefined) v = Math.max(min, v);
       if (max !== undefined) v = Math.min(max, v);
       onCommit(v);
-      setText(String(Math.round(v)));
+      setText(shown(v));
     } else {
-      setText(String(Math.round(value)));
+      setText(shown(value));
     }
   };
 
@@ -155,7 +160,7 @@ export function NumberField({
             onKeyDown={(e) => {
               if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
               if (e.key === 'Escape') {
-                setText(String(Math.round(value)));
+                setText(shown(value));
                 (e.target as HTMLInputElement).blur();
               }
             }}

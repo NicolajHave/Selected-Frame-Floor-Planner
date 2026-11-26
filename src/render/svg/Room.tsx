@@ -4,6 +4,11 @@ import type { RoomPolygon } from '@/model/objects';
 import type { ViewState } from '@/model/project';
 import { pxStroke } from './viewport';
 import { signedArea } from '@/geometry/polygon';
+import { cornerArc, type Turn } from '@/geometry/corners';
+import type { Corner } from '@/model/geometry';
+
+/** The colour of a wall that is pointed out on the plan. */
+const MARK = '#B45309';
 
 interface Props {
   room: RoomPolygon;
@@ -13,6 +18,8 @@ interface Props {
   /** Number each wall (matches the wall list in the room panel). */
   showWallNumbers?: boolean;
   highlightedWall?: number | null;
+  /** With a corner selected: which of its two walls turns when its angle is typed. */
+  turn?: Turn | null;
   onPointerDownEdge: (afterCornerId: string, e: React.PointerEvent<SVGElement>) => void;
   onDoubleClickEdge?: (afterCornerId: string, e: React.MouseEvent<SVGElement>) => void;
   onPointerDownCorner: (cornerId: string, e: React.PointerEvent<SVGElement>) => void;
@@ -26,6 +33,7 @@ export function Room({
   selectedId,
   showWallNumbers,
   highlightedWall,
+  turn,
   onPointerDownEdge,
   onDoubleClickEdge,
   onPointerDownCorner,
@@ -47,6 +55,14 @@ export function Room({
   const inward = signedArea(corners.map((c) => c.point)) >= 0 ? 1 : -1;
 
   const polyPoints = corners.map((c) => `${c.point.x},${c.point.y}`).join(' ');
+
+  // A selected corner with an angle: the wall that turns when the angle is typed.
+  const n = corners.length;
+  const cornerIndex = selectedKind === 'corner' && turn ? corners.findIndex((c) => c.id === selectedId) : -1;
+  const turning =
+    cornerIndex >= 0 && n >= 3 && (closed || (cornerIndex > 0 && cornerIndex < n - 1))
+      ? { corner: cornerIndex, wall: turn === 'next' ? cornerIndex : (cornerIndex - 1 + n) % n, turn: turn! }
+      : null;
 
   // Edges to render: closed → all, open → between consecutive corners only.
   const edges: {
@@ -133,13 +149,15 @@ export function Room({
         </g>
       ))}
 
+      {turning && <TurnMarks corners={corners} closed={closed} index={turning.corner} turn={turning.turn} view={view} />}
+
       {highlightedWall != null && edges[highlightedWall] && (
         <line
           x1={edges[highlightedWall].x1}
           y1={edges[highlightedWall].y1}
           x2={edges[highlightedWall].x2}
           y2={edges[highlightedWall].y2}
-          stroke="#B45309"
+          stroke={MARK}
           strokeWidth={pxStroke(view, 5)}
           strokeLinecap="round"
           strokeOpacity={0.8}
@@ -155,14 +173,14 @@ export function Room({
           const shift = Math.min(badgeShift, len / 4);
           const cx = (e.x1 + e.x2) / 2 + nx * badgeInset + ((e.x2 - e.x1) / len) * shift;
           const cy = (e.y1 + e.y2) / 2 + ny * badgeInset + ((e.y2 - e.y1) / len) * shift;
-          const hot = i === highlightedWall;
+          const hot = i === highlightedWall || i === turning?.wall;
           return (
             <g key={`n-${e.fromId}`} pointerEvents="none" data-wall-number={i + 1}>
               <circle
                 cx={cx}
                 cy={cy}
                 r={badgeR}
-                fill={hot ? '#B45309' : 'var(--wall-stroke)'}
+                fill={hot ? MARK : 'var(--wall-stroke)'}
               />
               <text
                 x={cx}
@@ -201,6 +219,56 @@ export function Room({
           </g>
         );
       })}
+    </g>
+  );
+}
+
+/**
+ * At a selected corner: its angle as a wedge inside the room, the wall that
+ * turns when the angle is typed picked out, and at that wall's far end the
+ * arc it swings along.
+ */
+function TurnMarks({ corners, closed, index, turn, view }: { corners: Corner[]; closed: boolean; index: number; turn: Turn; view: ViewState }) {
+  const n = corners.length;
+  const c = corners[index]!.point;
+  const prev = corners[(index - 1 + n) % n]!.point;
+  const next = corners[(index + 1) % n]!.point;
+  const far = turn === 'next' ? next : prev;
+  const arc = cornerArc(corners, closed, index);
+  const length = Math.hypot(far.x - c.x, far.y - c.y);
+  if (!arc || length < 1) return null;
+
+  const on = (a: number, r: number) => `${c.x + Math.cos(a) * r},${c.y + Math.sin(a) * r}`;
+  const shortest = Math.min(Math.hypot(prev.x - c.x, prev.y - c.y), Math.hypot(next.x - c.x, next.y - c.y));
+  const r = Math.min(pxStroke(view, 30), shortest * 0.4);
+  const wedge = `M${c.x},${c.y} L${on(arc.from, r)} A${r},${r} 0 ${Math.abs(arc.by) > Math.PI ? 1 : 0} ${arc.by > 0 ? 1 : 0} ${on(arc.from + arc.by, r)} Z`;
+
+  // The swing: a short arc through the far end, an arrowhead each way.
+  const at = Math.atan2(far.y - c.y, far.x - c.x);
+  const reach = Math.min(0.16, pxStroke(view, 34) / length);
+  const head = pxStroke(view, 7);
+  const arrow = (a: number, dir: 1 | -1) => {
+    const tip = { x: c.x + Math.cos(a) * length, y: c.y + Math.sin(a) * length };
+    // Back along the arc from the tip, and out to either side of it.
+    const bx = tip.x + Math.sin(a) * head * dir;
+    const by = tip.y - Math.cos(a) * head * dir;
+    const wx = Math.cos(a) * head * 0.5;
+    const wy = Math.sin(a) * head * 0.5;
+    return `${tip.x},${tip.y} ${bx + wx},${by + wy} ${bx - wx},${by - wy}`;
+  };
+
+  return (
+    <g pointerEvents="none" data-turning-wall={(turn === 'next' ? index : (index - 1 + n) % n) + 1}>
+      <path d={wedge} fill={MARK} fillOpacity={0.14} stroke={MARK} strokeWidth={pxStroke(view, 1.2)} strokeLinejoin="round" />
+      <line x1={c.x} y1={c.y} x2={far.x} y2={far.y} stroke={MARK} strokeWidth={pxStroke(view, 4)} strokeLinecap="round" strokeOpacity={0.85} />
+      <path
+        d={`M${on(at - reach, length)} A${length},${length} 0 0 1 ${on(at + reach, length)}`}
+        fill="none"
+        stroke={MARK}
+        strokeWidth={pxStroke(view, 1.5)}
+      />
+      <polygon points={arrow(at + reach, 1)} fill={MARK} />
+      <polygon points={arrow(at - reach, -1)} fill={MARK} />
     </g>
   );
 }

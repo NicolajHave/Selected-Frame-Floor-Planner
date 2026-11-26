@@ -58,6 +58,7 @@ export function Canvas() {
   const calibration = usePlannerStore((s) => s.calibration);
   const wallDraft = usePlannerStore((s) => s.wallDraft);
   const highlightedWall = usePlannerStore((s) => s.highlightedWall);
+  const cornerTurn = usePlannerStore((s) => s.cornerTurn);
   const drawLength = usePlannerStore((s) => s.drawLength);
 
   const setSelection = usePlannerStore((s) => s.setSelection);
@@ -771,8 +772,11 @@ export function Canvas() {
                 : null
             }
             selectedId={selection?.id ?? null}
-            showWallNumbers={selection?.kind === 'room' || selection?.kind === 'wall' || highlightedWall !== null}
+            showWallNumbers={
+              selection?.kind === 'room' || selection?.kind === 'wall' || selection?.kind === 'corner' || highlightedWall !== null
+            }
             highlightedWall={highlightedWall}
+            turn={selection?.kind === 'corner' ? cornerTurn : null}
             onPointerDownCorner={onPointerDownCorner}
             onPointerDownEdge={onPointerDownEdge}
             onDoubleClickEdge={onDoubleClickEdge}
