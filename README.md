@@ -58,6 +58,11 @@ URL. No environment variables are needed.
    on the plan — and it turns about the corner, its far end following
    the wall beyond, which keeps its direction (or tick that the wall
    keeps its length instead).
+   **Floor & walls** (in the panel with nothing selected, or with the
+   room selected): the kind of floor — wood, herringbone, concrete,
+   tiles, linoleum, terrazzo, carpet — in one of its colours or one of
+   your own, and the colour of the walls; a wall can have its own colour
+   (click it). They show in the 3D view and the PDF's pictures.
 4. **Doors & windows**: pick one in the library and click a wall — a
    preview shows where it goes. Openings stay clear of corners and of
    each other. Drag one along its wall (or onto another), drag its

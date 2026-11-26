@@ -7,6 +7,7 @@ import { Section } from '../ui/Section';
 import { PartsListSection } from './PartsListSection';
 import { PlanUnderlaySection } from './PlanUnderlaySection';
 import { LayoutCheckSection } from './LayoutCheckSection';
+import { FinishesSection } from './FinishesSection';
 
 export function EmptySelection() {
   const project = usePlannerStore((s) => s.project);
@@ -42,6 +43,13 @@ export function EmptySelection() {
           </>
         )}
       </Section>
+
+      {project.room?.closed && (
+        <>
+          <div className="h-px bg-wall-200" />
+          <FinishesSection />
+        </>
+      )}
 
       <div className="h-px bg-wall-200" />
 

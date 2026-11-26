@@ -4,6 +4,7 @@ import { Suspense, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import type { Project } from '@/model/project';
 import { useStage, type Stage } from './stage';
+import { DEFAULT_WALL_COLOR, roomWallColor } from '@/lib/finishes';
 import { Lights } from './Lights';
 import { Floor } from './Floor';
 import { Walls } from './Walls';
@@ -25,7 +26,7 @@ export function SceneContents({ project, onReady }: { project: Project; onReady?
           <Walls room={room} />
         </>
       )}
-      <Pillars pillars={project.pillars} />
+      <Pillars pillars={project.pillars} wallColor={stage?.frontLight ? DEFAULT_WALL_COLOR : roomWallColor(room)} />
       {project.electrical && project.electrical.length > 0 && (
         <ElectricalMeshes room={room} points={project.electrical} />
       )}

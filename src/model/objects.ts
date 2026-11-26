@@ -16,11 +16,29 @@ export interface RoomPolygon {
    * an entry are solid and `wallHeight` high.
    */
   walls?: Record<string, WallStyle>;
+  /** What the shop is finished in (see lib/finishes); the planner's neutral look when absent. */
+  finish?: RoomFinish;
+}
+
+/** A kind of floor (lib/finishes: wood, tiles, …) in one of its tones — or a colour of one's own, `#rrggbb`. */
+export interface FloorFinish {
+  kind: string;
+  tone?: string;
+  /** Laid the other way: a quarter turn (planks run across instead of along). */
+  turned?: boolean;
+}
+
+export interface RoomFinish {
+  floor?: FloorFinish;
+  /** The colour of the walls, `#rrggbb`. A wall can have its own (`WallStyle.color`). */
+  wall?: string;
 }
 
 export interface WallStyle {
   /** This wall's height; the room's `wallHeight` when absent. */
   height?: Mm;
+  /** This wall's own colour, `#rrggbb`; the room's wall colour when absent. */
+  color?: string;
   /**
    * An open side of the shop: there is no wall here. Dashed on the plan,
    * left out in 3D; customers walk in across it (the shop's entrance).

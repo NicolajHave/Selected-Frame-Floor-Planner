@@ -6,6 +6,7 @@ import { mm, formatArea, formatLength } from '@/model/units';
 import { Section } from '../ui/Section';
 import { NumberField } from '../ui/NumberField';
 import { Button } from '../ui/Button';
+import { FinishesSection } from './FinishesSection';
 
 export function RoomProperties() {
   const room = usePlannerStore((s) => s.project.room);
@@ -84,6 +85,13 @@ export function RoomProperties() {
           its own height, make it transparent or add doors and windows to it.
         </p>
       </Section>
+
+      {room.closed && (
+        <>
+          <div className="h-px bg-wall-200" />
+          <FinishesSection />
+        </>
+      )}
 
       <div className="h-px bg-wall-200" />
 

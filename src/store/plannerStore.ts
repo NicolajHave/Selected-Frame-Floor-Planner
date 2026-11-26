@@ -10,6 +10,7 @@ import type {
   ViewMode,
   PlanUnderlay,
   RoomPolygon,
+  FloorFinish,
   Pillar,
   InventoryItem,
   Accessory,
@@ -32,6 +33,7 @@ import { autosaveProject, internImage, onAssetDurable } from '@/lib/assets';
 import { trail } from '@/lib/monitor';
 import { clipCount, makeClip, placeClip, readClip, writeClip } from '@/lib/clipboard';
 import { CURRENT_SCHEMA, migrate } from '@/lib/schema';
+import { isColor } from '@/lib/finishes';
 import { snapPoint } from '@/geometry/snap';
 import { normalizeAngle, pushToWalls, snapToWall } from '@/geometry/wallSnap';
 import { rectCorners } from '@/geometry/transform';
@@ -295,7 +297,11 @@ interface PlannerState {
   deleteCorner: (cornerId: string) => void;
   updateRoomMeta: (patch: Partial<Pick<RoomPolygon, 'wallThickness' | 'wallHeight'>>) => void;
   /** Wall `index`: its own height (null = the room's) and whether it is see-through. */
-  updateWall: (index: number, patch: { height?: number | null; transparent?: boolean }) => void;
+  updateWall: (index: number, patch: { height?: number | null; transparent?: boolean; color?: string | null }) => void;
+  /** The room's floor (a kind and a tone, see lib/finishes); null for the planner's neutral floor. */
+  setFloorFinish: (floor: FloorFinish | null) => void;
+  /** The colour of the room's walls, `#rrggbb`; null for the planner's neutral walls. */
+  setWallColor: (color: string | null) => void;
 
   // object actions
   addPillarAt: (p: Point) => void;
@@ -1073,6 +1079,7 @@ export const usePlannerStore = create<PlannerState>()(
               wallThickness: thickness,
               wallHeight: old?.wallHeight ?? mm(2700),
               openings: [],
+              ...(old?.finish ? { finish: old.finish } : {}),
             };
             // Points on the old walls have nothing to hang on any more; floor boxes stay.
             if (s.project.electrical) s.project.electrical = s.project.electrical.filter((e) => e.position);
@@ -1458,6 +1465,7 @@ export const usePlannerStore = create<PlannerState>()(
               wallThickness: old?.wallThickness ?? mm(120),
               wallHeight: old?.wallHeight ?? mm(2700),
               openings: [],
+              ...(old?.finish ? { finish: old.finish } : {}),
             };
             // Wall points belonged to the old walls; floor boxes stay.
             if (s.project.electrical) s.project.electrical = s.project.electrical.filter((e) => e.position);
@@ -1616,11 +1624,48 @@ export const usePlannerStore = create<PlannerState>()(
             touch(s.project);
           }),
 
+        setFloorFinish: (floor) =>
+          set((s) => {
+            const room = s.project.room;
+            if (!room) return;
+            const now = room.finish?.floor;
+            const same =
+              (now?.kind ?? null) === (floor?.kind ?? null) &&
+              (now?.tone ?? null) === (floor?.tone ?? null) &&
+              !!now?.turned === !!floor?.turned;
+            if (same) return;
+            record(s);
+            const finish = { ...room.finish };
+            if (floor) finish.floor = { kind: floor.kind, ...(floor.tone ? { tone: floor.tone } : {}), ...(floor.turned ? { turned: true } : {}) };
+            else delete finish.floor;
+            if (Object.keys(finish).length) room.finish = finish;
+            else delete room.finish;
+            touch(s.project);
+          }),
+
+        setWallColor: (color) =>
+          set((s) => {
+            const room = s.project.room;
+            if (!room || (color !== null && !isColor(color))) return;
+            if ((room.finish?.wall ?? null) === color) return;
+            record(s);
+            const finish = { ...room.finish };
+            if (color) finish.wall = color;
+            else delete finish.wall;
+            if (Object.keys(finish).length) room.finish = finish;
+            else delete room.finish;
+            touch(s.project);
+          }),
+
         updateWall: (index, patch) =>
           set((s) => {
             const room = s.project.room;
             const corner = room?.corners[index];
-            if (!room || !corner || !wallFrame(room, index) || layoutBlocked(s)) return;
+            if (!room || !corner || !wallFrame(room, index)) return;
+            // A wall's colour is not part of the floor plan: the lock leaves it free.
+            const shapes = patch.height !== undefined || patch.transparent !== undefined;
+            if (shapes && layoutBlocked(s)) return;
+            if (patch.color !== undefined && patch.color !== null && !isColor(patch.color)) return;
             record(s);
             const walls = (room.walls ??= {});
             const style = { ...walls[corner.id] };
@@ -1631,6 +1676,10 @@ export const usePlannerStore = create<PlannerState>()(
             if (patch.transparent !== undefined) {
               if (patch.transparent) style.transparent = true;
               else delete style.transparent;
+            }
+            if (patch.color !== undefined) {
+              if (patch.color) style.color = patch.color;
+              else delete style.color;
             }
             if (Object.keys(style).length) walls[corner.id] = style;
             else delete walls[corner.id];
